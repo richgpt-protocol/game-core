@@ -1,0 +1,11 @@
+{
+    "MALAYSIA": "Malaysia",
+    "UNABLE_UPLOAD_FILE": "Fail tidak berjaya dimuat naik. Sila cuba lagi.",
+    "FILE_EMPTY": "Fail kosong.",
+    "INVALID_FILE_EXTENSION": "Fail yang dimuat naik tidak sah. Hanya dibenarkan untuk jenis fail '.pdf'",
+    "IMAGE_SIZE_NOT_SQUARE": "Saiz Imej yang dimuat naik bukan ciri saiz segi empat sama.",
+    "IMAGE_SIZE_NOT_RECTANGLE": "Saiz Imej yang dimuat naik bukan ciri saiz segi empat tepat (lebar mestilah lebih daripada 1.75 kali ganda ketinggiannya).",
+    "INVALID_IMAGE_EXTENSION": "Fail yang dimuat naik tidak sah. Hanya dibenarkan untuk '.jpg', '.jpeg' '.png' '.gif'",
+    "INVALID_MODULE": "Modul Tidak Sah.",
+    "IMAGE_IS_NOT_FOUND": "Imej tidak ditemui."
+}

@@ -1,0 +1,11 @@
+{
+    "MALAYSIA": "Malaysia",
+    "UNABLE_UPLOAD_FILE": "Unable to upload file. Please try it again.",
+    "FILE_EMPTY": "File is empty.",
+    "INVALID_FILE_EXTENSION": "Invalid file extension. Only allowed for '.pdf' file extension",
+    "IMAGE_SIZE_NOT_SQUARE": "Image Size is not square size.",
+    "IMAGE_SIZE_NOT_RECTANGLE": "Image Size is not rectange size (width must be more than 1.75 multiply of its height).",
+    "INVALID_IMAGE_EXTENSION": "Invalid file extension. Only allowed for '.jpg', '.jpeg' '.png' '.gif'",
+    "INVALID_MODULE": "Invalid Module.",
+    "IMAGE_IS_NOT_FOUND": "Image is not found."
+}
