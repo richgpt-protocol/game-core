@@ -21,6 +21,7 @@ import { SettingModule } from './setting/setting.module';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { SharedModule } from './shared/shared.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ChatbotModule } from './chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
       // disable throwing uncaughtException if an error event is emitted and it has no listeners
       ignoreErrors: false,
     }),
+    ChatbotModule,
   ],
   controllers: [AppController],
   providers: [
