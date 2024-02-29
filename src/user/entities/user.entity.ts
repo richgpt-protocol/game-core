@@ -4,17 +4,24 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 
+import { Wallet } from '../../wallet/entities/wallet.entity';
+
 @Entity()
 export class User {
   @PrimaryGeneratedColumn()
+  @OneToOne(() => Wallet, (wallet) => wallet.user)
   id: number;
 
   @Column()
   phoneNumber: string;
+
+  @Column({ nullable: true })
+  emailAddress: string;
 
   @Column({
     select: false,
