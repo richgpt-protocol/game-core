@@ -10,13 +10,15 @@ https://dev.mysql.com/downloads/mysql/
 
 Initiate database with username `root` and password `rootpass`
 
-Access into mysql shell and create database `richgpt`
+Access into mysql shell, create database `richgpt` and initiate first game
 
 > mysql -u root -p
 
 > Enter password: rootpass
 
 > CREATE DATABASE richgpt;
+
+> INSERT INTO game (epoch) VALUES (0);
 
 > exit
 
