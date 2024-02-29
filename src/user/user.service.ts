@@ -14,12 +14,25 @@ import { buildFilterCriterias } from 'src/shared/utils/pagination.util';
 import { ObjectUtil } from 'src/shared/utils/object.util';
 import { DateUtil } from 'src/shared/utils/date.util';
 
+import { ethers } from 'ethers';
+import { split, combine } from 'shamirs-secret-sharing-ts'
+import axios from 'axios';
+import { Wallet } from 'src/wallet/entities/wallet.entity';
+
+const serverUrls = [ // TO CHANGE
+  'http://localhost:4896',
+  'http://localhost:4897',
+  'http://localhost:4898'
+]
+
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
-    private connection: Connection,
+    @InjectRepository(Wallet)
+    private walletRepository: Repository<Wallet>,
+    // private connection: Connection,
   ) {}
 
   async findOne(id: number) {
@@ -56,6 +69,20 @@ export class UserService {
       .addSelect('row.loginAttempt')
       .where({
         emailAddress: email,
+      })
+      .getOne();
+  }
+
+  async findByPhoneNumber(phoneNumber: string) {
+    return await this.userRepository
+      .createQueryBuilder('row')
+      .select('row')
+      .addSelect('row.password')
+      .addSelect('row.isReset')
+      .addSelect('row.verificationCode')
+      .addSelect('row.loginAttempt')
+      .where({
+        phoneNumber: phoneNumber,
       })
       .getOne();
   }
@@ -118,6 +145,9 @@ export class UserService {
       }
     }
 
+    // create wallet
+    const hdNodeWallet = ethers.Wallet.createRandom()
+
     if (payload.referralCode) {
       const referralUser = await this.findReferralCodeWithoutHiddenFields(
         payload.referralCode,
@@ -126,23 +156,46 @@ export class UserService {
       if (!referralUser) {
         throw new BadRequestException('user.REFERAL_INVALID');
       }
+
+      // TODO fetch walletCreationBot private key from mpc server and set referrer in Referral contract
     }
 
     // const hashed = await bcrypt.hash(payload.password, 10);
-    const result = await this.userRepository.save(
-      this.userRepository.create({
-        ...payload,
-        password: payload.password, // Frontend do encryption
-        loginAttempt: 0,
-        // status: UserStatus.UNVERIFIED, // TODO will do email verification next milestone
-        status: UserStatus.ACTIVE,
-        isReset: false,
-      }),
-    );
+    const user = this.userRepository.create({
+      ...payload,
+      // password: payload.password, // Frontend do encryption
+      loginAttempt: 0,
+      // status: UserStatus.UNVERIFIED, // TODO will do email verification next milestone
+      status: UserStatus.ACTIVE,
+      isReset: false,
+    });
+    const result = await this.userRepository.save(user);
+
+    const wallet = this.walletRepository.create({
+      user,
+      walletAddress: hdNodeWallet.address
+    })
+    await this.walletRepository.save(wallet)
 
     await this.update(result.id, {
       referralCode: this.generateReferralCode(result.id),
     });
+
+    // split wallet private key into 3 shares and store in mpc servers
+    const privateKey = hdNodeWallet.privateKey
+    const secret = Buffer.from(privateKey)
+    const shares = split(secret, { shares: 3, threshold: 2})
+    for (let i = 0; i < serverUrls.length; i++) {
+      const url = serverUrls[i]
+      // TODO: mpc servers aren't live yet
+      // await axios.post(
+      //   url + '/storeShare',
+      //   {
+      //     userId: result.id,
+      //     share: shares[i].toString('hex')
+      //   }
+      // )
+    }
 
     // Temporary hide
     // await this.emailService.sendWelcomeEmail(
@@ -226,10 +279,16 @@ export class UserService {
     if (payload.keyword != null && payload.keyword != '') {
       query = query.andWhere(
         new Brackets((qb) => {
-          qb.where('user.firstName LIKE :firstName', {
-            firstName: `%${payload.keyword}%`,
-          })
-            .orWhere('user.referralCode LIKE :referralCode', {
+          // qb.where('user.firstName LIKE :firstName', {
+          //   firstName: `%${payload.keyword}%`,
+          // })
+          //   .orWhere('user.referralCode LIKE :referralCode', {
+          //     referralCode: `%${payload.keyword}%`,
+          //   })
+          //   .orWhere('user.phoneNumber LIKE :phoneNumber', {
+          //     phoneNumber: `%${payload.keyword}%`,
+          //   });
+          qb.where('user.referralCode LIKE :referralCode', {
               referralCode: `%${payload.keyword}%`,
             })
             .orWhere('user.phoneNumber LIKE :phoneNumber', {
