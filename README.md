@@ -1,5 +1,7 @@
 # How to run this API framework
 
+For testing purpose, current version allow user to register and login directly without otp.
+
 ## Download and install mySQL
 
 https://dev.mysql.com/downloads/mysql/
