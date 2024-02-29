@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsString,
   MinLength,
+  MaxLength,
 } from 'class-validator';
 
 export class LoginDto {
@@ -30,15 +31,21 @@ export class LoginDto {
 }
 
 export class UserLoginDto {
-  @ApiProperty()
-  @IsNotEmpty()
-  @IsString()
-  @IsEmail()
-  emailAddress: string;
+  // @ApiProperty()
+  // @IsNotEmpty()
+  // @IsString()
+  // @IsEmail()
+  // emailAddress: string;
 
   @ApiProperty()
   @IsString()
-  password: string;
+  @IsNotEmpty()
+  @MaxLength(15)
+  phoneNumber: string;
+
+  // @ApiProperty()
+  // @IsString()
+  // password: string;
 }
 
 export class OAuthDto {
