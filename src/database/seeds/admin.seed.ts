@@ -44,7 +44,7 @@ export default class CreateAdmins implements Seeder {
   private async insertPermissions(connection: Connection) {
     const filePath = path.resolve(
       __dirname,
-      '../../../sql_scripts/permission_script.sql',
+      '../sql_scripts/permission_script.sql',
     );
 
     return new Promise((resolve, reject) => {
