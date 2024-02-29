@@ -73,7 +73,8 @@ export class UserController {
       const result = await this.userService.register(payload);
       if (result) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { password, ...log } = payload;
+        // const { password, ...log } = payload;
+        const log = payload;
         await this.auditLogService.userInsert({
           module: classInfo.class,
           actions: classInfo.method,
