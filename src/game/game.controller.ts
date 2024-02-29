@@ -126,6 +126,11 @@ export class GameController {
     }
   }
 
+  // TODO: bet close 1 minute before draw result
+  @Secure(null, UserRole.ADMIN)
+  @Post('set-bet-close')
+  async setBetClose() {}
+
   @Secure(null, UserRole.ADMIN)
   @Post('set-draw-result')
   async setDrawResult(
@@ -148,6 +153,16 @@ export class GameController {
       };
     }
   }
+
+  // TODO: update bet after set draw result
+  @Secure(null, UserRole.ADMIN)
+  @Post('set-last-minute-bet')
+  async setLastMinuteBet() {}
+
+  // TODO: payout if any redeem
+  @Secure(null, UserRole.ADMIN)
+  @Post('payout')
+  async payout() {}
 
   @Secure(null, UserRole.USER)
   @Get('get-user-bets')
