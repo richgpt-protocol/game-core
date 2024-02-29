@@ -16,12 +16,12 @@ export class RegisterUserDto {
   @MaxLength(15)
   phoneNumber: string;
 
-  @ApiProperty({
-    description:
-      'Please use 8 or more characters with a mix of upper and lower letters, numbers/symbols for your new password.',
-  })
-  @IsString()
-  password: string;
+  // @ApiProperty({
+  //   description:
+  //     'Please use 8 or more characters with a mix of upper and lower letters, numbers/symbols for your new password.',
+  // })
+  // @IsString()
+  // password: string;
 
   @ApiProperty()
   @IsString()
