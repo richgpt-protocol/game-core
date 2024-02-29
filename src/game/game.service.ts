@@ -42,6 +42,9 @@ export class GameService {
   ) {}
 
   async bet(id: number, payload: BetDto[]) {
+
+    // TODO: submit bet to Core contract
+
     const wallet = await this.walletRepository
       .createQueryBuilder()
       .where({ user: id })
@@ -62,6 +65,9 @@ export class GameService {
   }
 
   async claim(id: number, payload: ClaimDto[]) {
+
+    // TODO: submit claim to Core contract
+
     const wallet = await this.walletRepository
       .createQueryBuilder()
       // .where('userId = :id', { id })
@@ -132,6 +138,9 @@ export class GameService {
   }
 
   async redeem(id: number, payload: RedeemDto) {
+
+    // TODO: submit redeem to Redeem contract
+
     const wallet = await this.walletRepository
       .createQueryBuilder()
       .where('userId = :id', { id })
@@ -152,6 +161,9 @@ export class GameService {
   }
 
   async setDrawResult(id: number, payload: DrawResultDto) {
+
+    // TODO: submit draw result to Core contract
+
     const game = await this.gameRepository.findOneBy({ epoch: payload.epoch });
     const drawResult = this.drawResultRepository.create({
       ...payload,
