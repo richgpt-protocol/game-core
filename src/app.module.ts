@@ -22,6 +22,8 @@ import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { SharedModule } from './shared/shared.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ChatbotModule } from './chatbot/chatbot.module';
+import { WalletModule } from './wallet/wallet.module';
+import { GameModule } from './game/game.module';
 
 @Module({
   imports: [
@@ -46,6 +48,8 @@ import { ChatbotModule } from './chatbot/chatbot.module';
       inject: [ConfigService],
     }),
     UserModule,
+    WalletModule,
+    GameModule,
     SettingModule,
     I18nModule.forRoot({
       fallbackLanguage: 'en',
