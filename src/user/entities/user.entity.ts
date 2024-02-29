@@ -20,11 +20,12 @@ export class User {
   @Column()
   phoneNumber: string;
 
-  @Column({ nullable: true })
+  @Column({ default: "default@email.com" })
   emailAddress: string;
 
   @Column({
     select: false,
+    nullable: true,
   })
   password: string;
 
