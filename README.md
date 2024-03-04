@@ -49,3 +49,7 @@ DB_DATABASE=richgpt
 ## Run
 
 > npm run start:dev
+
+## Generate type for smart contract
+
+> ./node_modules/.bin/typechain --target=ethers-v6 "src/contract/abis/*.json" --out-dir src/contract
