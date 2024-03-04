@@ -517,4 +517,19 @@ export class UserController {
       };
     }
   }
+
+  // TODO, this endpoint get all user info after login that required by frontend at once
+  @Secure(null, UserRole.USER)
+  @Post('get-all-user-info')
+  async getAllUserInfo() {
+    // user - phoneNumber
+    // user - referralCode
+    // wallet - walletAddress
+    // wallet - balance
+    // wallet - redeemable
+    // wallet - xp
+    // credit - all available credit amount
+    // game - current epoch
+    // bet - all numbers(forecast & amount) for current epoch
+  }
 }
