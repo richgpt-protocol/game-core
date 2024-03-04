@@ -18,6 +18,8 @@ import { ethers } from 'ethers';
 import { split, combine } from 'shamirs-secret-sharing-ts'
 import axios from 'axios';
 import { Wallet } from 'src/wallet/entities/wallet.entity';
+import { MPC } from 'src/shared/mpc';
+import { Referral__factory } from 'src/contract';
 
 const serverUrls = [ // TO CHANGE
   'http://localhost:4896',
@@ -146,7 +148,11 @@ export class UserService {
     }
 
     // create wallet
+    // const walletAddress = await MPC.createWallet()
+
+    // temporarily
     const hdNodeWallet = ethers.Wallet.createRandom()
+    const walletAddress = hdNodeWallet.address
 
     if (payload.referralCode) {
       const referralUser = await this.findReferralCodeWithoutHiddenFields(
@@ -157,13 +163,26 @@ export class UserService {
         throw new BadRequestException('user.REFERAL_INVALID');
       }
 
-      // TODO fetch walletCreationBot private key from mpc server and set referrer in Referral contract
+      const userWalletAddress = walletAddress;
+      const referrerWallet = await this.walletRepository.
+        createQueryBuilder('wallet')
+        .select('wallet.walletAddress')
+        .where({ user: referralUser })
+        .getOne();
+      const referrerWalletAddress = referrerWallet.walletAddress;
+
+      const provider = new ethers.JsonRpcProvider(process.env.PROVIDER_RPC_URL);
+      // const walletCreationBot = new ethers.Wallet(await MPC.retrievePrivateKey(process.env.WALLET_CREATION_BOT_ADDRESS));
+      const walletCreationBot = new ethers.Wallet(process.env.WALLET_CREATION_BOT_PRIVATE_KEY, provider); // temporarily
+      const referralContract = Referral__factory.connect(process.env.REFERRAL_CONTRACT_ADDRESS, walletCreationBot);
+      // TODO: check actual gas used and hardcode it
+      const estimatedGas = await referralContract.setReferrer.estimateGas(userWalletAddress, referrerWalletAddress);
+      const tx = await referralContract.setReferrer(userWalletAddress, referrerWalletAddress, {gasLimit: estimatedGas * ethers.toBigInt(13) / ethers.toBigInt(10)});
+      await tx.wait()
     }
 
-    // const hashed = await bcrypt.hash(payload.password, 10);
     const user = this.userRepository.create({
       ...payload,
-      // password: payload.password, // Frontend do encryption
       loginAttempt: 0,
       // status: UserStatus.UNVERIFIED, // TODO will do email verification next milestone
       status: UserStatus.ACTIVE,
@@ -173,29 +192,14 @@ export class UserService {
 
     const wallet = this.walletRepository.create({
       user,
-      walletAddress: hdNodeWallet.address
+      walletAddress,
+      privateKey: hdNodeWallet.privateKey, // temporarily
     })
     await this.walletRepository.save(wallet)
 
     await this.update(result.id, {
       referralCode: this.generateReferralCode(result.id),
     });
-
-    // split wallet private key into 3 shares and store in mpc servers
-    const privateKey = hdNodeWallet.privateKey
-    const secret = Buffer.from(privateKey)
-    const shares = split(secret, { shares: 3, threshold: 2})
-    for (let i = 0; i < serverUrls.length; i++) {
-      const url = serverUrls[i]
-      // TODO: mpc servers aren't live yet
-      // await axios.post(
-      //   url + '/storeShare',
-      //   {
-      //     userId: result.id,
-      //     share: shares[i].toString('hex')
-      //   }
-      // )
-    }
 
     // Temporary hide
     // await this.emailService.sendWelcomeEmail(
