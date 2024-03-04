@@ -7,9 +7,9 @@ import * as dotenv from 'dotenv'
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Wallet } from './entities/wallet.entity';
-import { Bet } from 'src/game/entities/bet.entity';
+import { Bet } from 'src/bet/entities/bet.entity';
 import { User } from 'src/user/entities/user.entity';
-import { BetDto } from 'src/game/dto/bet.dto';
+import { BetDto } from 'src/bet/dto/bet.dto';
 dotenv.config()
 
 // const client = new MongoClient('mongodb://localhost:27017')
