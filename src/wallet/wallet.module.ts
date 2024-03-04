@@ -9,7 +9,7 @@ import { AdminModule } from 'src/admin/admin.module';
 import { SseModule } from 'src/admin/sse/sse.module';
 import { User } from 'src/user/entities/user.entity';
 import { Wallet } from './entities/wallet.entity';
-import { Bet } from 'src/game/entities/bet.entity';
+import { Bet } from 'src/bet/entities/bet.entity';
 import { GameModule } from 'src/game/game.module';
 
 @Module({
