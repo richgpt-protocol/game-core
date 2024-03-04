@@ -5,7 +5,7 @@ import {
   IsBoolean,
   IsNumber,
 } from 'class-validator';
-import { BetDto } from './bet.dto';
+import { BetDto } from 'src/bet/dto/bet.dto';
 
 export class ClaimDto extends BetDto {
   @ApiProperty()

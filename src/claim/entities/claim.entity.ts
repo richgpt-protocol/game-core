@@ -10,9 +10,9 @@ import {
 } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { Wallet } from 'src/wallet/entities/wallet.entity';
-import { Game } from './game.entity';
-import { BetDto } from '../dto/bet.dto';
-import { Bet } from './bet.entity';
+import { Game } from '../../game/entities/game.entity';
+import { BetDto } from 'src/bet/dto/bet.dto';
+import { Bet } from 'src/bet/entities/bet.entity';
 
 @Entity()
 export class Claim {
@@ -36,6 +36,9 @@ export class Claim {
 
   @CreateDateColumn()
   submitAt: Date;
+
+  @Column()
+  txHash: string;
 
   @OneToOne(() => Bet, (bet) => bet.claim)
   @JoinColumn()
