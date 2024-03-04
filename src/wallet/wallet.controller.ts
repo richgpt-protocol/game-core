@@ -76,7 +76,7 @@ export class WalletController {
     // @HandlerClass() classInfo: IHandlerClass,
     // @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const {id, ...userInfo} = await this.walletService.getWalletInfo(req.user.userId)
+    const {id, privateKey, ...userInfo} = await this.walletService.getWalletInfo(req.user.userId)
     return {
       statusCode: HttpStatus.OK,
       data: userInfo,
