@@ -10,8 +10,8 @@ import {
 } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { Wallet } from 'src/wallet/entities/wallet.entity';
-import { Game } from './game.entity';
-import { BetDto } from '../dto/bet.dto';
+import { Game } from 'src/game/entities/game.entity';
+import { BetDto } from 'src/bet/dto/bet.dto';
 
 @Entity()
 export class Redeem {
@@ -21,20 +21,35 @@ export class Redeem {
   @Column()
   amount: number;
 
+  @Column()
+  destinationAddress: string;
+
   @CreateDateColumn()
   redeemSubmitAt: Date;
 
-  @Column({ nullable: true })
-  payoutBy: string;
+  @Column()
+  redeemTxHash: string;
 
   @Column({ nullable: true })
-  redeemRejectBy: string;
+  payoutCanProceed: true;
 
   @Column({ nullable: true })
-  redeemRejectReason: string;
+  payoutNote: string;
 
-  @UpdateDateColumn()
-  payoutOrRejectAt: Date;
+  @Column({ nullable: true })
+  payoutCheckedBy: string;
+
+  @Column({ nullable: true })
+  payoutCheckedAt: Date;
+
+  @Column({ nullable: true })
+  payoutSignature: string;
+
+  @Column({ nullable: true })
+  payoutTxHash: string;
+
+  @Column({ nullable: true })
+  payoutAt: Date;
 
   @Column()
   walletId: string;
