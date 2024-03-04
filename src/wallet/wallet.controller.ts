@@ -34,7 +34,7 @@ import { GameService } from 'src/game/game.service';
 // import { SendMessageDto } from './dto/bet.dto';
 import { User } from 'src/user/entities/user.entity';
 import { Repository } from 'typeorm';
-import { BetDto } from 'src/game/dto/bet.dto';
+import { BetDto } from 'src/bet/dto/bet.dto';
 
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
@@ -43,6 +43,21 @@ export class WalletController {
     private walletService: WalletService,
     private gameService: GameService,
   ) {}
+
+  // TODO
+  @Secure(null, UserRole.USER)
+  @Post('deposit')
+  async deposit() {}
+
+  // TODO: transfer GameUSD to other wallet that registered with us, update balance in database
+  @Secure(null, UserRole.USER)
+  @Post('transfer')
+  async transfer() {}
+
+  // TODO: supply free credit to wallet. Here is not a good place for this API.
+  @Secure(null, UserRole.ADMIN)
+  @Post('supply-credit')
+  async supplyCredit() {}
 
   @Secure(null, UserRole.USER)
   @Get('get-info')
@@ -69,34 +84,13 @@ export class WalletController {
     };
   }
 
-  @Secure(null, UserRole.USER)
-  @Get('get-bets')
-  @ApiHeader({
-    name: 'x-custom-lang',
-    description: 'Custom Language',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'OK',
-    type: ResponseVo,
-  })
-  async getUserBets(
-    @Request() req,
-    @Query('epoch') epoch: number,
-    // @IpAddress() ipAddress,
-    // @HandlerClass() classInfo: IHandlerClass,
-    // @I18n() i18n: I18nContext,
-  ): Promise<ResponseVo<any>> {
-    const bets = await this.gameService.getUserBets(req.user.userId, epoch)
-    return {
-      statusCode: HttpStatus.OK,
-      data: bets,
-      message: '',
-    };
-  }
-
   // TODO
   @Secure(null, UserRole.USER)
-  @Post('deposit')
-  async deposit() {}
+  @Get('get-redeem-status')
+  async getRedeemStatus() {}
+
+  // TODO, need finalize and update smart contract first
+  @Secure(null, UserRole.USER)
+  @Post('get-xp')
+  async getXP() {}
 }
