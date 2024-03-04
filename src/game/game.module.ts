@@ -9,10 +9,10 @@ import { AdminModule } from 'src/admin/admin.module';
 import { SseModule } from 'src/admin/sse/sse.module';
 import { User } from 'src/user/entities/user.entity';
 import { Wallet } from 'src/wallet/entities/wallet.entity';
-import { Bet } from './entities/bet.entity';
-import { Claim } from './entities/claim.entity';
+import { Bet } from 'src/bet/entities/bet.entity';
+import { Claim } from '../claim/entities/claim.entity';
 import { Game } from './entities/game.entity';
-import { Redeem } from './entities/redeem.entity';
+import { Redeem } from '../redeem/entities/redeem.entity';
 import { DrawResult } from './entities/drawResult.entity';
 
 @Module({
