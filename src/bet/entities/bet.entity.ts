@@ -11,14 +11,14 @@ import {
 } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { Wallet } from 'src/wallet/entities/wallet.entity';
-import { Game } from './game.entity';
+import { Game } from 'src/game/entities/game.entity';
 import { BetDto } from '../dto/bet.dto';
-import { Claim } from './claim.entity';
+import { Claim } from 'src/claim/entities/claim.entity';
 
 @Entity()
 export class Bet {
   @PrimaryGeneratedColumn()
-  id: string;
+  id: number;
 
   @Column()
   number: string;
@@ -29,11 +29,14 @@ export class Bet {
   @Column()
   amount: number;
 
+  @Column()
+  credit: number;
+
   @CreateDateColumn()
   submitAt: Date;
 
-  @OneToOne(() => Claim, (claim) => claim.bet)
-  claim: Claim;
+  @Column({ nullable: true })
+  txHash: string;
 
   @Column()
   walletId: number;
@@ -48,4 +51,7 @@ export class Bet {
   @ManyToOne(() => Game, (game) => game.bets)
   @JoinColumn({ name: 'gameId' })
   game: Game;
+
+  @OneToOne(() => Claim, (claim) => claim.bet)
+  claim: Claim;
 }
