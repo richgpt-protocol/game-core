@@ -8,6 +8,8 @@ import { SharedModule } from 'src/shared/shared.module';
 import { AdminModule } from 'src/admin/admin.module';
 import { SseModule } from 'src/admin/sse/sse.module';
 import { Deposit } from './entities/deposit.entity';
+import { HttpModule } from '@nestjs/axios';
+import { ConfigService } from 'src/config/config.service';
 
 @Module({
   imports: [
@@ -17,8 +19,14 @@ import { Deposit } from './entities/deposit.entity';
     // SharedModule,
     // AdminModule,
     // SseModule,
+    HttpModule.registerAsync({
+      useFactory: () => ({
+        timeout: 5000,
+        maxRedirects: 5,
+      }),
+    }),
   ],
-  providers: [DepositService],
+  providers: [DepositService, ConfigService],
   controllers: [DepositController],
   exports: [],
 })
