@@ -33,9 +33,9 @@ import {
 // import { SendMessageDto } from './dto/bet.dto';
 import { User } from 'src/user/entities/user.entity';
 import { Repository } from 'typeorm';
-import { BetDto } from './dto/bet.dto';
-import { ClaimDto } from './dto/claim.dto';
-import { RedeemDto } from './dto/redeem.dto';
+import { BetDto } from 'src/bet/dto/bet.dto';
+import { ClaimDto } from '../claim/dto/claim.dto';
+import { RedeemDto } from '../redeem/dto/redeem.dto';
 import { DrawResultDto } from './dto/drawResult.dto';
 
 @ApiTags('Game')
@@ -44,87 +44,6 @@ export class GameController {
   constructor(
     private gameService: GameService,
   ) {}
-
-  @Secure(null, UserRole.USER)
-  @Post('bet')
-  @ApiHeader({
-    name: 'x-custom-lang',
-    description: 'Custom Language',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'OK',
-    type: ResponseVo,
-  })
-  async bet(
-    @Request() req,
-    @Body() payload: BetDto[],
-    // @IpAddress() ipAddress,
-    // @HandlerClass() classInfo: IHandlerClass,
-    // @I18n() i18n: I18nContext,
-  ): Promise<ResponseVo<any>> {
-    try {
-      await this.gameService.bet(req.user.userId, payload)
-      return {
-        statusCode: HttpStatus.OK,
-        data: null,
-        message: 'bet success',
-      };
-    } catch (error) {
-      return {
-        statusCode: HttpStatus.BAD_REQUEST,
-        data: null,
-        message: error.message,
-      };
-    }
-  }
-
-  // TODO
-  @Secure(null, UserRole.USER)
-  @Post('claim')
-  async claim(
-    @Request() req,
-    @Body() payload: ClaimDto[],
-  ) {
-    try {
-      const res = await this.gameService.claim(req.user.userId, payload)
-      return {
-        statusCode: HttpStatus.OK,
-        data: res,
-        message: 'claim success',
-      };
-
-    } catch (error) {
-      return {
-        statusCode: HttpStatus.BAD_REQUEST,
-        data: null,
-        message: error.message,
-      };
-    }
-  }
-
-  @Secure(null, UserRole.USER)
-  @Post('redeem')
-  async redeem(
-    @Request() req,
-    @Body() payload: RedeemDto,
-  ) {
-    try {
-      await this.gameService.redeem(req.user.userId, payload)
-      return {
-        statusCode: HttpStatus.OK,
-        data: null,
-        message: 'redeem success',
-      };
-
-    } catch (error) {
-      return {
-        statusCode: HttpStatus.BAD_REQUEST,
-        data: null,
-        message: error.message,
-      };
-    }
-  }
 
   // TODO: bet close 1 minute before draw result
   @Secure(null, UserRole.ADMIN)
@@ -154,41 +73,9 @@ export class GameController {
     }
   }
 
-  // TODO: update bet after set draw result
-  @Secure(null, UserRole.ADMIN)
-  @Post('set-last-minute-bet')
-  async setLastMinuteBet() {}
-
-  // TODO: payout if any redeem
-  @Secure(null, UserRole.ADMIN)
-  @Post('payout')
-  async payout() {}
-
-  @Secure(null, UserRole.USER)
-  @Get('get-user-bets')
-  @ApiHeader({
-    name: 'x-custom-lang',
-    description: 'Custom Language',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'OK',
-    type: ResponseVo,
-  })
-  async getUserBets(
-    @Request() req,
-    @Query('epoch') epoch: number,
-    // @IpAddress() ipAddress,
-    // @HandlerClass() classInfo: IHandlerClass,
-    // @I18n() i18n: I18nContext,
-  ): Promise<ResponseVo<any>> {
-    const bets = await this.gameService.getUserBets(req.user.userId, epoch)
-    return {
-      statusCode: HttpStatus.OK,
-      data: bets,
-      message: '',
-    };
-  }
+  // TODO: input number[], epoch and return max allowed bet for that number for that epoch
+  @Get('get-max-allowed-bet')
+  async getMaxAllowedBet() {}
 
   @Get('get-draw-result')
   @ApiHeader({
@@ -201,13 +88,12 @@ export class GameController {
     type: ResponseVo,
   })
   async getDrawResult(
-    @Request() req,
     @Query('epoch') epoch: number,
     // @IpAddress() ipAddress,
     // @HandlerClass() classInfo: IHandlerClass,
     // @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const {id, submitAt, ...drawResult} = await this.gameService.getDrawResult(epoch)
+    const {id, ...drawResult} = await this.gameService.getDrawResult(epoch)
     return {
       statusCode: HttpStatus.OK,
       data: drawResult,
@@ -215,8 +101,25 @@ export class GameController {
     };
   }
 
-  // TODO
-  @Secure(null, UserRole.USER)
-  @Get('get-redeem-status')
-  async getRedeemStatus() {}
+  // TODO???
+  @Get('get-past-draw-result')
+  async getPastDrawResult(
+    @Query('startEpoch') startEpoch: number,
+    @Query('endEpoch') endEpoch: number, // inclusive
+  ) {}
+
+  // TODO, sort descending by winner amount
+  @Get('get-past-draw-winner')
+  async getPastDrawWinner(
+    @Query('startEpoch') startEpoch: number,
+    @Query('endEpoch') endEpoch: number, // inclusive
+  ) {}
+
+  // TODO, sum up and sort descending by winner amount
+  @Get('get-draw-leaderboard')
+  async getDrawLeaderboard() {}
+
+  // TODO, after finalize xp
+  @Get('get-xp-leaderboard')
+  async getXPLeaderboard() {}
 }
