@@ -24,6 +24,11 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { WalletModule } from './wallet/wallet.module';
 import { GameModule } from './game/game.module';
+import { BetModule } from './bet/bet.module';
+import { DepositModule } from './deposit/deposit.module';
+import { ClaimModule } from './claim/claim.module';
+import { RedeemModule } from './redeem/redeem.module';
+import { PayoutModule } from './payout/payout.module';
 
 @Module({
   imports: [
@@ -50,6 +55,11 @@ import { GameModule } from './game/game.module';
     UserModule,
     WalletModule,
     GameModule,
+    BetModule,
+    DepositModule,
+    ClaimModule,
+    RedeemModule,
+    PayoutModule,
     SettingModule,
     I18nModule.forRoot({
       fallbackLanguage: 'en',
