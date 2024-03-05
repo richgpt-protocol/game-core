@@ -24,6 +24,9 @@ export class Game {
   @Column({ unique: true })
   epoch: number;
 
+  @Column({ default: false })
+  isCurrentEpoch: boolean;
+
   @Column()
   maxBetPerNumber: number;
 
