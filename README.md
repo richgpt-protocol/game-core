@@ -48,6 +48,8 @@ DB_DATABASE=richgpt
 
 ## Run
 
+> npm run typeorm-seeding-seed:run -- --seed CreateGame
+
 > npm run start:dev
 
 ## Generate type for smart contract
