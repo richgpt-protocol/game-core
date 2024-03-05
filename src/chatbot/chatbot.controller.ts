@@ -39,7 +39,8 @@ export class ChatbotController {
     private chatbotService: ChatbotService,
   ) {}
 
-  @Post('sendMessage')
+  @Secure(null, UserRole.USER)
+  @Post('send')
   @ApiHeader({
     name: 'x-custom-lang',
     description: 'Custom Language',
@@ -55,11 +56,12 @@ export class ChatbotController {
     type: ErrorResponseVo,
   })
   async sendMessage(
+    @Request() req,
     @Body() payload: SendMessageDto
   ): Promise<ResponseVo<any>> {
 
     try {
-      const replied = await this.chatbotService.sendMessage(payload)
+      const replied = await this.chatbotService.sendMessage(req.user.userId, payload)
       return {
         statusCode: HttpStatus.OK,
         data: {
