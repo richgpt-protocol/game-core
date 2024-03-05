@@ -1,80 +1,96 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Injectable } from '@nestjs/common';
 import OpenAI from "openai"
-import { ChatCompletionMessageParam } from 'openai/resources';
 import { SendMessageDto } from './dto/sendMessage.dto';
 import { MongoClient, WithId } from 'mongodb'
-import { Data, QztWzt } from './chatbot.interface'
+import { QztWzt } from './chatbot.interface'
 var similarity = require('compute-cosine-similarity') // pure js lib, use import will cause error
+import { InjectRepository } from '@nestjs/typeorm';
+import { ChatLog } from './entities/chatLog.entity';
+import { Repository } from 'typeorm';
+import { Message } from './entities/message.entity';
 import * as dotenv from 'dotenv'
 dotenv.config()
 
-const client = new MongoClient('mongodb://localhost:27017')
+const client = new MongoClient('mongodb://localhost:27017') // for number recommendation based on input
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY})
 const model = "gpt-3.5-turbo"
 
 @Injectable()
 export class ChatbotService {
-  feeds: { [key: string]: ChatCompletionMessageParam[] } = {}
+  feeds = []
   initialMessageTimestamp: { [key: string]: string} = {}
   availableFunctions: {[key: string]: Function} = {
     'getNumberRecommendation': this.getNumberRecommendation,
   }
 
-  constructor() {}
+  constructor(
+    @InjectRepository(ChatLog)
+    private chatLogRepository: Repository<ChatLog>,
+    @InjectRepository(Message)
+    private messageRepository: Repository<Message>,
+  ) {}
 
-  async sendMessage(payload: SendMessageDto): Promise<string> {
+  async sendMessage(id: number, payload: SendMessageDto): Promise<string> {
+    let chatLog: ChatLog;
+
     const isInitialMessage = payload.isInitialMessage
-    const userId = payload.userId
     if (isInitialMessage) {
-      if (userId in this.feeds) {
-        if (this.feeds[userId].length > 0) {
-          const obj = {}
-          obj[this.initialMessageTimestamp[userId]] = JSON.stringify(this.feeds[userId])
-          try {
-            await client.connect()
-            const db = client.db('fdgpt').collection('chatlog')
-            const result = <Data>await db.findOne({ userId: userId })
-            if (result) {
-              await db.updateOne(
-                { userId: userId },
-                { $set: { logs: [...result.logs, obj] } }
-              )
+      chatLog = await this.chatLogRepository.save(
+        this.chatLogRepository.create({ userId: id })
+      )
 
-            } else {
-              await db.insertOne({
-                userId: userId,
-                logs: [obj]
-              })
-            }
-        
-          } finally {
-            await client.close()
-          }
-        }
+      const initialRole = 'system';
+      const initialContent = "You are a fun and playful assistant." +
+        "You assist me who likely to bet in 4D lottery." +
+        "\n" +
+        "Your reply should within 3 sentences, make the reply close to lottery if possible." +
+        "Your reply may include emoji." +
+        "\n" +
+        "If and only if I ask for number, provide me a 4-Digits number between 0000 and 9999. Don't tell me it is random." +
+        "If I ask why this number, tell me any reason besides random." +
+        "\n" +
+        `Current year is ${(new Date(Date.now())).getFullYear()}.`
+      const message = await this.messageRepository.save(
+        this.messageRepository.create({
+          role: initialRole,
+          content: initialContent,
+          chatLog
+        })
+      )
+      chatLog.messages = [message]
+      await this.chatLogRepository.save(chatLog)
+
+      this.feeds.push({ 'role': initialRole, 'content': initialContent })
+
+    } else { // isInitialMessage == false
+      // fetch previous messages from db
+      chatLog = await this.chatLogRepository
+        .createQueryBuilder('chatLog')
+        .select()
+        .leftJoinAndSelect('chatLog.messages', 'message')
+        .where({ userId: id })
+        .orderBy('chatLog.id', 'DESC')
+        .getOne()
+      for (const message of chatLog.messages) {
+        this.feeds.push({ 'role': message.role, 'content': message.content })
       }
-      this.feeds[userId] = [{
-        "role": "system",
-        "content": 
-          "You are a fun and playful assistant." +
-          "You assist me who likely to bet in 4D lottery." +
-          "\n" +
-          "Your reply should within 3 sentences, make the reply close to lottery if possible." +
-          "Your reply may include emoji." +
-          "\n" +
-          "If and only if I ask for number, provide me a 4-Digits number between 0000 and 9999. Don't tell me it is random." +
-          "If I ask why this number, tell me any reason besides random." +
-          "\n" +
-          `Current year is ${(new Date(Date.now())).getFullYear()}.`
-      }]
-      this.initialMessageTimestamp[userId] = Date.now().toString()
     }
 
-    const feed: ChatCompletionMessageParam = { 'role': 'user', 'content': payload.message  }
-    this.feeds[userId].push(feed)
+    // add current message to feeds
+    this.feeds.push({ 'role': 'user', 'content': payload.message })
+    // save current message into db
+    const userMessage = await this.messageRepository.save(
+      this.messageRepository.create({
+        role: 'user',
+        content: payload.message,
+        chatLog
+      })
+    )
 
+    // submit to chatgpt
     const completion = await openai.chat.completions.create({
-      messages: this.feeds[userId],
+      messages: this.feeds,
       model: model,
       tools: [
         {
@@ -96,8 +112,18 @@ export class ChatbotService {
         },
       ]
     })
-    const message = completion.choices[0].message
-    const toolCalls = message.tool_calls
+    const assistantMessage = completion.choices[0].message
+
+    // save this message into db
+    await this.messageRepository.save(
+      this.messageRepository.create({
+        role: assistantMessage.role,
+        content: assistantMessage.content,
+        chatLog
+      })
+    )
+
+    const toolCalls = assistantMessage.tool_calls
     let replied = ''
     if (toolCalls) {
       // this message is to call functions
@@ -117,24 +143,44 @@ export class ChatbotService {
           // all other functions (without argument)
           functionResponse = await functionToCall()
         }
-        
-        // handle functionResponse if not return in if statement
         // console.info(functionResponse)
-        this.feeds[userId].push(message) // message contain function call
-        this.feeds[userId].push({ // message contain function response
+
+        this.feeds.push(assistantMessage) // message contain function call
+        this.feeds.push({ // message contain function response
           tool_call_id: toolCall.id,
           role: "tool",
           content: JSON.stringify(functionResponse),
         })
-        const response = await openai.chat.completions.create({ model: model, messages: this.feeds[userId] })
-        replied = response.choices[0].message.content
+
+        // save function reponse into db
+        await this.messageRepository.save(
+          this.messageRepository.create({
+            role: "tool",
+            content: JSON.stringify(functionResponse),
+            chatLog
+          })
+        )
       }
 
-    } else {
-      replied = completion.choices[0].message.content
-    }
+      // submit everything to chatgpt
+      const response = await openai.chat.completions.create({ model: model, messages: this.feeds })
+      const assistantMessageWithFunctionResponse = response.choices[0].message
 
-    this.feeds[userId].push({ 'role': 'assistant', 'content': replied  })
+      // save assistant message with function response into db
+      await this.messageRepository.save(
+        this.messageRepository.create({
+          role: assistantMessageWithFunctionResponse.role,
+          content: assistantMessageWithFunctionResponse.content,
+          chatLog
+        })
+      )
+
+      replied = assistantMessageWithFunctionResponse.content
+
+    } else {
+      // this message is normal message
+      replied = assistantMessage.content
+    }
 
     return replied
   }

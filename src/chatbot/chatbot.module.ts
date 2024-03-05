@@ -8,12 +8,14 @@ import { PermissionModule } from 'src/permission/permission.module';
 import { SharedModule } from 'src/shared/shared.module';
 import { AdminModule } from 'src/admin/admin.module';
 import { SseModule } from 'src/admin/sse/sse.module';
+import { ChatLog } from './entities/chatLog.entity';
+import { Message } from './entities/message.entity';
 
 @Module({
   imports: [
-    // TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([ChatLog, Message]),
     // AuditLogModule,
-    // PermissionModule,
+    PermissionModule,
     // SharedModule,
     // AdminModule,
     // SseModule,

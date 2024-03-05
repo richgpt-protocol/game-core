@@ -4,12 +4,14 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 
 import { Wallet } from '../../wallet/entities/wallet.entity';
+import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 
 @Entity()
 export class User {
@@ -85,4 +87,7 @@ export class User {
   @ManyToOne(() => User, (user) => user.id)
   @JoinColumn({ name: 'referralUserId' })
   referralUser: User;
+
+  @OneToMany(() => ChatLog, (chatLog) => chatLog.user)
+  chatLogs: ChatLog[];
 }
