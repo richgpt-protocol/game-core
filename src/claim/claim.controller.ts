@@ -30,7 +30,7 @@ import {
     ResponseVo,
   } from 'src/shared/vo/response.vo';
 import { ClaimService } from './claim.service';
-import { ClaimDto } from './dto/Claim.dto';
+import { ClaimDto } from './dto/claim.dto';
 
 @ApiTags('Claim')
 @Controller('api/v1/claim')

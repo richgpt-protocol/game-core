@@ -23,7 +23,8 @@
     "db:create": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs db:create",
     "db:drop": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs db:drop",
     "seed:run": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs seed:run",
-    "seed:create": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs seed:create"
+    "seed:create": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs seed:create",
+    "seed:admin": "ts-node ./node_modules/typeorm-seeding/dist/cli.js seed -s CreateAdmins"
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.2",

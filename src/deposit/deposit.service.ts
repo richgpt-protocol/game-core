@@ -29,8 +29,14 @@ export class DepositService {
       this.configService.get('DEPOSIT_BOT_URL') + '/deposit',
       {
         chainId: body.chainId,
-        userId: user.id,
+        userId: user.userId,
         address: body.address,
+      },
+      {
+        headers: {
+          secret: this.configService.get('DEPOSIT_BOT_SECRET'),
+          'Content-Type': 'application/json',
+        },
       },
     );
 

@@ -61,7 +61,8 @@ export class DepositController {
   ): Promise<ResponseVo<any>> {
     try {
       //TODO solana
-      const wallet = await this.walletService.getWalletInfo(req.user.id);
+      const wallet = await this.walletService.getWalletInfo(req.user.userId);
+      console.log(wallet);
 
       await this.depositService.createDepositRequest(req.user, {
         chainId: body.chainId,

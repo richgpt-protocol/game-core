@@ -30,7 +30,7 @@ import {
     ResponseVo,
   } from 'src/shared/vo/response.vo';
 import { RedeemService } from './redeem.service';
-import { RedeemDto } from './dto/Redeem.dto';
+import { RedeemDto } from './dto/redeem.dto';
 import { GameService } from 'src/game/game.service';
 
 @ApiTags('Redeem')

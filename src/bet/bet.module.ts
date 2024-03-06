@@ -10,6 +10,8 @@ import { SseModule } from 'src/admin/sse/sse.module';
 import { Bet } from './entities/bet.entity';
 import { Wallet } from 'src/wallet/entities/wallet.entity';
 import { Game } from 'src/game/entities/game.entity';
+import { ConfigService } from 'src/config/config.service';
+import { ConfigModule } from 'src/config/config.module';
 
 @Module({
   imports: [
@@ -20,7 +22,7 @@ import { Game } from 'src/game/entities/game.entity';
     // AdminModule,
     // SseModule,
   ],
-  providers: [BetService],
+  providers: [BetService, ConfigService],
   controllers: [BetController],
   exports: [],
 })
