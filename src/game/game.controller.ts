@@ -37,6 +37,7 @@ import { BetDto } from 'src/bet/dto/bet.dto';
 import { ClaimDto } from '../claim/dto/claim.dto';
 import { RedeemDto } from '../redeem/dto/redeem.dto';
 import { DrawResultDto } from './dto/drawResult.dto';
+import { PermissionEnum } from 'src/shared/enum/permission.enum';
 
 @ApiTags('Game')
 @Controller('api/v1/game')
@@ -46,9 +47,15 @@ export class GameController {
   ) {}
 
   // TODO: bet close 1 minute before draw result
-  @Secure(null, UserRole.ADMIN)
+  @Secure(PermissionEnum.SET_BET_CLOSE, UserRole.ADMIN)
   @Post('set-bet-close')
-  async setBetClose() {}
+  async setBetClose() {
+    return {
+      statusCode: HttpStatus.OK,
+      data: null,
+      message: 'set bet close success',
+    };
+  }
 
   @Secure(null, UserRole.ADMIN)
   @Post('set-draw-result')
