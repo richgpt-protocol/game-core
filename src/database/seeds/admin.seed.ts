@@ -7,6 +7,7 @@ import * as path from 'path';
 import { Permission } from '../../permission/entities/permission.entity';
 import { PermissionAccess } from '../../permission/entities/permission-access.entity';
 import { PermissionAccessDto } from '../../permission/dto/permission-access.dto';
+import * as bcrypt from 'bcrypt';
 
 export default class CreateAdmins implements Seeder {
   /**
@@ -28,7 +29,7 @@ export default class CreateAdmins implements Seeder {
           username: 'admin',
           name: 'Admin',
           emailAddress: 'admin@gmail.com',
-          password: 'admin888*',
+          password: await bcrypt.hash('admin888*', 10),
           adminType: AdminType.SUPERUSER,
           createdBy: 'system',
           status: AdminStatus.ACTIVE,
