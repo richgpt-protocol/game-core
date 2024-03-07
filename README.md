@@ -2,26 +2,6 @@
 
 For testing purpose, current version allow user to register and login directly without otp.
 
-## Download and install mySQL
-
-https://dev.mysql.com/downloads/mysql/
-
-## Initiate database and create database
-
-Initiate database with username `root` and password `rootpass`
-
-Access into mysql shell, create database `richgpt` and initiate first game
-
-> mysql -u root -p
-
-> Enter password: rootpass
-
-> CREATE DATABASE richgpt;
-
-> INSERT INTO game (epoch) VALUES (0);
-
-> exit
-
 ## Git clone, switch branch and set environment
 
 > git clone git@github.com:richgpt-protocol/game-core.git
@@ -42,15 +22,45 @@ DB_PORT=3306
 DB_DATABASE=richgpt
 ```
 
+## Download and install mySQL
+
+https://dev.mysql.com/downloads/mysql/
+
 ## Install
 
-> npm install --force
+> npm install
+
+## Create database and initiate database via run seed
+
+> npm run db:create
+
+> npm run build
+
+> npm run seed:run
 
 ## Run
 
-> npm run typeorm-seeding-seed:run -- --seed CreateGame
-
 > npm run start:dev
+
+## Test environment
+
+### admin
+
+admin account with superuser type for testing purpose: 
+
+username: admin
+
+password: admin888*
+
+### reset database
+
+clear all data and reinitiate database
+
+> npm run db:drop
+
+> npm run db:create
+
+> npm run seed:run
 
 ## Generate type for smart contract
 

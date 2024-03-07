@@ -1,8 +1,7 @@
 import { AdminType, UserRole } from '../../shared/enum/role.enum';
 import { AdminStatus } from '../../shared/enum/status.enum';
-import { Connection } from 'typeorm';
-import { Factory, Seeder } from 'typeorm-seeding';
-import * as bcrypt from 'bcrypt';
+import { DataSource } from 'typeorm';
+import { Seeder, SeederFactoryManager } from 'typeorm-extension';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Permission } from '../../permission/entities/permission.entity';
@@ -10,10 +9,17 @@ import { PermissionAccess } from '../../permission/entities/permission-access.en
 import { PermissionAccessDto } from '../../permission/dto/permission-access.dto';
 
 export default class CreateAdmins implements Seeder {
-  public async run(factory: Factory, connection: Connection): Promise<void> {
-    await this.insertPermissions(connection);
+  /**
+   * Track seeder execution.
+   *
+   * Default: false
+   */
+  track = false;
 
-    const admins = await connection
+  public async run(dataSource: DataSource, factoryManager: SeederFactoryManager): Promise<void> {
+    await this.insertPermissions(dataSource);
+
+    const admins = await dataSource
       .createQueryBuilder()
       .insert()
       .into('admin')
@@ -21,8 +27,8 @@ export default class CreateAdmins implements Seeder {
         {
           username: 'admin',
           name: 'Admin',
-          emailAddress: 'soonlai814@gmail.com',
-          password: await bcrypt.hash('Zaq12wsx', 10),
+          emailAddress: 'admin@gmail.com',
+          password: 'admin888*',
           adminType: AdminType.SUPERUSER,
           createdBy: 'system',
           status: AdminStatus.ACTIVE,
@@ -30,10 +36,10 @@ export default class CreateAdmins implements Seeder {
       ])
       .execute();
 
-    const permissionList = await this.findAll(connection, AdminType.SUPERUSER);
+    const permissionList = await this.findAll(dataSource, AdminType.SUPERUSER);
     const permissions = permissionList.map((p) => p.id);
 
-    await this.assignPermission(connection, {
+    await this.assignPermission(dataSource, {
       userId: admins.generatedMaps[0].id,
       userRole: UserRole.ADMIN,
       role: AdminType.SUPERUSER,
@@ -41,56 +47,47 @@ export default class CreateAdmins implements Seeder {
     });
   }
 
-  private async insertPermissions(connection: Connection) {
+  private async insertPermissions(dataSource: DataSource) {
     const filePath = path.resolve(
       __dirname,
       '../sql_scripts/permission_script.sql',
     );
 
-    return new Promise((resolve, reject) => {
-      fs.readFile(filePath.toString(), 'utf-8', (err, data) => {
-        if (err) {
-          reject(err);
-        } else {
-          const arr = data.split('\n');
-          arr.forEach(async (script) => {
-            await connection.query(script);
-          });
-          resolve(data);
-        }
-      });
-    });
+    let arr = fs.readFileSync(filePath.toString(), 'utf-8').split('\n');
+    for (let i = 0; i < arr.length; i++) {
+      await dataSource.query(arr[i]);
+    }
   }
 
   private async findAll(
-    connection: Connection,
+    dataSource: DataSource,
     role?: string,
   ): Promise<Permission[]> {
     if (role != null) {
-      return await connection.query(
+      return await dataSource.query(
         `SELECT * FROM permission WHERE permission.roles LIKE '%${role}%'`,
       );
     }
 
-    return await connection.query(`SELECT * FROM permission`);
+    return await dataSource.query(`SELECT * FROM permission`);
   }
 
   private async findAllPermissionAccessByUser(
-    connection: Connection,
+    dataSource: DataSource,
     userId: number,
     role: string,
   ): Promise<PermissionAccess[]> {
-    return await connection.query(
+    return await dataSource.query(
       `SELECT * FROM permission_access WHERE "userId" = ${userId} AND role = '${role}'`,
     );
   }
 
   private async assignPermission(
-    connection: Connection,
+    dataSource: DataSource,
     payload: PermissionAccessDto,
   ) {
     const pa = await this.findAllPermissionAccessByUser(
-      connection,
+      dataSource,
       payload.userId,
       payload.role,
     );
@@ -113,7 +110,7 @@ export default class CreateAdmins implements Seeder {
       }
     });
     if (deleted.length > 0) {
-      await connection
+      await dataSource
         .createQueryBuilder()
         .delete()
         .from('permission_access')
@@ -121,7 +118,7 @@ export default class CreateAdmins implements Seeder {
         .execute();
     }
 
-    const permissionList = await this.findAll(connection, payload.role);
+    const permissionList = await this.findAll(dataSource, payload.role);
     const permissionAccesses = newInserted.map((p) => {
       return {
         role: payload.role,
@@ -130,7 +127,7 @@ export default class CreateAdmins implements Seeder {
         permissionId: Number(p),
       };
     });
-    await connection
+    await dataSource
       .createQueryBuilder()
       .insert()
       .into('permission_access')
