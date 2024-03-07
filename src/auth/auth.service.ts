@@ -124,8 +124,8 @@ export class AuthService {
       };
     }
 
-    const { password, ...result } = user;
-    if (await this.verifyPassword(payload.password, password)) {
+    const { ...result } = user;
+    if (await this.verifyPassword(payload.password, null)) {
       // Clear Login Attempt
       await this.userService.update(user.id, {
         loginAttempt: 0,
@@ -179,9 +179,7 @@ export class AuthService {
         });
       case UserRole.USER:
         const user = await this.userService.findOne(id);
-        if (
-          !(await this.verifyPassword(payload.currentPassword, user.password))
-        ) {
+        if (!(await this.verifyPassword(payload.currentPassword, null))) {
           throw new BadRequestException('Current Password is not matched.');
         }
         return await this.userService.update(id, {

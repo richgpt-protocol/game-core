@@ -5,11 +5,12 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { Admin } from './admin.entity';
-import { Notification } from '../entities/notification.entity';
+import { Admin } from '../../admin/entities/admin.entity';
+import { Notification } from './notification.entity';
+import { User } from 'src/user/entities/user.entity';
 
 @Entity()
-export class AdminNotification {
+export class UserNotification {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -27,12 +28,15 @@ export class AdminNotification {
   deletedDate: Date;
 
   // Foreign Keys
-  @ManyToOne(() => Admin, (admin) => admin.adminNotifications)
+  @ManyToOne(() => Admin, (admin) => admin.userNotifications)
   admin: Admin;
+
+  @ManyToOne(() => User, (user) => user.userNotifications)
+  user: User;
 
   @ManyToOne(
     () => Notification,
-    (notification) => notification.adminNotifications,
+    (notification) => notification.userNotifications,
     {
       eager: true,
     },

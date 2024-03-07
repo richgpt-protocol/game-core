@@ -63,113 +63,113 @@ export class AdminController {
     };
   }
 
-  @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
-  @Get('get-admin-notification')
-  @ApiResponse({
-    status: 200,
-    description: 'Successful Response',
-    type: ResponseVo,
-  })
-  async getAdminNotification(
-    @Request() req,
-    @IpAddress() ipAddress,
-    @HandlerClass() classInfo: IHandlerClass,
-  ): Promise<ResponseVo<any>> {
-    const result = await this.adminService.getAdminNotifications(
-      req.user.userId,
-    );
+  // @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
+  // @Get('get-admin-notification')
+  // @ApiResponse({
+  //   status: 200,
+  //   description: 'Successful Response',
+  //   type: ResponseVo,
+  // })
+  // async getAdminNotification(
+  //   @Request() req,
+  //   @IpAddress() ipAddress,
+  //   @HandlerClass() classInfo: IHandlerClass,
+  // ): Promise<ResponseVo<any>> {
+  //   const result = await this.adminService.getAdminNotifications(
+  //     req.user.userId,
+  //   );
 
-    await this.auditLogService.addAuditLog(
-      classInfo,
-      req,
-      ipAddress,
-      'Get Admin Notification: ' + JSON.stringify(req.user.userId),
-    );
+  //   await this.auditLogService.addAuditLog(
+  //     classInfo,
+  //     req,
+  //     ipAddress,
+  //     'Get Admin Notification: ' + JSON.stringify(req.user.userId),
+  //   );
 
-    return {
-      statusCode: HttpStatus.OK,
-      data: result,
-      message: 'Get Admin Notification Successful',
-    };
-  }
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     data: result,
+  //     message: 'Get Admin Notification Successful',
+  //   };
+  // }
 
-  @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
-  @Put('update-admin-notification')
-  @ApiResponse({
-    status: 200,
-    description: 'Successful Response',
-    type: ResponseVo,
-  })
-  async updateAdminNotification(
-    @Request() req,
-    @IpAddress() ipAddress,
-    @HandlerClass() classInfo: IHandlerClass,
-    @Body() payload: UpdateAdminNotificationDto,
-  ): Promise<ResponseVo<any>> {
-    const admin = await this.adminService.findById(req.user.userId);
+  // @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
+  // @Put('update-admin-notification')
+  // @ApiResponse({
+  //   status: 200,
+  //   description: 'Successful Response',
+  //   type: ResponseVo,
+  // })
+  // async updateAdminNotification(
+  //   @Request() req,
+  //   @IpAddress() ipAddress,
+  //   @HandlerClass() classInfo: IHandlerClass,
+  //   @Body() payload: UpdateAdminNotificationDto,
+  // ): Promise<ResponseVo<any>> {
+  //   const admin = await this.adminService.findById(req.user.userId);
 
-    if (!admin) {
-      throw new BadRequestException('Admin is not found.');
-    }
+  //   if (!admin) {
+  //     throw new BadRequestException('Admin is not found.');
+  //   }
 
-    const result = await this.adminService.updateNotificationRead(
-      payload,
-      admin.id,
-    );
+  //   const result = await this.adminService.updateNotificationRead(
+  //     payload,
+  //     admin.id,
+  //   );
 
-    if (result.affected > 0) {
-      await this.auditLogService.addAuditLog(
-        classInfo,
-        req,
-        ipAddress,
-        'Update Admin Notification: ' + JSON.stringify(payload),
-      );
+  //   if (result.affected > 0) {
+  //     await this.auditLogService.addAuditLog(
+  //       classInfo,
+  //       req,
+  //       ipAddress,
+  //       'Update Admin Notification: ' + JSON.stringify(payload),
+  //     );
 
-      return {
-        statusCode: HttpStatus.OK,
-        data: {},
-        message: 'Update Admin Notification Successful',
-      };
-    } else {
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        data: {},
-        message: 'Failed to update Admin Notification.',
-      };
-    }
-  }
+  //     return {
+  //       statusCode: HttpStatus.OK,
+  //       data: {},
+  //       message: 'Update Admin Notification Successful',
+  //     };
+  //   } else {
+  //     return {
+  //       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+  //       data: {},
+  //       message: 'Failed to update Admin Notification.',
+  //     };
+  //   }
+  // }
 
-  @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
-  @Delete('clear-all-notifications')
-  @ApiResponse({
-    status: 200,
-    description: 'Successful Response',
-    type: ResponseVo,
-  })
-  async clearAllNotifications(
-    @Request() req,
-    @IpAddress() ipAddress,
-    @HandlerClass() classInfo: IHandlerClass,
-  ): Promise<ResponseVo<any>> {
-    const admin = await this.adminService.findById(req.user.userId);
+  // @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
+  // @Delete('clear-all-notifications')
+  // @ApiResponse({
+  //   status: 200,
+  //   description: 'Successful Response',
+  //   type: ResponseVo,
+  // })
+  // async clearAllNotifications(
+  //   @Request() req,
+  //   @IpAddress() ipAddress,
+  //   @HandlerClass() classInfo: IHandlerClass,
+  // ): Promise<ResponseVo<any>> {
+  //   const admin = await this.adminService.findById(req.user.userId);
 
-    if (!admin) {
-      throw new UnauthorizedException('Admin is not found.');
-    }
-    await this.adminService.clearAllNotifications(admin.id);
-    await this.auditLogService.addAuditLog(
-      classInfo,
-      req,
-      ipAddress,
-      'Clear All Admin Notifications.',
-    );
+  //   if (!admin) {
+  //     throw new UnauthorizedException('Admin is not found.');
+  //   }
+  //   await this.adminService.clearAllNotifications(admin.id);
+  //   await this.auditLogService.addAuditLog(
+  //     classInfo,
+  //     req,
+  //     ipAddress,
+  //     'Clear All Admin Notifications.',
+  //   );
 
-    return {
-      statusCode: HttpStatus.OK,
-      data: {},
-      message: 'Clear All Admin Notifications Successful',
-    };
-  }
+  //   return {
+  //     statusCode: HttpStatus.OK,
+  //     data: {},
+  //     message: 'Clear All Admin Notifications Successful',
+  //   };
+  // }
 
   @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
   @Post('get-admin-list')

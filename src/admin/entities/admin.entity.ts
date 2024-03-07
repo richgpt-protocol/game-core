@@ -6,7 +6,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { AdminNotification } from './admin-notification.entity';
+import { UserNotification } from '../../notification/entities/user-notification.entity';
+import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
 
 @Entity()
 export class Admin {
@@ -64,8 +65,11 @@ export class Admin {
 
   // Foreign Keys
   @OneToMany(
-    () => AdminNotification,
-    (adminNotification) => adminNotification.admin,
+    () => UserNotification,
+    (userNotification) => userNotification.admin,
   )
-  adminNotifications: AdminNotification[];
+  userNotifications: UserNotification[];
+
+  @OneToMany(() => RedeemTx, (redeemTx) => redeemTx.admin)
+  redeemTxs: RedeemTx[];
 }

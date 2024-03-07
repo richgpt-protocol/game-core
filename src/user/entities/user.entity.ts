@@ -1,9 +1,14 @@
+import { UserNotification } from 'src/notification/entities/user-notification.entity';
+import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import {
   Column,
   CreateDateColumn,
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
+  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -16,17 +21,12 @@ export class User {
   @Column()
   phoneNumber: string;
 
-  @Column({
-    select: false,
-  })
-  password: string;
-
   @Column()
   referralCode: string;
 
   @Column({
     comment:
-      'A - active, I - inactive, S - Suspended, T - Terminated, U - Unverified, P - Pending, R - Reject',
+      'A - active, I - inactive, S - Suspended, T - Terminated, U - Unverified, P - Pending',
   })
   status: string;
 
@@ -57,6 +57,37 @@ export class User {
   })
   otpGenerateTime: Date;
 
+  @Column({
+    default: 1,
+    comment: '1 - Bronze, 2 - Silver, 3 - Gold',
+  })
+  referralRank: number;
+
+  @Column({
+    comment: 'SMS, TELEGRAM, WHATSAPP',
+  })
+  otpMethod: string;
+
+  @Column({
+    nullable: true,
+  })
+  emailAddress: string;
+
+  @Column({
+    default: false,
+  })
+  isEmailVerified: boolean;
+
+  @Column({
+    nullable: true,
+  })
+  emailVerificationCode: string;
+
+  @Column({
+    nullable: true,
+  })
+  emailOtpGenerateTime: Date;
+
   @CreateDateColumn()
   createdDate: Date;
 
@@ -77,4 +108,20 @@ export class User {
   @ManyToOne(() => User, (user) => user.id)
   @JoinColumn({ name: 'referralUserId' })
   referralUser: User;
+
+  @OneToMany(() => ReferralTx, (referraltx) => referraltx.user)
+  referralTx: ReferralTx[];
+
+  @OneToMany(() => ReferralTx, (referraltx) => referraltx.referralUser)
+  referredTx: ReferralTx[];
+
+  @OneToOne(() => UserWallet, (userWallet) => userWallet.user)
+  @JoinColumn()
+  wallet: UserWallet;
+
+  @OneToMany(
+    () => UserNotification,
+    (userNotification) => userNotification.user,
+  )
+  userNotifications: UserNotification[];
 }

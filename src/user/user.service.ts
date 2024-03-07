@@ -97,10 +97,11 @@ export class UserService {
   }
 
   async getUserInfo(id: number) {
-    const { password, verificationCode, ...result } =
-      await this.userRepository.findOneBy({
+    const { verificationCode, ...result } = await this.userRepository.findOneBy(
+      {
         id,
-      });
+      },
+    );
     return result;
   }
 
@@ -128,14 +129,11 @@ export class UserService {
       }
     }
 
-    // const hashed = await bcrypt.hash(payload.password, 10);
     const result = await this.userRepository.save(
       this.userRepository.create({
         ...payload,
-        password: payload.password, // Frontend do encryption
         loginAttempt: 0,
-        // status: UserStatus.UNVERIFIED, // TODO will do email verification next milestone
-        status: UserStatus.ACTIVE,
+        status: UserStatus.PENDING,
         isReset: false,
       }),
     );

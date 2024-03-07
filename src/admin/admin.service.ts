@@ -14,12 +14,11 @@ import { AdminDto, GetAdminListDto } from './dto/admin.dto';
 import { buildFilterCriterias } from 'src/shared/utils/pagination.util';
 import { ObjectUtil } from 'src/shared/utils/object.util';
 import * as bcrypt from 'bcrypt';
-import { AdminNotification } from './entities/admin-notification.entity';
 import {
   AdminNotificationDto,
   UpdateAdminNotificationDto,
 } from './dto/admin-notification.dto';
-import { Notification } from './entities/notification.entity';
+import { Notification } from '../notification/entities/notification.entity';
 import { DateUtil } from 'src/shared/utils/date.util';
 import { PermissionService } from 'src/permission/permission.service';
 import { UserRole } from 'src/shared/enum/role.enum';
@@ -31,10 +30,8 @@ export class AdminService {
   constructor(
     @InjectRepository(Admin)
     private adminRepository: Repository<Admin>,
-    @InjectRepository(AdminNotification)
-    private adminNotificationRepository: Repository<AdminNotification>,
-    @InjectRepository(Notification)
-    private notificationRepository: Repository<Notification>,
+    // @InjectRepository(Notification)
+    // private notificationRepository: Repository<Notification>,
     private connection: Connection,
     @Inject(forwardRef(() => PermissionService))
     private permissionService: PermissionService,
@@ -222,93 +219,93 @@ export class AdminService {
     return result;
   }
 
-  async getAdminNotifications(id: number) {
-    const admin = await this.findById(id);
-    return await this.adminNotificationRepository
-      .createQueryBuilder('row')
-      .leftJoinAndSelect('row.notification', 'notification')
-      .where({
-        admin,
-      })
-      .orderBy('notification.createdDate', 'DESC')
-      .getMany();
-  }
+  // async getAdminNotifications(id: number) {
+  //   const admin = await this.findById(id);
+  //   return await this.adminNotificationRepository
+  //     .createQueryBuilder('row')
+  //     .leftJoinAndSelect('row.notification', 'notification')
+  //     .where({
+  //       admin,
+  //     })
+  //     .orderBy('notification.createdDate', 'DESC')
+  //     .getMany();
+  // }
 
-  async updateNotificationRead(
-    payload: UpdateAdminNotificationDto,
-    adminId: number,
-  ) {
-    const admin = await this.findById(adminId);
-    return await this.adminNotificationRepository
-      .createQueryBuilder()
-      .update(AdminNotification)
-      .set({
-        isRead: true,
-        readDateTime: new Date(),
-      })
-      .where({
-        id: In(payload.notificationIds),
-        admin,
-      })
-      .execute();
-  }
+  // async updateNotificationRead(
+  //   payload: UpdateAdminNotificationDto,
+  //   adminId: number,
+  // ) {
+  //   const admin = await this.findById(adminId);
+  //   return await this.adminNotificationRepository
+  //     .createQueryBuilder()
+  //     .update(AdminNotification)
+  //     .set({
+  //       isRead: true,
+  //       readDateTime: new Date(),
+  //     })
+  //     .where({
+  //       id: In(payload.notificationIds),
+  //       admin,
+  //     })
+  //     .execute();
+  // }
 
-  async createAdminNotification(payload: AdminNotificationDto) {
-    const queryRunner = this.connection.createQueryRunner();
+  // async createAdminNotification(payload: AdminNotificationDto) {
+  //   const queryRunner = this.connection.createQueryRunner();
 
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+  //   await queryRunner.connect();
+  //   await queryRunner.startTransaction();
 
-    try {
-      const notification = await this.notificationRepository.save(
-        this.notificationRepository.create({
-          type: payload.type,
-          title: payload.title,
-          message: payload.message,
-        }),
-      );
+  //   try {
+  //     const notification = await this.notificationRepository.save(
+  //       this.notificationRepository.create({
+  //         type: payload.type,
+  //         title: payload.title,
+  //         message: payload.message,
+  //       }),
+  //     );
 
-      if (notification) {
-        let admins = [];
-        if (payload.filterAdminIds && payload.filterAdminIds.length > 0) {
-          admins = await this.adminRepository
-            .createQueryBuilder('row')
-            .select('row')
-            .whereInIds(payload.filterAdminIds)
-            .getMany();
-        } else {
-          admins = await this.adminRepository.find();
-        }
+  //     if (notification) {
+  //       let admins = [];
+  //       if (payload.filterAdminIds && payload.filterAdminIds.length > 0) {
+  //         admins = await this.adminRepository
+  //           .createQueryBuilder('row')
+  //           .select('row')
+  //           .whereInIds(payload.filterAdminIds)
+  //           .getMany();
+  //       } else {
+  //         admins = await this.adminRepository.find();
+  //       }
 
-        const createQueries = [];
-        admins.forEach((a) => {
-          createQueries.push(
-            this.adminNotificationRepository.create({
-              admin: a,
-              notification,
-            }),
-          );
-        });
-        await this.adminNotificationRepository.save(createQueries);
-      }
-      await queryRunner.commitTransaction();
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      this.logger.error(err);
-    } finally {
-      await queryRunner.release();
-    }
-  }
+  //       const createQueries = [];
+  //       admins.forEach((a) => {
+  //         createQueries.push(
+  //           this.adminNotificationRepository.create({
+  //             admin: a,
+  //             notification,
+  //           }),
+  //         );
+  //       });
+  //       await this.adminNotificationRepository.save(createQueries);
+  //     }
+  //     await queryRunner.commitTransaction();
+  //   } catch (err) {
+  //     await queryRunner.rollbackTransaction();
+  //     this.logger.error(err);
+  //   } finally {
+  //     await queryRunner.release();
+  //   }
+  // }
 
-  async clearAllNotifications(adminId: number) {
-    const admin = await this.findById(adminId);
+  // async clearAllNotifications(adminId: number) {
+  //   const admin = await this.findById(adminId);
 
-    await this.adminNotificationRepository
-      .createQueryBuilder()
-      .softDelete()
-      .where({
-        admin,
-      })
-      .execute();
-  }
+  //   await this.adminNotificationRepository
+  //     .createQueryBuilder()
+  //     .softDelete()
+  //     .where({
+  //       admin,
+  //     })
+  //     .execute();
+  // }
 }

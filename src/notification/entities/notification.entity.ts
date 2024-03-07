@@ -5,7 +5,7 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { AdminNotification } from './admin-notification.entity';
+import { UserNotification } from './user-notification.entity';
 
 @Entity()
 export class Notification {
@@ -14,8 +14,6 @@ export class Notification {
 
   @Column({
     nullable: true,
-    comment:
-      'CB - Cancelled Booking, PU - Pending User, PD - Pending Driver, UTR - User Topup, DCR - Driver Cashout, UCR - User Cashout',
   })
   type: string;
 
@@ -32,8 +30,8 @@ export class Notification {
 
   // Foreign Keys
   @OneToMany(
-    () => AdminNotification,
-    (adminNotification) => adminNotification.notification,
+    () => UserNotification,
+    (userNotification) => userNotification.notification,
   )
-  adminNotifications: AdminNotification[];
+  userNotifications: UserNotification[];
 }

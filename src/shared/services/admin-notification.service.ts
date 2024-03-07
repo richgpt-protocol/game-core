@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { AdminNotification } from 'src/admin/entities/admin-notification.entity';
 import { Admin } from 'src/admin/entities/admin.entity';
-import { Notification } from 'src/admin/entities/notification.entity';
+import { Notification } from 'src/notification/entities/notification.entity';
+import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { Connection, Repository } from 'typeorm';
 
 @Injectable()
@@ -10,8 +10,8 @@ export class AdminNotificationService {
   constructor(
     @InjectRepository(Notification)
     private notificationRepository: Repository<Notification>,
-    @InjectRepository(AdminNotification)
-    private adminNotificationRepository: Repository<AdminNotification>,
+    @InjectRepository(UserNotification)
+    private userNotificationRepository: Repository<UserNotification>,
     @InjectRepository(Admin)
     private adminRepository: Repository<Admin>,
     private connection: Connection,
@@ -45,7 +45,7 @@ export class AdminNotificationService {
         const createQueries = [];
         admins.forEach((a) => {
           createQueries.push(
-            this.adminNotificationRepository.create({
+            this.userNotificationRepository.create({
               isRead: false,
               admin: a,
               notification,
@@ -53,14 +53,14 @@ export class AdminNotificationService {
           );
         });
 
-        result = await this.adminNotificationRepository.save(createQueries);
+        result = await this.userNotificationRepository.save(createQueries);
       } else {
         const admin = await this.adminRepository.findOneBy({
           id: adminId,
         });
         if (admin) {
-          result = await this.adminNotificationRepository.save(
-            this.adminNotificationRepository.create({
+          result = await this.userNotificationRepository.save(
+            this.userNotificationRepository.create({
               isRead: false,
               admin,
               notification,

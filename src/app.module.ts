@@ -21,6 +21,11 @@ import { SettingModule } from './setting/setting.module';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { SharedModule } from './shared/shared.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ReferralModule } from './referral/referral.module';
+import { NotificationModule } from './notification/notification.module';
+import { WalletlModule } from './wallet/wallet.module';
+import { GameModule } from './game/game.module';
+import { CampaignModule } from './campaign/campaign.module';
 
 @Module({
   imports: [
@@ -29,6 +34,11 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     AuthModule,
     PermissionModule,
     AuditLogModule,
+    ReferralModule,
+    NotificationModule,
+    WalletlModule,
+    GameModule,
+    CampaignModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
