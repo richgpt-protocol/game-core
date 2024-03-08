@@ -14,17 +14,27 @@ import { Claim } from '../claim/entities/claim.entity';
 import { Game } from './entities/game.entity';
 import { Redeem } from '../redeem/entities/redeem.entity';
 import { DrawResult } from './entities/drawResult.entity';
+import { ConfigService } from 'src/config/config.service';
+import { SchedulerRegistry } from '@nestjs/schedule';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Wallet, Game, Bet, Claim, Redeem, DrawResult]),
+    TypeOrmModule.forFeature([
+      User,
+      Wallet,
+      Game,
+      Bet,
+      Claim,
+      Redeem,
+      DrawResult,
+    ]),
     // AuditLogModule,
     PermissionModule,
     // SharedModule,
     // AdminModule,
     // SseModule,
   ],
-  providers: [GameService],
+  providers: [GameService, ConfigService, SchedulerRegistry],
   controllers: [GameController],
   exports: [GameService],
 })

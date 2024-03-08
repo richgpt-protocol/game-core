@@ -103,6 +103,16 @@ export class BetController {
     };
   }
 
+  @Get('get-all-bets')
+  async getAllBets(@Query('epoch') epoch: number): Promise<ResponseVo<any>> {
+    const bets = await this.betService.getAllBets(epoch);
+    return {
+      statusCode: HttpStatus.OK,
+      data: bets,
+      message: '',
+    };
+  }
+
   @Secure(null, UserRole.USER)
   @Post('get-bet-amount')
   async getBetAmount(

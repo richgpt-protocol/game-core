@@ -97,6 +97,20 @@ export class BetService {
     });
   }
 
+  async getAllBets(epoch: number) {
+    const bets = await this.betRepository
+      .createQueryBuilder('row')
+      .select('row')
+      .where({ epoch })
+      .getMany();
+    return bets.map((bet) => {
+      delete bet.id;
+      delete bet.walletId;
+      delete bet.gameId;
+      return bet;
+    });
+  }
+
   async estimateBetAmount(payload: FormatBetsDTO[]): Promise<number> {
     let totalAmount = 0;
     payload.forEach((bet) => {
