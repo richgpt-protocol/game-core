@@ -9,7 +9,7 @@ export class PermissionAccessDto {
 
   @ApiProperty({
     description:
-      'S - Superuser, F - Finance, M - Marketing, O - Operations, R - Recruiter',
+      'S - Superuser, F - Finance, M - Marketing, O - Operations, R - Recruiter, B - Bot',
   })
   @IsNotEmpty()
   @IsRole()

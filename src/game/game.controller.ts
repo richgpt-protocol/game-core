@@ -14,6 +14,7 @@ import { ResponseVo } from 'src/shared/vo/response.vo';
 import { GameService } from './game.service';
 // import { SendMessageDto } from './dto/bet.dto';
 import { DrawResultDto } from './dto/drawResult.dto';
+import { PermissionEnum } from 'src/shared/enum/permission.enum';
 
 @ApiTags('Game')
 @Controller('api/v1/game')
@@ -21,9 +22,15 @@ export class GameController {
   constructor(private gameService: GameService) {}
 
   // TODO: bet close 1 minute before draw result
-  @Secure(null, UserRole.ADMIN)
+  @Secure(PermissionEnum.SET_BET_CLOSE, UserRole.ADMIN)
   @Post('set-bet-close')
-  async setBetClose() {}
+  async setBetClose() {
+    return {
+      statusCode: HttpStatus.OK,
+      data: null,
+      message: 'set bet close success',
+    };
+  }
 
   @Secure(null, UserRole.ADMIN)
   @Post('set-draw-result')

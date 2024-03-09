@@ -9,7 +9,7 @@ import { PermissionAccess } from '../../permission/entities/permission-access.en
 import { PermissionAccessDto } from '../../permission/dto/permission-access.dto';
 import * as bcrypt from 'bcrypt';
 
-export default class CreateAdmins implements Seeder {
+export default class CreateBots implements Seeder {
   /**
    * Track seeder execution.
    *
@@ -18,46 +18,97 @@ export default class CreateAdmins implements Seeder {
   track = false;
 
   public async run(dataSource: DataSource, factoryManager: SeederFactoryManager): Promise<void> {
-    await this.insertPermissions(dataSource);
-
-    const admins = await dataSource
+    const bots = await dataSource
       .createQueryBuilder()
       .insert()
       .into('admin')
       .values([
         {
-          username: 'admin',
-          name: 'Admin',
-          emailAddress: 'admin@gmail.com',
-          password: await bcrypt.hash('admin888*', 10),
-          adminType: AdminType.SUPERUSER,
+          username: 'depositBot',
+          name: 'Deposit Bot',
+          emailAddress: '',
+          password: await bcrypt.hash('depositBot888*', 10),
+          adminType: AdminType.BOT,
+          createdBy: 'system',
+          status: AdminStatus.ACTIVE,
+        },
+        {
+          username: 'vrfCoordinatorBot',
+          name: 'VRF Coordinator Bot',
+          emailAddress: '',
+          password: await bcrypt.hash('vrfCoordinatorBot888*', 10),
+          adminType: AdminType.BOT,
+          createdBy: 'system',
+          status: AdminStatus.ACTIVE,
+        },
+        {
+          username: 'redeemBot',
+          name: 'Redeem Bot',
+          emailAddress: '',
+          password: await bcrypt.hash('redeemBot888*', 10),
+          adminType: AdminType.BOT,
+          createdBy: 'system',
+          status: AdminStatus.ACTIVE,
+        },
+        {
+          username: 'payoutBot',
+          name: 'Payout Bot',
+          emailAddress: '',
+          password: await bcrypt.hash('payoutBot888*', 10),
+          adminType: AdminType.BOT,
           createdBy: 'system',
           status: AdminStatus.ACTIVE,
         },
       ])
       .execute();
 
-    const permissionList = await this.findAll(dataSource, AdminType.SUPERUSER);
-    const permissions = permissionList.map((p) => p.id);
-
+    // deposit bot
     await this.assignPermission(dataSource, {
-      userId: admins.generatedMaps[0].id,
+      userId: bots.generatedMaps[0].id,
       userRole: UserRole.ADMIN,
-      role: AdminType.SUPERUSER,
-      permissions,
+      role: AdminType.BOT,
+      permissions : [(await dataSource.query(
+        `SELECT id FROM permission WHERE code = 'supply_game_usd'`
+      ))[0].id],
     });
-  }
 
-  private async insertPermissions(dataSource: DataSource) {
-    const filePath = path.resolve(
-      __dirname,
-      '../sql_scripts/permission_script.sql',
-    );
+    // vrf coordinator
+    await this.assignPermission(dataSource, {
+      userId: bots.generatedMaps[1].id,
+      userRole: UserRole.ADMIN,
+      role: AdminType.BOT,
+      permissions : [
+        (await dataSource.query(
+          `SELECT id FROM permission WHERE code = 'set_bet_close'`
+        ))[0].id,
+        (await dataSource.query(
+          `SELECT id FROM permission WHERE code = 'fetch_draw_result'`
+        ))[0].id,
+        (await dataSource.query(
+          `SELECT id FROM permission WHERE code = 'submit_last_minute_draw'`
+        ))[0].id,
+      ],
+    });
 
-    let arr = fs.readFileSync(filePath.toString(), 'utf-8').split('\n');
-    for (let i = 0; i < arr.length; i++) {
-      await dataSource.query(arr[i]);
-    }
+    // redeem bot
+    await this.assignPermission(dataSource, {
+      userId: bots.generatedMaps[2].id,
+      userRole: UserRole.ADMIN,
+      role: AdminType.BOT,
+      permissions : [(await dataSource.query(
+        `SELECT id FROM permission WHERE code = 'update_payout_signature'`
+      ))[0].id],
+    });
+
+    // payout bot
+    await this.assignPermission(dataSource, {
+      userId: bots.generatedMaps[3].id,
+      userRole: UserRole.ADMIN,
+      role: AdminType.BOT,
+      permissions : [(await dataSource.query(
+        `SELECT id FROM permission WHERE code = 'payout'`
+      ))[0].id],
+    });
   }
 
   private async findAll(

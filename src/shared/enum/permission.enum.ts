@@ -6,4 +6,10 @@ export enum PermissionEnum {
   UPDATE_SITE_SETTING = 'update_site_setting',
   GET_SETTING = 'get_setting',
   RESET_ADMIN_PASSWORD = 'reset_admin_password',
+  SUPPLY_GAME_USD = 'supply_game_usd',
+  SET_BET_CLOSE='set_bet_close',
+  FETCH_DRAW_RESULT='fetch_draw_result',
+  SUBMIT_LAST_MINUTE_DRAW='submit_last_minute_draw',
+  UPDATE_PAYOUT_SIGNATURE='update_payout_signature',
+  PAYOUT='payout',
 }
