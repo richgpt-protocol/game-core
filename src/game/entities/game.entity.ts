@@ -7,7 +7,7 @@ export class Game {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ unique: true })
   epoch: string;
 
   @Column({
@@ -27,14 +27,18 @@ export class Game {
   minBetAmount: number;
 
   @Column({
-    comment: 'timestamp in seconds',
+    nullable: true,
   })
-  startTime: number;
+  drawTxHash: string;
 
-  @Column({
-    comment: 'timestamp in seconds',
-  })
-  endTime: number;
+  @Column()
+  startDate: Date;
+
+  @Column()
+  endDate: Date;
+
+  @Column({ default: false })
+  isClosed: boolean;
 
   // Foreign Keys
   @OneToMany(() => BetOrder, (betOrder) => betOrder.game)

@@ -9,6 +9,7 @@
     "OTP_IS_VERIFIED": "Your mobile number is verified.",
     "OTP_EXPIRED": "Your OTP is expired. Please request new OTP again.",
     "WRONG_EMAIL_PASSWORD": "Wrong email address or password.",
+    "WRONG_PHONE_NUMBER": "Wrong phone number.",
     "DUPLICATED_EMAIL": "Your email address is used in this system.",
     "VERIFY_IDENTIITY_SUCCESSFUL": "Verify Identity Successful.",
     "FAILED_VERIFY_IDENTIITY": "Failed to verify identity.",

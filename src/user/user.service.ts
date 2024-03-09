@@ -14,12 +14,27 @@ import { buildFilterCriterias } from 'src/shared/utils/pagination.util';
 import { ObjectUtil } from 'src/shared/utils/object.util';
 import { DateUtil } from 'src/shared/utils/date.util';
 
+import { ethers } from 'ethers';
+import axios from 'axios';
+import { MPC } from 'src/shared/mpc';
+import { Referral__factory } from 'src/contract';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
+
+const serverUrls = [
+  // TO CHANGE
+  'http://localhost:4896',
+  'http://localhost:4897',
+  'http://localhost:4898',
+];
+
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
-    private connection: Connection,
+    @InjectRepository(UserWallet)
+    private walletRepository: Repository<UserWallet>,
+    // private connection: Connection,
   ) {}
 
   async findOne(id: number) {
@@ -37,7 +52,7 @@ export class UserService {
   }
 
   async findOneWithoutHiddenFields(id) {
-    return await this.userRepository.findOne(id);
+    return await this.userRepository.findOneBy(id);
   }
 
   async findReferralCodeWithoutHiddenFields(code: string) {
@@ -56,6 +71,20 @@ export class UserService {
       .addSelect('row.loginAttempt')
       .where({
         emailAddress: email,
+      })
+      .getOne();
+  }
+
+  async findByPhoneNumber(phoneNumber: string) {
+    return await this.userRepository
+      .createQueryBuilder('row')
+      .select('row')
+      .addSelect('row.password')
+      .addSelect('row.isReset')
+      .addSelect('row.verificationCode')
+      .addSelect('row.loginAttempt')
+      .where({
+        phoneNumber: phoneNumber,
       })
       .getOne();
   }
@@ -119,6 +148,13 @@ export class UserService {
       }
     }
 
+    // create wallet
+    // const walletAddress = await MPC.createWallet()
+
+    // temporarily
+    const hdNodeWallet = ethers.Wallet.createRandom();
+    const walletAddress = hdNodeWallet.address;
+
     if (payload.referralCode) {
       const referralUser = await this.findReferralCodeWithoutHiddenFields(
         payload.referralCode,
@@ -127,16 +163,55 @@ export class UserService {
       if (!referralUser) {
         throw new BadRequestException('user.REFERAL_INVALID');
       }
+
+      const userWalletAddress = walletAddress;
+      const referrerWallet = await this.walletRepository
+        .createQueryBuilder('wallet')
+        .select('wallet.walletAddress')
+        .where({ user: referralUser })
+        .getOne();
+      const referrerWalletAddress = referrerWallet.walletAddress;
+
+      const provider = new ethers.JsonRpcProvider(process.env.PROVIDER_RPC_URL);
+      // const walletCreationBot = new ethers.Wallet(await MPC.retrievePrivateKey(process.env.WALLET_CREATION_BOT_ADDRESS));
+      const walletCreationBot = new ethers.Wallet(
+        process.env.WALLET_CREATION_BOT_PRIVATE_KEY,
+        provider,
+      ); // temporarily
+      const referralContract = Referral__factory.connect(
+        process.env.REFERRAL_CONTRACT_ADDRESS,
+        walletCreationBot,
+      );
+      // TODO: check actual gas used and hardcode it
+      const estimatedGas = await referralContract.setReferrer.estimateGas(
+        userWalletAddress,
+        referrerWalletAddress,
+      );
+      const tx = await referralContract.setReferrer(
+        userWalletAddress,
+        referrerWalletAddress,
+        {
+          gasLimit: (estimatedGas * ethers.toBigInt(13)) / ethers.toBigInt(10),
+        },
+      );
+      await tx.wait();
     }
 
-    const result = await this.userRepository.save(
-      this.userRepository.create({
-        ...payload,
-        loginAttempt: 0,
-        status: UserStatus.PENDING,
-        isReset: false,
-      }),
-    );
+    const user = this.userRepository.create({
+      ...payload,
+      loginAttempt: 0,
+      status: UserStatus.PENDING,
+      isReset: false,
+    });
+    const result = await this.userRepository.save(user);
+
+    const wallet = this.walletRepository.create({
+      user,
+      walletAddress,
+      privateKey: hdNodeWallet.privateKey, // temporarily
+    });
+
+    await this.walletRepository.save(wallet);
 
     await this.update(result.id, {
       referralCode: this.generateReferralCode(result.id),
@@ -224,15 +299,20 @@ export class UserService {
     if (payload.keyword != null && payload.keyword != '') {
       query = query.andWhere(
         new Brackets((qb) => {
-          qb.where('user.firstName LIKE :firstName', {
-            firstName: `%${payload.keyword}%`,
-          })
-            .orWhere('user.referralCode LIKE :referralCode', {
-              referralCode: `%${payload.keyword}%`,
-            })
-            .orWhere('user.phoneNumber LIKE :phoneNumber', {
-              phoneNumber: `%${payload.keyword}%`,
-            });
+          // qb.where('user.firstName LIKE :firstName', {
+          //   firstName: `%${payload.keyword}%`,
+          // })
+          //   .orWhere('user.referralCode LIKE :referralCode', {
+          //     referralCode: `%${payload.keyword}%`,
+          //   })
+          //   .orWhere('user.phoneNumber LIKE :phoneNumber', {
+          //     phoneNumber: `%${payload.keyword}%`,
+          //   });
+          qb.where('user.referralCode LIKE :referralCode', {
+            referralCode: `%${payload.keyword}%`,
+          }).orWhere('user.phoneNumber LIKE :phoneNumber', {
+            phoneNumber: `%${payload.keyword}%`,
+          });
         }),
       );
     }

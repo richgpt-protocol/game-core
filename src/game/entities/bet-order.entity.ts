@@ -10,14 +10,13 @@ import {
 import { Game } from './game.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
+import { PointTx } from 'src/point/entities/point-tx.entity';
+import { ClaimTx } from 'src/wallet/entities/claim-tx.entity';
 
 @Entity()
 export class BetOrder {
   @PrimaryGeneratedColumn()
   id: number;
-
-  @Column()
-  numberPair: string;
 
   @Column({
     type: 'decimal',
@@ -66,4 +65,10 @@ export class BetOrder {
 
   @OneToOne(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.betOrder)
   creditWalletTx: CreditWalletTx;
+
+  @OneToOne(() => PointTx, (pointTx) => pointTx.betOrder)
+  pointTx: PointTx;
+
+  @OneToOne(() => ClaimTx, (claimTx) => claimTx.betOrder)
+  claimTx: ClaimTx;
 }

@@ -15,19 +15,17 @@ export class RedeemTx {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({
-    comment: 'S - success, P - Pending, F - Failed',
-  })
-  status: string;
+  @Column({ nullable: true })
+  payoutNote: string;
 
-  @Column()
-  rejectedReason: string;
+  @Column({ nullable: true })
+  payoutCanProceed: true;
 
-  @CreateDateColumn()
-  createdDate: Date;
+  @Column({ nullable: true })
+  payoutCheckedAt: Date;
 
-  @UpdateDateColumn()
-  updatedDate: Date;
+  @Column({ nullable: true })
+  payoutSignature: string;
 
   @Column()
   senderAddress: string;
@@ -56,11 +54,6 @@ export class RedeemTx {
   tokenAddress: string;
 
   @Column({
-    nullable: true,
-  })
-  txHash: string;
-
-  @Column({
     type: 'decimal',
     precision: 30,
     scale: 18,
@@ -76,8 +69,14 @@ export class RedeemTx {
   })
   amountInUSD: number;
 
+  @CreateDateColumn()
+  createdDate: Date;
+
+  @UpdateDateColumn()
+  updatedDate: Date;
+
   @Column()
-  reviewedBy: number;
+  reviewBy: number;
 
   @ManyToOne(() => Admin, (admin) => admin.redeemTxs)
   admin: Admin;

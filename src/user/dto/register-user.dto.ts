@@ -10,18 +10,18 @@ import {
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { UserStatus } from 'src/shared/enum/status.enum';
 export class RegisterUserDto {
-  @ApiProperty({
-    description:
-      'Please use 8 or more characters with a mix of upper and lower letters, numbers/symbols for your new password.',
-  })
-  @IsString()
-  password: string;
-
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
   @MaxLength(15)
   phoneNumber: string;
+
+  // @ApiProperty({
+  //   description:
+  //     'Please use 8 or more characters with a mix of upper and lower letters, numbers/symbols for your new password.',
+  // })
+  // @IsString()
+  // password: string;
 
   @ApiProperty()
   @IsString()
@@ -93,21 +93,21 @@ export class UpdateUserByAdminDto {
   @IsNotEmpty()
   phoneNumber: string;
 
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  firstName: string;
+  // @ApiProperty()
+  // @IsString()
+  // @IsNotEmpty()
+  // firstName: string;
 
-  @ApiProperty()
-  @IsString()
-  @IsOptional()
-  @IsEmail()
-  backupEmailAddress: string;
+  // @ApiProperty()
+  // @IsString()
+  // @IsOptional()
+  // @IsEmail()
+  // backupEmailAddress: string;
 
-  @ApiProperty()
-  @IsString()
-  @IsOptional()
-  nric: string;
+  // @ApiProperty()
+  // @IsString()
+  // @IsOptional()
+  // nric: string;
 
   @ApiProperty({
     enum: UserStatus,

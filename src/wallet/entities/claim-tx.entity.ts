@@ -1,12 +1,14 @@
 import {
   Column,
   Entity,
+  JoinColumn,
   ManyToOne,
   OneToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { WalletTx } from './wallet-tx.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
+import { BetOrder } from 'src/game/entities/bet-order.entity';
 
 @Entity()
 export class ClaimTx {
@@ -20,9 +22,6 @@ export class ClaimTx {
     default: 0,
   })
   prize: number;
-
-  @Column()
-  txHash: string;
 
   @Column({
     type: 'decimal',
@@ -60,4 +59,8 @@ export class ClaimTx {
 
   @ManyToOne(() => DrawResult, (drawResult) => drawResult.claimTx)
   drawResult: DrawResult;
+
+  @OneToOne(() => BetOrder, (bet) => bet.claimTx)
+  @JoinColumn()
+  betOrder: BetOrder;
 }

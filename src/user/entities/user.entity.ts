@@ -13,6 +13,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
+
 @Entity()
 export class User {
   @PrimaryGeneratedColumn()
@@ -124,4 +126,7 @@ export class User {
     (userNotification) => userNotification.user,
   )
   userNotifications: UserNotification[];
+
+  @OneToMany(() => ChatLog, (chatLog) => chatLog.user)
+  chatLogs: ChatLog[];
 }

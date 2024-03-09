@@ -8,8 +8,9 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { WalletTx } from './wallet-tx.entity';
-import { SupplyTx } from './supply-tx.entity';
 import { CreditWalletTx } from './credit-wallet-tx.entity';
+import { ReloadTx } from './reload-tx.entity';
+import { PointTx } from 'src/point/entities/point-tx.entity';
 
 @Entity()
 export class UserWallet {
@@ -24,8 +25,22 @@ export class UserWallet {
   })
   walletBalance: number;
 
-  @Column()
+  @Column({
+    type: 'decimal',
+    precision: 30,
+    scale: 18,
+    default: 0,
+  })
+  creditBalance: number;
+
+  @Column({
+    unique: true,
+  })
   walletAddress: string;
+
+  // temporarily, will replaced by mpc
+  @Column()
+  privateKey: string;
 
   @Column({
     type: 'decimal',
@@ -34,6 +49,14 @@ export class UserWallet {
     default: 0,
   })
   redeemableBalance: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 30,
+    scale: 18,
+    default: 0,
+  })
+  pointBalance: number;
 
   @UpdateDateColumn()
   updatedDate: Date;
@@ -48,9 +71,12 @@ export class UserWallet {
   @OneToMany(() => WalletTx, (walletTx) => walletTx.userWallet)
   walletTx: WalletTx[];
 
-  @OneToMany(() => SupplyTx, (walletTx) => walletTx.userWallet)
-  supplyTx: SupplyTx[];
+  @OneToMany(() => ReloadTx, (walletTx) => walletTx.userWallet)
+  reloadTxs: ReloadTx[];
 
   @OneToMany(() => CreditWalletTx, (walletTx) => walletTx.userWallet)
   creditWalletTx: CreditWalletTx[];
+
+  @OneToMany(() => PointTx, (pointTx) => pointTx.userWallet)
+  pointTx: PointTx[];
 }

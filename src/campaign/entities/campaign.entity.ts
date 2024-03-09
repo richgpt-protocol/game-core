@@ -1,3 +1,4 @@
+import { PointTx } from 'src/point/entities/point-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 
@@ -37,4 +38,7 @@ export class Campaign {
 
   @OneToMany(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.campaign)
   creditWalletTx: CreditWalletTx[];
+
+  @OneToMany(() => PointTx, (pointTx) => pointTx.campaign)
+  pointTx: PointTx[];
 }

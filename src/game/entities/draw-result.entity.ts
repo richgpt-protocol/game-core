@@ -22,9 +22,6 @@ export class DrawResult {
   @Column()
   numberPair: string;
 
-  @Column()
-  txHash: string;
-
   @CreateDateColumn()
   createdDate: Date;
 

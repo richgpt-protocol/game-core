@@ -26,6 +26,7 @@ import { NotificationModule } from './notification/notification.module';
 import { WalletlModule } from './wallet/wallet.module';
 import { GameModule } from './game/game.module';
 import { CampaignModule } from './campaign/campaign.module';
+import { ChatbotModule } from './chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { CampaignModule } from './campaign/campaign.module';
       // disable throwing uncaughtException if an error event is emitted and it has no listeners
       ignoreErrors: false,
     }),
+    ChatbotModule,
   ],
   controllers: [AppController],
   providers: [

@@ -8,8 +8,10 @@ import {
 } from 'typeorm';
 import { UserWallet } from './user-wallet.entity';
 
+// This entity is used for storing the supply of native tokens
+// for gas fees tx for all the wallets
 @Entity()
-export class SupplyTx {
+export class ReloadTx {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -53,6 +55,6 @@ export class SupplyTx {
   @Column()
   userWalletId: number;
 
-  @ManyToOne(() => UserWallet, (userWallet) => userWallet.supplyTx)
+  @ManyToOne(() => UserWallet, (userWallet) => userWallet.reloadTxs)
   userWallet: UserWallet;
 }

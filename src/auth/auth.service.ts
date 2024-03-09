@@ -82,11 +82,13 @@ export class AuthService {
   }
 
   async loginAsUser(payload: UserLoginDto): Promise<any> {
-    const user = await this.userService.findByEmail(payload.emailAddress);
+    // const user = await this.userService.findByEmail(payload.emailAddress);
+    const user = await this.userService.findByPhoneNumber(payload.phoneNumber);
 
     if (!user) {
       return {
-        error: 'user.WRONG_EMAIL_PASSWORD',
+        // error: 'user.WRONG_EMAIL_PASSWORD',
+        error: 'user.WRONG_PHONE_NUMBER',
       };
     }
 
@@ -125,13 +127,11 @@ export class AuthService {
     }
 
     const { ...result } = user;
-    if (await this.verifyPassword(payload.password, null)) {
+    if (payload.code === result.verificationCode) {
       // Clear Login Attempt
       await this.userService.update(user.id, {
         loginAttempt: 0,
       });
-
-      return result;
     } else {
       // Increase failed login attempt
       await this.userService.update(user.id, {
@@ -141,6 +141,8 @@ export class AuthService {
         error: 'user.WRONG_EMAIL_PASSWORD',
       };
     }
+
+    return result;
   }
 
   async createToken(user: any, role: string) {

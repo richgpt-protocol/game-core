@@ -8,10 +8,11 @@ import { PermissionModule } from 'src/permission/permission.module';
 import { SharedModule } from 'src/shared/shared.module';
 import { AdminModule } from 'src/admin/admin.module';
 import { SseModule } from 'src/admin/sse/sse.module';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, UserWallet]),
     AuditLogModule,
     PermissionModule,
     SharedModule,

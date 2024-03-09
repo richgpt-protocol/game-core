@@ -73,7 +73,8 @@ export class UserController {
       const result = await this.userService.register(payload);
       if (result) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { password, ...log } = payload;
+        // const { password, ...log } = payload;
+        const log = payload;
         await this.auditLogService.userInsert({
           module: classInfo.class,
           actions: classInfo.method,
@@ -515,5 +516,20 @@ export class UserController {
         message: await i18n.translate('Failed to update user profile.'),
       };
     }
+  }
+
+  // TODO, this endpoint get all user info after login that required by frontend at once
+  @Secure(null, UserRole.USER)
+  @Post('get-all-user-info')
+  async getAllUserInfo() {
+    // user - phoneNumber
+    // user - referralCode
+    // wallet - walletAddress
+    // wallet - balance
+    // wallet - redeemable
+    // wallet - xp
+    // credit - all available credit amount
+    // game - current epoch
+    // bet - all numbers(forecast & amount) for current epoch
   }
 }
