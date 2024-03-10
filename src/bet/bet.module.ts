@@ -1,19 +1,29 @@
-// import { Module } from '@nestjs/common';
-// import { BetService } from './bet.service';
-// import { BetController } from './bet.controller';
-// import { TypeOrmModule } from '@nestjs/typeorm';
-// import { PermissionModule } from 'src/permission/permission.module';
-// import { Game } from 'src/game/entities/game.entity';
-// import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
-// import { BetOrder } from 'src/game/entities/bet-order.entity';
+import { Module } from '@nestjs/common';
+import { BetService } from './bet.service';
+import { BetController } from './bet.controller';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuditLogModule } from 'src/audit-log/audit-log.module';
+import { PermissionModule } from 'src/permission/permission.module';
+import { SharedModule } from 'src/shared/shared.module';
+import { AdminModule } from 'src/admin/admin.module';
+import { SseModule } from 'src/admin/sse/sse.module';
+import { Bet } from './entities/bet.entity';
+import { Wallet } from 'src/wallet/entities/wallet.entity';
+import { Game } from 'src/game/entities/game.entity';
+import { ConfigService } from 'src/config/config.service';
+import { ConfigModule } from 'src/config/config.module';
 
-// @Module({
-//   imports: [
-//     TypeOrmModule.forFeature([BetOrder, UserWallet, Game]),
-//     PermissionModule,
-//   ],
-//   providers: [BetService],
-//   controllers: [BetController],
-//   exports: [],
-// })
-// export class BetModule {}
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Bet, Wallet, Game]),
+    // AuditLogModule,
+    PermissionModule,
+    // SharedModule,
+    // AdminModule,
+    // SseModule,
+  ],
+  providers: [BetService, ConfigService],
+  controllers: [BetController],
+  exports: [],
+})
+export class BetModule {}

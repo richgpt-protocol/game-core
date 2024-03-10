@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Injectable } from '@nestjs/common';
 import { ChatCompletionMessageParam } from 'openai/resources';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
+
 // import { SendMessageDto } from './dto/bet.dto';
 // import { MongoClient, WithId } from 'mongodb'
 import * as dotenv from 'dotenv';
@@ -13,10 +16,13 @@ import { RedeemDto } from '../redeem/dto/redeem.dto';
 import { DrawResultDto } from './dto/drawResult.dto';
 import { ClaimTx } from 'src/wallet/entities/claim-tx.entity';
 import { DrawResult } from './entities/draw-result.entity';
+import { Core__factory } from 'src/contract';
+import { JsonRpcProvider } from 'ethers';
+import { ConfigService } from 'src/config/config.service';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
 import { BetOrder } from './entities/bet-order.entity';
-dotenv.config();
+dotenv.config();;
 
 // const client = new MongoClient('mongodb://localhost:27017')
 
@@ -37,6 +43,8 @@ export class GameService {
     private redeemRepository: Repository<RedeemTx>,
     @InjectRepository(DrawResult)
     private drawResultRepository: Repository<DrawResult>,
+    private schedulerRegistry: SchedulerRegistry,
+    private configService: ConfigService,
   ) {}
 
   async setDrawResult(id: number, payload: DrawResultDto) {
@@ -69,5 +77,83 @@ export class GameService {
       .where({ game })
       .getOne();
     return drawResult;
+  }
+
+  async triggerDrawResult() {
+    const existingCron = this.schedulerRegistry.doesExist(
+      'cron',
+      'setDrawResult',
+    );
+    if (existingCron) {
+      return;
+    }
+
+    const cron = this.schedulerRegistry.addCronJob(
+      'setDrawResult',
+      new CronJob('*/20 * * * * *', async () => {
+        const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+        const coreContract = Core__factory.connect(
+          this.configService.get('CORE_CONTRACT'),
+          provider,
+        );
+
+        //Earliest game with epoch where isClosed is false
+        const game = await this.gameRepository
+          .createQueryBuilder('row')
+          .where({ isClosed: false })
+          .orderBy('row.epoch', 'ASC')
+          .getOne();
+
+        const drawResultsDb = await this.drawResultRepository.findOneBy({
+          game,
+        });
+
+        if (drawResultsDb && !drawResultsDb.consolation1) {
+          drawResultsDb.submitBy = 'system';
+          drawResultsDb.fetchStartAt = new Date();
+          for (let i = 0; i < 20; i++) {
+            const drawResult = await coreContract.drawResults(
+              game.epoch.toString(),
+              i.toString(),
+            );
+            drawResultsDb[`consolation${i + 1}`] = drawResult.toString();
+          }
+        } else if (drawResultsDb && !drawResultsDb.special1) {
+          for (let i = 10; i != 0; i++) {
+            if (!drawResultsDb[`special${i}`]) {
+              const drawResult = await coreContract.drawResults(
+                game.epoch.toString(),
+                i.toString(),
+              );
+
+              drawResultsDb[`special${i}`] = drawResult.toString();
+
+              break; //exit the loop if a missing special is found. i.e set only one special at a time
+            }
+          }
+        } else if (drawResultsDb && !drawResultsDb.third) {
+          const drawResult = await coreContract.drawResults(
+            game.epoch.toString(),
+            '2',
+          );
+          drawResultsDb.third = drawResult.toString();
+        } else if (drawResultsDb && !drawResultsDb.second) {
+          const drawResult = await coreContract.drawResults(
+            game.epoch.toString(),
+            '1',
+          );
+          drawResultsDb.second = drawResult.toString();
+        } else if (drawResultsDb && !drawResultsDb.first) {
+          const drawResult = await coreContract.drawResults(
+            game.epoch.toString(),
+            '0',
+          );
+          drawResultsDb.first = drawResult.toString();
+        } else if (drawResultsDb && drawResultsDb.first) {
+          //first is set. Clear the cron
+          this.schedulerRegistry.deleteCronJob('setDrawResult');
+        }
+      }),
+    );
   }
 }

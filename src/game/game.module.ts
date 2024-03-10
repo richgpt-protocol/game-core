@@ -10,21 +10,24 @@ import { User } from 'src/user/entities/user.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
 import { ClaimTx } from 'src/wallet/entities/claim-tx.entity';
+import { ConfigService } from 'src/config/config.service';
+import { SchedulerRegistry } from '@nestjs/schedule';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       User,
-      BetOrder,
-      UserWallet,
+      Wallet,
       Game,
-      ClaimTx,
-      RedeemTx,
+      Bet,
+      Claim,
+      Redeem,
       DrawResult,
     ]),
+    // AuditLogModule,
     PermissionModule,
   ],
-  providers: [GameService],
+  providers: [GameService, ConfigService, SchedulerRegistry],
   controllers: [GameController],
   exports: [GameService],
 })
