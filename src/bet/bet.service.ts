@@ -2,7 +2,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { BetDto, FormatBetsDTO, Permutations } from './dto/bet.dto';
-import { Bet } from './entities/bet.entity';
+import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { Repository } from 'typeorm';
 import {
   JsonRpcProvider,
@@ -15,15 +15,15 @@ import { Game } from 'src/game/entities/game.entity';
 import { ConfigService } from 'src/config/config.service';
 import { Contract, parseUnits } from 'ethers';
 import { Core, Core__factory, Helper__factory } from 'src/contract';
-import { Wallet } from 'src/wallet/entities/wallet.entity';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 
 @Injectable()
 export class BetService {
   constructor(
-    @InjectRepository(Bet)
-    private betRepository: Repository<Bet>,
-    @InjectRepository(Wallet)
-    private walletRepository: Repository<Wallet>,
+    @InjectRepository(BetOrder)
+    private betRepository: Repository<BetOrder>,
+    @InjectRepository(UserWallet)
+    private walletRepository: Repository<UserWallet>,
     @InjectRepository(Game)
     private gameRepository: Repository<Game>,
     private configService: ConfigService,
@@ -266,7 +266,7 @@ export class BetService {
     return true;
   }
 
-  private _getTotalCredits(wallet: Wallet): number {
+  private _getTotalCredits(wallet: UserWallet): number {
     return wallet.credits.reduce((acc, credit) => {
       if (credit.expiryDate > new Date()) {
         return acc + credit.amount;
@@ -294,7 +294,7 @@ export class BetService {
       .getOne();
   }
 
-  private async _checkPreviousBetAndApprove(wallet: Wallet, signer, spender) {
+  private async _checkPreviousBetAndApprove(wallet: UserWallet, signer, spender) {
     const previousBet = await this.betRepository.findOneBy({ wallet });
     if (!previousBet) {
       await this._approveToken(signer, spender);
@@ -324,9 +324,9 @@ export class BetService {
     currentEpoch: BigNumberish,
     useCredit: boolean,
     totalCredits: number,
-    wallet: Wallet,
+    wallet: UserWallet,
   ): Promise<{
-    bets: Bet[];
+    bets: BetOrder[];
     gameUSDUsed: number;
     creditUsed: number;
   }> {
@@ -443,7 +443,7 @@ export class BetService {
   }
 
   private async _updateWalletAfterBet(
-    wallet: Wallet,
+    wallet: UserWallet,
     gameUSDUsed: number,
     creditUsed: number,
   ) {

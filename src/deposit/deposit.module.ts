@@ -7,17 +7,17 @@ import { PermissionModule } from 'src/permission/permission.module';
 import { SharedModule } from 'src/shared/shared.module';
 import { AdminModule } from 'src/admin/admin.module';
 import { SseModule } from 'src/admin/sse/sse.module';
-import { Deposit } from './entities/deposit.entity';
+import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigService } from 'src/config/config.service';
-import { Wallet } from 'src/wallet/entities/wallet.entity';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { WalletService } from 'src/wallet/wallet.service';
 import { User } from 'src/user/entities/user.entity';
-import { Bet } from 'src/bet/entities/bet.entity';
+import { BetOrder } from 'src/game/entities/bet-order.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Deposit, Wallet, User, Bet]),
+    TypeOrmModule.forFeature([DepositTx, UserWallet, User, BetOrder]),
     // AuditLogModule,
     // PermissionModule,
     // SharedModule,

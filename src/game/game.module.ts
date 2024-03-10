@@ -17,11 +17,11 @@ import { SchedulerRegistry } from '@nestjs/schedule';
   imports: [
     TypeOrmModule.forFeature([
       User,
-      Wallet,
+      UserWallet,
       Game,
-      Bet,
-      Claim,
-      Redeem,
+      BetOrder,
+      ClaimTx,
+      RedeemTx,
       DrawResult,
     ]),
     // AuditLogModule,

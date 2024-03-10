@@ -1,24 +1,24 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Deposit } from './entities/deposit.entity';
+import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { Repository } from 'typeorm';
 import { CreateDeopsitRequestDto, SupplyDto } from './dto/deposit.dto';
 import { HttpService } from '@nestjs/axios';
 import { response } from 'express';
 import { AxiosResponse } from 'axios';
 import { ConfigService } from 'src/config/config.service';
-import { Wallet } from 'src/wallet/entities/wallet.entity';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 
 @Injectable()
 export class DepositService {
   constructor(
     private configService: ConfigService,
     private httpService: HttpService,
-    @InjectRepository(Wallet)
-    private walletRepository: Repository<Wallet>,
-    @InjectRepository(Deposit)
-    private depositRepository: Repository<Deposit>,
+    @InjectRepository(UserWallet)
+    private walletRepository: Repository<UserWallet>,
+    @InjectRepository(DepositTx)
+    private depositRepository: Repository<DepositTx>,
   ) {}
 
   async createDepositRequest(
