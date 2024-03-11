@@ -19,7 +19,7 @@ export class RedeemTx {
   payoutNote: string;
 
   @Column({ nullable: true })
-  payoutCanProceed: true;
+  payoutCanProceed: boolean;
 
   @Column({ nullable: true })
   payoutCheckedAt: Date;
