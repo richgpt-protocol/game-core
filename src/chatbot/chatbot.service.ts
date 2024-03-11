@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { SendMessageDto } from './dto/sendMessage.dto';
-import { MongoClient, WithId } from 'mongodb';
+import { MongoClient } from 'mongodb';
 import { QztWzt } from './chatbot.interface';
 var similarity = require('compute-cosine-similarity'); // pure js lib, use import will cause error
 import { InjectRepository } from '@nestjs/typeorm';
@@ -51,7 +51,7 @@ export class ChatbotService {
         "If and only if I ask for number, provide me a 4-Digits number between 0000 and 9999. Don't tell me it is random." +
         'If I ask why this number, tell me any reason besides random.' +
         '\n' +
-        `Current year is ${new Date(Date.now()).getFullYear()}.`;
+        `Today is ${new Date(Date.now()).toString()}.`;
       const message = await this.messageRepository.save(
         this.messageRepository.create({
           role: initialRole,
@@ -63,6 +63,7 @@ export class ChatbotService {
       await this.chatLogRepository.save(chatLog);
 
       this.feeds.push({ role: initialRole, content: initialContent });
+
     } else {
       // isInitialMessage == false
       // fetch previous messages from db
@@ -81,7 +82,7 @@ export class ChatbotService {
     // add current message to feeds
     this.feeds.push({ role: 'user', content: payload.message });
     // save current message into db
-    const userMessage = await this.messageRepository.save(
+    await this.messageRepository.save(
       this.messageRepository.create({
         role: 'user',
         content: payload.message,
@@ -194,21 +195,29 @@ export class ChatbotService {
   ): Promise<{ recommendedNumber: string; meaning: string }> {
     let qztwzt: QztWzt[];
 
+    // fetch all number:embedding(text) recommendation from mongodb
     try {
       await client.connect();
       const db = client.db('fdgpt').collection('qztwzt');
       const cursor = db.find();
       qztwzt = <QztWzt[]>await cursor.toArray();
+    
+    } catch (e) {
+      console.error(e);
+      throw new HttpException('Cannot connect to qztwzt database', HttpStatus.INTERNAL_SERVER_ERROR);
+
     } finally {
       await client.close();
     }
 
+    // create embedding for input message
     const resp = await openai.embeddings.create({
       model: 'text-embedding-3-small',
       input: message,
     });
     const queryEmbedding = resp.data[0].embedding;
 
+    // find the nearest number:embedding pair
     let largestSimilarity = 0;
     let nearestIndex = 0;
     for (let i = 0; i < qztwzt.length; i++) {
@@ -220,6 +229,7 @@ export class ChatbotService {
       }
     }
 
+    // return the nearest number and its meaning
     const obj = {
       recommendedNumber: qztwzt[nearestIndex].number,
       meaning: qztwzt[nearestIndex].english,
