@@ -18,6 +18,9 @@ export class BetOrder {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column()
+  numberPair: string;
+
   @Column({
     type: 'decimal',
     precision: 30,
@@ -61,7 +64,7 @@ export class BetOrder {
   walletTx: WalletTx;
 
   @Column()
-  creaditWalletTxId: number;
+  creditWalletTxId: number;
 
   @OneToOne(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.betOrder)
   creditWalletTx: CreditWalletTx;
