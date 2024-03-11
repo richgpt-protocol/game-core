@@ -18,6 +18,9 @@ export class BetOrder {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column()
+  numberPair: string;
+
   @Column({
     type: 'decimal',
     precision: 30,
