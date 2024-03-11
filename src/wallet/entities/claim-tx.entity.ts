@@ -15,13 +15,8 @@ export class ClaimTx {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({
-    type: 'decimal',
-    precision: 30,
-    scale: 18,
-    default: 0,
-  })
-  prize: number;
+  @Column()
+  prize: string;
 
   @Column({
     type: 'decimal',
