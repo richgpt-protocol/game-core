@@ -39,5 +39,5 @@ export class DrawResult {
   game: Game;
 
   @OneToMany(() => ClaimDetail, (claimDetail) => claimDetail.drawResult)
-  claimTx: ClaimDetail[];
+  claimDetail: ClaimDetail[];
 }

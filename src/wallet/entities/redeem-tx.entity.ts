@@ -27,8 +27,11 @@ export class RedeemTx {
   @Column({ nullable: true })
   payoutSignature: string;
 
+  @Column({ nullable: true })
+  payoutTxHash: string;
+
   @Column()
-  senderAddress: string;
+  fromAddress: string;
 
   @Column()
   receiverAddress: string;

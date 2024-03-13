@@ -48,7 +48,7 @@ export class WalletTx {
     type: 'decimal',
     precision: 30,
     scale: 18,
-    default: 0,
+    nullable: true,
   })
   startingBalance: number;
 
@@ -56,7 +56,7 @@ export class WalletTx {
     type: 'decimal',
     precision: 30,
     scale: 18,
-    default: 0,
+    nullable: true,
   })
   endingBalance: number;
 

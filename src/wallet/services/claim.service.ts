@@ -4,14 +4,14 @@ import { Game } from 'src/game/entities/game.entity';
 import { Repository } from 'typeorm';
 import { ClaimDto } from '../dto/claim.dto';
 import { UserWallet } from '../entities/user-wallet.entity';
-import { ClaimTx } from '../entities/claim-detail.entity';
+import { ClaimDetail } from '../entities/claim-detail.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 
 @Injectable()
 export class ClaimService {
   constructor(
-    @InjectRepository(ClaimTx)
-    private claimRepository: Repository<ClaimTx>,
+    @InjectRepository(ClaimDetail)
+    private claimRepository: Repository<ClaimDetail>,
     @InjectRepository(UserWallet)
     private walletRepository: Repository<UserWallet>,
     @InjectRepository(BetOrder)

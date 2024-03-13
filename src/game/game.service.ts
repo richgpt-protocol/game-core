@@ -11,11 +11,11 @@ import { BetDto } from 'src/bet/dto/bet.dto';
 import { Game } from './entities/game.entity';
 import { RedeemDto } from '../redeem/dto/redeem.dto';
 import { DrawResultDto } from './dto/drawResult.dto';
-import { ClaimTx } from 'src/wallet/entities/claim-detail.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
 import { BetOrder } from './entities/bet-order.entity';
+import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 dotenv.config();
 
 // const client = new MongoClient('mongodb://localhost:27017')
@@ -31,8 +31,8 @@ export class GameService {
     private gameRepository: Repository<Game>,
     @InjectRepository(BetOrder)
     private betRepository: Repository<BetOrder>,
-    @InjectRepository(ClaimTx)
-    private claimRepository: Repository<ClaimTx>,
+    @InjectRepository(ClaimDetail)
+    private claimRepository: Repository<ClaimDetail>,
     @InjectRepository(RedeemTx)
     private redeemRepository: Repository<RedeemTx>,
     @InjectRepository(DrawResult)

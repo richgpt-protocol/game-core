@@ -9,7 +9,7 @@ import { PermissionModule } from 'src/permission/permission.module';
 import { User } from 'src/user/entities/user.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
-import { ClaimTx } from 'src/wallet/entities/claim-detail.entity';
+import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 
 @Module({
   imports: [
@@ -18,7 +18,7 @@ import { ClaimTx } from 'src/wallet/entities/claim-detail.entity';
       BetOrder,
       UserWallet,
       Game,
-      ClaimTx,
+      ClaimDetail,
       RedeemTx,
       DrawResult,
     ]),

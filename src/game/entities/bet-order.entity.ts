@@ -37,8 +37,15 @@ export class BetOrder {
   })
   smallForecastAmount: number;
 
-  @Column()
+  @Column({
+    default: false,
+  })
   isClaimed: boolean;
+
+  @Column({
+    default: false,
+  })
+  availableClaim: boolean;
 
   @Column()
   txHash: string;
@@ -73,5 +80,5 @@ export class BetOrder {
   pointTx: PointTx;
 
   @OneToOne(() => ClaimDetail, (claimDetail) => claimDetail.betOrder)
-  claimTx: ClaimDetail;
+  claimDetail: ClaimDetail;
 }

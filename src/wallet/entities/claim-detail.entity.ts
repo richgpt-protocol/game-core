@@ -52,10 +52,10 @@ export class ClaimDetail {
   @Column()
   drawResultId: number;
 
-  @ManyToOne(() => DrawResult, (drawResult) => drawResult.claimTx)
+  @ManyToOne(() => DrawResult, (drawResult) => drawResult.claimDetail)
   drawResult: DrawResult;
 
-  @OneToOne(() => BetOrder, (bet) => bet.claimTx)
+  @OneToOne(() => BetOrder, (bet) => bet.claimDetail)
   @JoinColumn()
   betOrder: BetOrder;
 }
