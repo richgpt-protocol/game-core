@@ -19,6 +19,12 @@ export class DrawResult {
   })
   prizeCategory: string;
 
+  @Column({
+    comment: 'index based on number array return by smart contract.',
+    // 0 is first prize, 1 is second prize, 2 is third prize, 3-13 is special prize, 14-32 is consolation prize
+  })
+  prizeIndex: number;
+
   @Column()
   numberPair: string;
 
