@@ -11,7 +11,7 @@ import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 
 @Entity()
-export class ClaimTx {
+export class ClaimDetail {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -46,7 +46,7 @@ export class ClaimTx {
   @Column()
   walletTxId: number;
 
-  @OneToOne(() => WalletTx, (walletTx) => walletTx.claimTx)
+  @ManyToOne(() => WalletTx, (walletTx) => walletTx.claimDetail)
   walletTx: WalletTx;
 
   @Column()

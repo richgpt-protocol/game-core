@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
 import { CreditWalletTx } from './entities/credit-wallet-tx.entity';
-import { ClaimTx } from './entities/claim-tx.entity';
+import { ClaimTx } from './entities/claim-detail.entity';
 import { DepositTx } from './entities/deposit-tx.entity';
 import { RedeemTx } from './entities/redeem-tx.entity';
 import { ReloadTx } from './entities/reload-tx.entity';

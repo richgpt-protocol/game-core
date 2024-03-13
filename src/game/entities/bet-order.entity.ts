@@ -11,7 +11,7 @@ import { Game } from './game.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
-import { ClaimTx } from 'src/wallet/entities/claim-tx.entity';
+import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 
 @Entity()
 export class BetOrder {
@@ -72,6 +72,6 @@ export class BetOrder {
   @OneToOne(() => PointTx, (pointTx) => pointTx.betOrder)
   pointTx: PointTx;
 
-  @OneToOne(() => ClaimTx, (claimTx) => claimTx.betOrder)
-  claimTx: ClaimTx;
+  @OneToOne(() => ClaimDetail, (claimDetail) => claimDetail.betOrder)
+  claimTx: ClaimDetail;
 }

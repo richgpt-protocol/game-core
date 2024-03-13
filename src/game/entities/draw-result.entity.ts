@@ -7,7 +7,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Game } from './game.entity';
-import { ClaimTx } from 'src/wallet/entities/claim-tx.entity';
+import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 
 @Entity()
 export class DrawResult {
@@ -32,6 +32,6 @@ export class DrawResult {
   @ManyToOne(() => Game, (game) => game.drawResult)
   game: Game;
 
-  @OneToMany(() => ClaimTx, (claimTx) => claimTx.drawResult)
-  claimTx: ClaimTx[];
+  @OneToMany(() => ClaimDetail, (claimDetail) => claimDetail.drawResult)
+  claimTx: ClaimDetail[];
 }

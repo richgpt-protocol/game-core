@@ -11,7 +11,7 @@ import { BetDto } from 'src/bet/dto/bet.dto';
 import { Game } from './entities/game.entity';
 import { RedeemDto } from '../redeem/dto/redeem.dto';
 import { DrawResultDto } from './dto/drawResult.dto';
-import { ClaimTx } from 'src/wallet/entities/claim-tx.entity';
+import { ClaimTx } from 'src/wallet/entities/claim-detail.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';

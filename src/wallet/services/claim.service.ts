@@ -4,7 +4,7 @@ import { Game } from 'src/game/entities/game.entity';
 import { Repository } from 'typeorm';
 import { ClaimDto } from '../dto/claim.dto';
 import { UserWallet } from '../entities/user-wallet.entity';
-import { ClaimTx } from '../entities/claim-tx.entity';
+import { ClaimTx } from '../entities/claim-detail.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 
 @Injectable()
