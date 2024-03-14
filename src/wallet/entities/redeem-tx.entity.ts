@@ -30,6 +30,11 @@ export class RedeemTx {
   @Column({ nullable: true })
   payoutTxHash: string;
 
+  @Column({
+    comment: 'S - success, P - Pending, F - Failed',
+  })
+  payoutStatus: string;
+
   @Column()
   fromAddress: string;
 
