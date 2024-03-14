@@ -42,8 +42,13 @@ export class ReloadTx {
   })
   amountInUSD: number;
 
-  @Column()
+  @Column({
+    nullable: true,
+  })
   txHash: string;
+
+  @Column()
+  retryCount: number;
 
   @CreateDateColumn()
   createdDate: Date;

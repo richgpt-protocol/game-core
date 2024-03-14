@@ -22,25 +22,19 @@ export class GameUsdTx {
   })
   status: string;
 
-  @Column()
-  txHash: string;
-
   @Column({
-    type: 'decimal',
-    precision: 30,
-    scale: 18,
-    default: 0,
+    nullable: true,
   })
-  amountInUSD: number;
-
-  @Column()
-  currency: string;
+  txHash: string;
 
   @Column()
   senderAddress: string;
 
   @Column()
   receiverAddress: string;
+
+  @Column()
+  retryCount: number;
 
   @Column()
   walletTxId: number;

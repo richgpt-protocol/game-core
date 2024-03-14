@@ -21,7 +21,17 @@ export class DepositTx {
   @Column()
   isTransferred: boolean;
 
+  @Column({
+    comment: 'S - success, P - Pending, F - Failed',
+  })
+  status: string;
+
   @Column()
+  retryCount: number;
+
+  @Column({
+    nullable: true,
+  })
   txHash: string;
 
   @Column()
