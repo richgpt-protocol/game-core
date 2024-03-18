@@ -19,7 +19,7 @@ import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { DepositDTO } from './dto/deposit.dto';
-import { Provider, ethers } from 'ethers';
+import { Provider, ethers, parseUnits } from 'ethers';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Cron } from '@nestjs/schedule';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
@@ -135,7 +135,7 @@ export class DepositService {
 
   private async getPriceInUSD(currency: string): Promise<number> {
     //TODO
-    // const priceUrl = this.configService.get('PRICE_API_URL');
+    // const priceUrl = this.configService.get('CRYPTO_PRICE_API_URL');
     // const response = await axios.get(priceUrl);
     // const price = +response.data[currency].usd;
     // return price;
@@ -161,7 +161,7 @@ export class DepositService {
   ) {
     try {
       const supplyWallet = new ethers.Wallet(
-        this.configService.get('SUPPLY_PK'),
+        this.configService.get('SUPPLY_ACCOUNT_PK'),
       );
       supplyWallet.connect(this.getProvider(chainId));
       const tx = await supplyWallet.sendTransaction({
@@ -219,7 +219,7 @@ export class DepositService {
   // }
 
   @Cron('*/10 * * * * *')
-  async handleGameUsdTx() {
+  private async handleGameUsdTx() {
     const pendingGameUsdTx = await this.gameUsdTxRepository.find({
       where: {
         status: 'P',
@@ -242,19 +242,19 @@ export class DepositService {
 
         const provider = this.getProvider(tx.chainId);
         const gameUsdWallet = new ethers.Wallet(
-          this.configService.get('GAMEUSD_BOT_PK'),
+          this.configService.get('DEPOSIT_BOT_PK'),
           provider,
         );
 
         const gameUsdContract = new ethers.Contract(
-          this.configService.get('GAMEUSDPOOL_ADDRESS'),
-          [`function supply(address,uint256) external`],
+          this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
+          [`unction deposit(address user, uint256 amount) external`],
           gameUsdWallet,
         );
 
-        const onchainGameUsdTx = await gameUsdContract.supply(
+        const onchainGameUsdTx = await gameUsdContract.deposit(
           tx.receiverAddress,
-          tx.amount,
+          parseUnits(tx.amount.toString(), 18), //18 decimals for gameUSD
         );
 
         const receipt = await onchainGameUsdTx.wait();
@@ -298,8 +298,13 @@ export class DepositService {
     }
   }
 
+  /**
+   * 1. Get all pending deposit transactions
+   * 2. For each transaction, check if the user has token balance and native balance, move the tokens to escrow
+   * 3. If the user doesn't have enough native balance but have enough token balance, initiate a reload transaction
+   */
   @Cron('*/20 * * * * *')
-  async handleEscrowTx() {
+  private async handleEscrowTx() {
     const pendingDepositTxns = await this.depositRepository.find({
       where: {
         status: 'P',
@@ -330,20 +335,56 @@ export class DepositService {
         const userSigner = new ethers.Wallet(userWallet.privateKey, provider);
         const tokenContract = new ethers.Contract(
           tx.currency,
-          [`function transfer(address,uint256) external`],
+          [
+            `function transfer(address,uint256) external`,
+            `function balanceOf(address) external view returns (uint256)`,
+            `function decimals() external view returns (uint8)`,
+          ],
           userSigner,
         );
 
         const escrowAddress = this.configService.get('ESCROW_ADDRESS');
-        const onchainEscrowTx = await tokenContract.transfer(
-          escrowAddress,
-          tx.walletTx.txAmount,
-        );
+        let receipt, onchainEscrowTxHash;
 
-        const receipt = await onchainEscrowTx.wait(1);
-        if (receipt.status == 1) {
+        //reaches catch block if there is not enough native balance.
+        try {
+          const [userBalance, tokenDecimals] = await Promise.all([
+            provider.getBalance(userWallet.walletAddress),
+            tokenContract.decimals(),
+          ]);
+
+          if (
+            userBalance >=
+            parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals)
+          ) {
+            const onchainEscrowTx = await tokenContract.transfer(
+              escrowAddress,
+              tx.walletTx.txAmount,
+            );
+
+            receipt = await onchainEscrowTx.wait(1);
+            onchainEscrowTxHash = onchainEscrowTx.hash;
+          }
+        } catch (error) {
+          //user doesn't have enough native balance, but has enough token balance.
+          //trigger failed reload tx
+          console.log('Error in escrow tx', error);
+
+          await queryRunner.manager.update(
+            ReloadTx,
+            {
+              status: 'F',
+              userWalletId: userWallet.id,
+            },
+            {
+              retryCount: 0,
+            },
+          );
+        }
+
+        if (receipt && receipt.status == 1) {
           tx.status = 'S';
-          tx.txHash = onchainEscrowTx.hash;
+          tx.txHash = onchainEscrowTxHash;
           tx.isTransferred = true;
 
           const gameUsdTx = new GameUsdTx();
@@ -352,13 +393,13 @@ export class DepositService {
           gameUsdTx.txHash = null;
           gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
           gameUsdTx.senderAddress = this.configService.get(
-            'GAMEUSD_BOT_ADDRESS',
+            'DEPOSIT_BOT_ADDRESS',
           );
           gameUsdTx.receiverAddress = userWallet.walletAddress;
           gameUsdTx.walletTx = tx.walletTx;
           gameUsdTx.walletTxId = tx.walletTx.id;
           await queryRunner.manager.save(tx);
-        } else {
+        } else if (receipt && receipt.status != 0) {
           tx.retryCount += 1;
           await queryRunner.manager.save(tx);
         }
@@ -373,7 +414,7 @@ export class DepositService {
   }
 
   @Cron('*/10 * * * * *')
-  async handleReloadTx() {
+  private async handleReloadTx() {
     const pendingReloadTx = await this.reloadTx.find({
       where: {
         status: 'P',
