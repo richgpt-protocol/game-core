@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
@@ -10,8 +10,6 @@ import {
   Repository,
 } from 'typeorm';
 // import { CreateDeopsitRequestDto, SupplyDto } from './dto/deposit.dto';
-import { HttpService } from '@nestjs/axios';
-import { response } from 'express';
 import axios, { AxiosResponse } from 'axios';
 import { ConfigService } from 'src/config/config.service';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
@@ -20,33 +18,30 @@ import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { DepositDTO } from './dto/deposit.dto';
 import { Provider, ethers, parseUnits } from 'ethers';
-import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Cron } from '@nestjs/schedule';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
+import { AdminService } from 'src/admin/admin.service';
 
 @Injectable()
 export class DepositService {
   constructor(
     @InjectRepository(DepositTx)
     private depositRepository: Repository<DepositTx>,
-    @InjectRepository(WalletTx)
-    private walletTxRepository: Repository<WalletTx>,
-    @InjectRepository(UserWallet)
-    private userWalletRepository: Repository<UserWallet>,
     @InjectRepository(ReloadTx)
-    private reloadTx: Repository<ReloadTx>,
+    private reloadTxRepository: Repository<ReloadTx>,
     @InjectRepository(GameUsdTx)
     private gameUsdTxRepository: Repository<GameUsdTx>,
-    private httpService: HttpService,
-    private configService: ConfigService,
+    // private httpService: HttpService,
+    private readonly configService: ConfigService,
+    // private adminService: AdminService,
     private dataSource: DataSource,
-    private eventEmitter: EventEmitter2,
   ) {}
 
   async processDeposit(payload: DepositDTO) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+    throw new InternalServerErrorException('Error processing deposit');
 
     try {
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
@@ -54,6 +49,7 @@ export class DepositService {
           walletAddress: payload.walletAddress,
         },
       });
+
 
       const walletTx = new WalletTx();
       walletTx.txType = 'DEPOSIT';
@@ -63,6 +59,8 @@ export class DepositService {
       walletTx.userWallet = userWallet;
       walletTx.userWalletId = userWallet.id;
 
+      const walletTxResult = await queryRunner.manager.save(walletTx);
+
       const depositTx = new DepositTx();
       depositTx.currency = payload.tokenAddress;
       depositTx.senderAddress = payload.depositerAddress;
@@ -71,7 +69,8 @@ export class DepositService {
       depositTx.isTransferred = false;
       depositTx.txHash = null;
       depositTx.walletTx = walletTx;
-      depositTx.walletTxId = walletTx.id;
+      depositTx.walletTxId = walletTxResult.id;
+      depositTx.retryCount = 0;
       depositTx.status = 'P';
 
       const nativeBalance = await this.getNativeBalance(
@@ -81,26 +80,31 @@ export class DepositService {
       const minimumNativeBalance = this.configService.get(
         `MINIMUM_NATIVE_BALANCE_${payload.chainId}`,
       );
-      // if (nativeBalance < ethers.parseEther(minimumNativeBalance)) {
+
       const reloadTx = await this.reloadWallet(payload, +minimumNativeBalance);
       reloadTx.userWallet = userWallet;
       reloadTx.userWalletId = userWallet.id;
 
       await queryRunner.manager.save(reloadTx);
-      // } else {
-      //   //initiate token transfer to escrow and set depositTx.txHash
-      //   //transfer gameUSD once above tx is successful
-      //   //update status of depositTx and walletTx
-      // }
 
-      await queryRunner.manager.save(walletTx);
       await queryRunner.manager.save(depositTx);
       queryRunner.commitTransaction();
     } catch (error) {
       console.log(error);
       await queryRunner.rollbackTransaction();
     } finally {
-      await queryRunner.release();
+      if (!queryRunner.isReleased) await queryRunner.release();
+
+      throw new InternalServerErrorException('Error processing deposit');
+    }
+  }
+
+  private currencyByChainId(chainId: number) {
+    switch (chainId) {
+      case 5611:
+        return 'BNB';
+      default:
+        return 'ETH';
     }
   }
 
@@ -108,12 +112,19 @@ export class DepositService {
     payload: DepositDTO,
     reloadAmount: number,
   ): Promise<ReloadTx> {
+    const currencyLabel = this.currencyByChainId(payload.chainId);
     const reloadTx = new ReloadTx();
     reloadTx.chainId = payload.chainId;
     reloadTx.status = 'P';
     reloadTx.amount = reloadAmount;
     reloadTx.txHash = null;
-    reloadTx.amountInUSD = await this.getPriceInUSD(payload.tokenAddress);
+    reloadTx.currency = currencyLabel;
+    reloadTx.retryCount = 0;
+    reloadTx.amountInUSD =
+      reloadAmount *
+      (await this.getPriceInUSD(
+        currencyLabel === 'BNB' ? 'binancecoin' : 'ethereum',
+      ));
 
     // try {
     //   const tx = await this.transferNative(
@@ -134,13 +145,15 @@ export class DepositService {
   }
 
   private async getPriceInUSD(currency: string): Promise<number> {
-    //TODO
-    // const priceUrl = this.configService.get('CRYPTO_PRICE_API_URL');
-    // const response = await axios.get(priceUrl);
-    // const price = +response.data[currency].usd;
-    // return price;
-
-    return 0;
+    try {
+      const priceUrl = this.configService.get('CRYPTO_PRICE_API_URL');
+      const response = await axios.get(priceUrl);
+      const price = +response.data[currency].usd;
+      return price;
+    } catch (error) {
+      console.error('Error fetching price', error);
+      return 0;
+    }
   }
 
   private async getNativeBalance(walletAddress: string, chainId: number) {
@@ -162,8 +175,8 @@ export class DepositService {
     try {
       const supplyWallet = new ethers.Wallet(
         this.configService.get('SUPPLY_ACCOUNT_PK'),
+        this.getProvider(chainId),
       );
-      supplyWallet.connect(this.getProvider(chainId));
       const tx = await supplyWallet.sendTransaction({
         to: target,
         value: ethers.parseEther(amount.toString()),
@@ -174,52 +187,14 @@ export class DepositService {
     }
   }
 
-  private async transferTokenToEscrow(
-    tokenAddress: string,
-    walletAddress: string,
-    amount: number,
-    chainId: number,
-  ) {
-    const userWallet = await this.userWalletRepository.findOne({
-      where: {
-        walletAddress,
-      },
-    });
-
-    const provider = this.getProvider(chainId);
-    const wallet = new ethers.Wallet(userWallet.privateKey, provider);
-    const tokenContract = new ethers.Contract(
-      tokenAddress,
-      [`function transfer(address,uint256) external`],
-      wallet,
-    );
-    const escrowAddress = this.configService.get('ESCROW_ADDRESS');
-    const tx = await tokenContract.transfer(escrowAddress, amount);
-
-    return tx;
-  }
-
-  // @OnEvent('reload', { async: true })
-  // async handleReloadEvent({
-  //   reloadTx,
-  //   tx,
-  // }: {
-  //   reloadTx: ReloadTx;
-  //   tx: ethers.TransactionResponse;
-  // }) {
-  //   try {
-  //     const receipt = await tx.wait(1);
-  //     if (receipt.status == 1) {
-  //       reloadTx.txHash = tx.hash;
-  //       reloadTx.status = 'S';
-  //     }
-
-  //     await this.reloadTx.save(reloadTx);
-  //   } catch (error) {}
-  // }
-
+  isGameUSDCronRunning = false;
   @Cron('*/10 * * * * *')
   private async handleGameUsdTx() {
+    if (this.isGameUSDCronRunning) return;
+
+    this.isGameUSDCronRunning = true;
+
+    this.isGameUSDCronRunning = true;
     const pendingGameUsdTx = await this.gameUsdTxRepository.find({
       where: {
         status: 'P',
@@ -227,6 +202,7 @@ export class DepositService {
     });
 
     for (const tx of pendingGameUsdTx) {
+      console.log('Processing gameUSD tx', tx.id);
       const queryRunner = this.dataSource.createQueryRunner();
       await queryRunner.connect();
       await queryRunner.startTransaction();
@@ -236,7 +212,12 @@ export class DepositService {
           tx.status = 'F';
           await queryRunner.manager.save(tx);
 
-          //TODO admin notification
+          //TODO
+          // this.adminService.createAdminNotification({
+          //   type: 'error',
+          //   title: 'GameUSD deposit failed',
+          //   message: `GameUSD deposit failed for tx ${tx.id}`,
+          // });
           continue;
         }
 
@@ -248,7 +229,7 @@ export class DepositService {
 
         const gameUsdContract = new ethers.Contract(
           this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
-          [`unction deposit(address user, uint256 amount) external`],
+          [`function deposit(address user, uint256 amount) external`],
           gameUsdWallet,
         );
 
@@ -259,29 +240,34 @@ export class DepositService {
 
         const receipt = await onchainGameUsdTx.wait();
         if (receipt.status == 1) {
+          console.log('receipt', receipt);
           tx.status = 'S';
           tx.txHash = onchainGameUsdTx.hash;
           await queryRunner.manager.save(tx);
 
-          const walletTx = await queryRunner.manager.findOne(WalletTx, {
-            where: {
-              id: tx.walletTxId,
-            },
-          });
+          const walletTx = await queryRunner.manager
+            .createQueryBuilder(WalletTx, 'walletTx')
+            .innerJoinAndSelect('walletTx.userWallet', 'userWallet')
+            .where('walletTx.id = :id', { id: tx.walletTxId })
+            .getOne();
 
           walletTx.status = 'S';
+
+          // console.log('walletTx', walletTx);
 
           const previousWalletTx = await queryRunner.manager.findOne(WalletTx, {
             where: {
               userWalletId: walletTx.userWalletId,
+              id: Not(tx.walletTxId),
             },
             order: {
               createdDate: 'DESC',
             },
           });
 
-          walletTx.startingBalance = previousWalletTx.endingBalance;
-          walletTx.endingBalance = previousWalletTx.endingBalance + tx.amount;
+          walletTx.startingBalance = previousWalletTx?.endingBalance || 0;
+          walletTx.endingBalance =
+            (previousWalletTx?.endingBalance || 0) + tx.amount;
 
           walletTx.userWallet.walletBalance = walletTx.endingBalance;
 
@@ -293,11 +279,13 @@ export class DepositService {
       } catch (error) {
         await queryRunner.rollbackTransaction();
       } finally {
-        await queryRunner.release();
+        if (!queryRunner.isReleased) await queryRunner.release();
       }
     }
+    this.isGameUSDCronRunning = false;
   }
 
+  isEscrowCronRunning = false;
   /**
    * 1. Get all pending deposit transactions
    * 2. For each transaction, check if the user has token balance and native balance, move the tokens to escrow
@@ -305,13 +293,16 @@ export class DepositService {
    */
   @Cron('*/20 * * * * *')
   private async handleEscrowTx() {
-    const pendingDepositTxns = await this.depositRepository.find({
-      where: {
-        status: 'P',
-      },
-    });
+    if (this.isEscrowCronRunning) return;
+    this.isEscrowCronRunning = true;
+    const pendingDepositTxns = await this.depositRepository
+      .createQueryBuilder('depositTx')
+      .innerJoinAndSelect('depositTx.walletTx', 'walletTx')
+      .where('depositTx.status = :status', { status: 'P' })
+      .getMany();
 
     for (const tx of pendingDepositTxns) {
+      console.log('Processing escrow tx', tx.id);
       const queryRunner = this.dataSource.createQueryRunner();
       await queryRunner.connect();
       await queryRunner.startTransaction();
@@ -321,7 +312,12 @@ export class DepositService {
           tx.status = 'F';
           await queryRunner.manager.save(tx);
 
-          //TODO admin notification
+          //TODO
+          // this.adminService.createAdminNotification({
+          //   type: 'error',
+          //   title: 'Escrow tx failed',
+          //   message: `Escrow tx failed for tx ${tx.id}`,
+          // });
           continue;
         }
 
@@ -349,7 +345,7 @@ export class DepositService {
         //reaches catch block if there is not enough native balance.
         try {
           const [userBalance, tokenDecimals] = await Promise.all([
-            provider.getBalance(userWallet.walletAddress),
+            tokenContract.balanceOf(userWallet.walletAddress),
             tokenContract.decimals(),
           ]);
 
@@ -359,16 +355,18 @@ export class DepositService {
           ) {
             const onchainEscrowTx = await tokenContract.transfer(
               escrowAddress,
-              tx.walletTx.txAmount,
+              parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals),
             );
 
             receipt = await onchainEscrowTx.wait(1);
             onchainEscrowTxHash = onchainEscrowTx.hash;
+          } else {
+            console.log('skipping escrow tx', tx.id);
           }
         } catch (error) {
           //user doesn't have enough native balance, but has enough token balance.
           //trigger failed reload tx
-          console.log('Error in escrow tx', error);
+          console.log('Error in escrow tx, retrying reload txns', error);
 
           await queryRunner.manager.update(
             ReloadTx,
@@ -382,6 +380,13 @@ export class DepositService {
           );
         }
 
+        console.log(
+          'receipt',
+          receipt,
+          'onchainEscrowTxHash',
+          onchainEscrowTxHash,
+        );
+
         if (receipt && receipt.status == 1) {
           tx.status = 'S';
           tx.txHash = onchainEscrowTxHash;
@@ -391,6 +396,7 @@ export class DepositService {
           gameUsdTx.amount = tx.walletTx.txAmount;
           gameUsdTx.status = 'P';
           gameUsdTx.txHash = null;
+          gameUsdTx.retryCount = 0;
           gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
           gameUsdTx.senderAddress = this.configService.get(
             'DEPOSIT_BOT_ADDRESS',
@@ -399,29 +405,38 @@ export class DepositService {
           gameUsdTx.walletTx = tx.walletTx;
           gameUsdTx.walletTxId = tx.walletTx.id;
           await queryRunner.manager.save(tx);
-        } else if (receipt && receipt.status != 0) {
+          await queryRunner.manager.save(gameUsdTx);
+        } else if (receipt && receipt.status != 1) {
           tx.retryCount += 1;
           await queryRunner.manager.save(tx);
         }
 
         await queryRunner.commitTransaction();
       } catch (err) {
+        console.log('Error in escrow tx', err);
         await queryRunner.rollbackTransaction();
       } finally {
-        await queryRunner.release();
+        if (!queryRunner.isReleased) await queryRunner.release();
       }
     }
+
+    this.isEscrowCronRunning = false;
   }
 
+  isReloadCronRunning = false;
   @Cron('*/10 * * * * *')
   private async handleReloadTx() {
-    const pendingReloadTx = await this.reloadTx.find({
-      where: {
-        status: 'P',
-      },
-    });
+    if (this.isReloadCronRunning) return;
+
+    this.isReloadCronRunning = true;
+    const pendingReloadTx = await this.reloadTxRepository
+      .createQueryBuilder('reloadTx')
+      .innerJoinAndSelect('reloadTx.userWallet', 'userWallet')
+      .where('reloadTx.status = :status', { status: 'P' })
+      .getMany();
 
     for (const tx of pendingReloadTx) {
+      console.log('Processing reload tx', tx);
       const queryRunner = this.dataSource.createQueryRunner();
       await queryRunner.connect();
       await queryRunner.startTransaction();
@@ -429,9 +444,15 @@ export class DepositService {
       try {
         if (tx.retryCount >= 5) {
           tx.status = 'F';
-          await this.reloadTx.save(tx);
+          await this.reloadTxRepository.save(tx);
 
-          //TODO admin notification
+          //TODO
+          // this.adminService.createAdminNotification({
+          //   type: 'error',
+          //   title: 'Reload tx failed',
+          //   message: `Reload tx failed for tx ${tx.id}`,
+          // });
+
           continue;
         }
 
@@ -446,31 +467,19 @@ export class DepositService {
         if (receipt.status == 1) {
           tx.status = 'S';
           tx.txHash = onchainTx.hash;
-          await this.reloadTx.save(tx);
+          await this.reloadTxRepository.save(tx);
         } else {
           tx.retryCount += 1;
-          await this.reloadTx.save(tx);
+          await this.reloadTxRepository.save(tx);
         }
       } catch (error) {
+        console.log('Error in reload tx', error);
         await queryRunner.rollbackTransaction();
       } finally {
-        await queryRunner.release();
+        if (!queryRunner.isReleased) await queryRunner.release();
       }
     }
+
+    this.isReloadCronRunning = false;
   }
 }
-
-/**
- * ISSUES
-1. reload and escrow transactions could run at the same time.
-   - update escrow transaction hash but not the status - can't
-2. point 3:C is not possible. Couldn't find reload txn's status from depositTx entity
-    - can't find the corresponding reload txn status when processing depositTx
-    - will need to wait until the 
-    
-    
-    - current flow
-        - reload and escrow happens parallely
-        - if escrow fails, it notifies admin
-        - escrow cron is ran every 20 seconds so reload could complete before escrow.
- */
