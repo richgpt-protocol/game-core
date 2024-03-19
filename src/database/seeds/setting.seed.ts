@@ -65,6 +65,10 @@ export default class CreateSettings implements Seeder {
           key: SettingEnum.WITHDRAWAL_FEES_OPBNB,
           value: 0.2,
         },
+        {
+          key: SettingEnum.WITHDRAWAL_FEES_OPBNB_TESTNET,
+          value: 0.02,
+        },
       ])
       .execute();
   }
