@@ -46,7 +46,7 @@ export class ClaimDetail {
   @Column()
   walletTxId: number;
 
-  @ManyToOne(() => WalletTx, (walletTx) => walletTx.claimDetail)
+  @ManyToOne(() => WalletTx, (walletTx) => walletTx.claimDetails)
   walletTx: WalletTx;
 
   @Column()
