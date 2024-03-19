@@ -1,47 +1,25 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
   HttpStatus,
-  Param,
   Post,
-  Put,
   Query,
   Request,
 } from '@nestjs/common';
-import { ApiHeader, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { I18n, I18nContext } from 'nestjs-i18n';
-import { AdminService } from 'src/admin/admin.service';
-import { SseService } from 'src/admin/sse/sse.service';
-import { AuditLogService } from 'src/audit-log/audit-log.service';
-import { MobileCountries } from 'src/shared/constants/mobile-country.constant';
-import { HandlerClass } from 'src/shared/decorators/handler-class.decorator';
-import { IpAddress } from 'src/shared/decorators/ip-address.decorator';
+import { ApiHeader, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Secure } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
-import { IHandlerClass } from 'src/shared/interfaces/handler-class.interface';
-import { SMSService } from 'src/shared/services/sms.service';
-import { DateUtil } from 'src/shared/utils/date.util';
-import { RandomUtil } from 'src/shared/utils/random.util';
-import {
-  ErrorResponseVo,
-  ResponseListVo,
-  ResponseVo,
-} from 'src/shared/vo/response.vo';
+import { ResponseVo } from 'src/shared/vo/response.vo';
 import { GameService } from './game.service';
 // import { SendMessageDto } from './dto/bet.dto';
 import { DrawResultDto } from './dto/drawResult.dto';
-import { ConfigService } from 'src/config/config.service';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 
 @ApiTags('Game')
 @Controller('api/v1/game')
 export class GameController {
-  constructor(
-    private gameService: GameService,
-    private configService: ConfigService,
-  ) {}
+  constructor(private gameService: GameService) {}
 
   // TODO: bet close 1 minute before draw result
   @Secure(PermissionEnum.SET_BET_CLOSE, UserRole.ADMIN)
@@ -99,28 +77,6 @@ export class GameController {
       data: drawResult,
       message: 'draw result get successfully',
     };
-  }
-
-  @Post('trigger-draw-result')
-  async triggerDrawResult(@Request() req) {
-    try {
-      const secret = req.headers['secret'];
-      if (secret !== this.configService.get('RESULT_BOT_SECRET')) {
-        throw new BadRequestException('invalid secret');
-      }
-      await this.gameService.triggerDrawResult();
-      return {
-        statusCode: HttpStatus.OK,
-        data: null,
-        message: 'trigger draw result success',
-      };
-    } catch (error) {
-      return {
-        statusCode: HttpStatus.BAD_REQUEST,
-        data: null,
-        message: error.message,
-      };
-    }
   }
 
   // TODO???
