@@ -11,6 +11,7 @@ import { HttpModule } from '@nestjs/axios';
 import { TwilioModule } from 'nestjs-twilio';
 import { ConfigService } from 'src/config/config.service';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
+import { AdminNotificationService } from './services/admin-notification.service';
 
 @Module({
   imports: [
@@ -32,7 +33,7 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
       inject: [ConfigService],
     }),
   ],
-  providers: [SMSService, CacheSettingService],
-  exports: [SMSService, CacheSettingService],
+  providers: [SMSService, CacheSettingService, AdminNotificationService],
+  exports: [SMSService, CacheSettingService, AdminNotificationService],
 })
 export class SharedModule {}
