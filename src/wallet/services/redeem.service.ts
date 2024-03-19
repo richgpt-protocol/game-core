@@ -269,10 +269,9 @@ export class RedeemService {
           chainId: redeemTx.chainId,
           status: 'P', // pending
           txHash: null,
-          amountInUSD: redeemTx.amount, // 1:1 hardcoded for now
-          currency: 'GameUSD',
           senderAddress: walletTx.userWallet.walletAddress,
           receiverAddress: process.env.GAMEUSD_POOL_CONTRACT_ADDRESS,
+          retryCount: 0,
           walletTxId: walletTx.id,
         });
         await queryRunner.manager.save(gameUsdTx);

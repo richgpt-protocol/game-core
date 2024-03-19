@@ -271,10 +271,9 @@ export class ClaimService {
           chainId: Number(process.env.CHAIN_ID),
           status: 'S',
           txHash: txReceipt.hash,
-          amountInUSD: walletTx.txAmount,
-          currency: 'GameUSD',
           senderAddress: process.env.GAMEUSD_POOL_CONTRACT_ADDRESS,
           receiverAddress: walletTx.userWallet.walletAddress,
+          retryCount: 0,
           walletTxId: walletTx.id,
         });
         await queryRunner.manager.save(gameUsdTx);
