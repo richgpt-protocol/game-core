@@ -20,6 +20,10 @@ import { PermissionController } from 'src/permission/permission.controller';
 import { PermissionService } from 'src/permission/permission.service';
 import { Permission } from 'src/permission/entities/permission.entity';
 import { PermissionAccess } from 'src/permission/entities/permission-access.entity';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
+import { UserNotification } from 'src/notification/entities/user-notification.entity';
+import { Notification } from 'src/notification/entities/notification.entity';
+import { SharedModule } from 'src/shared/shared.module';
 
 @Module({
   imports: [
@@ -31,6 +35,9 @@ import { PermissionAccess } from 'src/permission/entities/permission-access.enti
       ReloadTx,
       GameUsdTx,
       BetOrder,
+      Notification,
+      UserNotification,
+      Admin,
     ]),
     // HttpModule,
     // AuditLogModule,
@@ -38,9 +45,14 @@ import { PermissionAccess } from 'src/permission/entities/permission-access.enti
     // SharedModule,
     AdminModule,
     ConfigModule,
+    SharedModule,
     // SseModule,
   ],
-  providers: [DepositService, WalletService /* HttpService */],
+  providers: [
+    DepositService,
+    WalletService,
+    AdminNotificationService /* HttpService */,
+  ],
   controllers: [DepositController],
   exports: [],
 })

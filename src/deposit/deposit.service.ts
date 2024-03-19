@@ -20,7 +20,7 @@ import { DepositDTO } from './dto/deposit.dto';
 import { Provider, ethers, parseUnits } from 'ethers';
 import { Cron } from '@nestjs/schedule';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
-import { AdminService } from 'src/admin/admin.service';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 @Injectable()
 export class DepositService {
@@ -33,7 +33,7 @@ export class DepositService {
     private gameUsdTxRepository: Repository<GameUsdTx>,
     // private httpService: HttpService,
     private readonly configService: ConfigService,
-    // private adminService: AdminService,
+    private adminNotificationService: AdminNotificationService,
     private dataSource: DataSource,
   ) {}
 
@@ -41,7 +41,6 @@ export class DepositService {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
-    throw new InternalServerErrorException('Error processing deposit');
 
     try {
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
@@ -49,7 +48,6 @@ export class DepositService {
           walletAddress: payload.walletAddress,
         },
       });
-
 
       const walletTx = new WalletTx();
       walletTx.txType = 'DEPOSIT';
@@ -92,6 +90,13 @@ export class DepositService {
     } catch (error) {
       console.log(error);
       await queryRunner.rollbackTransaction();
+
+      await this.adminNotificationService.setAdminNotification(
+        `Error processing deposit for wallet: ${payload.walletAddress}. This will be retried after sometime.`,
+        'DEPOSIT_TRANSACTION_ROLLBACK',
+        'Deposit Failed',
+        false,
+      );
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
 
@@ -212,12 +217,13 @@ export class DepositService {
           tx.status = 'F';
           await queryRunner.manager.save(tx);
 
-          //TODO
-          // this.adminService.createAdminNotification({
-          //   type: 'error',
-          //   title: 'GameUSD deposit failed',
-          //   message: `GameUSD deposit failed for tx ${tx.id}`,
-          // });
+          await this.adminNotificationService.setAdminNotification(
+            `GameUSD transaction after 5 times for gameUSD.tx.entity: ${tx.id}`,
+            'GAMEUSD_TX_FAILED_5_TIMES',
+            'GameUSD transfer transfer failed',
+            false,
+            tx.walletTxId,
+          );
           continue;
         }
 
@@ -312,12 +318,13 @@ export class DepositService {
           tx.status = 'F';
           await queryRunner.manager.save(tx);
 
-          //TODO
-          // this.adminService.createAdminNotification({
-          //   type: 'error',
-          //   title: 'Escrow tx failed',
-          //   message: `Escrow tx failed for tx ${tx.id}`,
-          // });
+          await this.adminNotificationService.setAdminNotification(
+            `Transaction to escrow failed after 5 times for Deposit.tx.entity: ${tx.id}`,
+            'ESCROW_FAILED_5_TIMES',
+            'Transfer to Escrow Failed',
+            false,
+            tx.walletTxId,
+          );
           continue;
         }
 
@@ -446,12 +453,19 @@ export class DepositService {
           tx.status = 'F';
           await this.reloadTxRepository.save(tx);
 
-          //TODO
-          // this.adminService.createAdminNotification({
-          //   type: 'error',
-          //   title: 'Reload tx failed',
-          //   message: `Reload tx failed for tx ${tx.id}`,
-          // });
+          const walletTx = await queryRunner.manager.findOne(WalletTx, {
+            where: {
+              reloadTx: tx,
+            },
+          });
+
+          await this.adminNotificationService.setAdminNotification(
+            `Reload transaction after 5 times for reload.tx.entity: ${tx.id}`,
+            'RELOAD_FAILED_5_TIMES',
+            'Native token transfer failed',
+            false,
+            walletTx.id,
+          );
 
           continue;
         }

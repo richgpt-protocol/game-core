@@ -3,10 +3,12 @@ import {
   CreateDateColumn,
   Entity,
   ManyToOne,
+  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { UserWallet } from './user-wallet.entity';
+import { WalletTx } from './wallet-tx.entity';
 
 // This entity is used for storing the supply of native tokens
 // for gas fees tx for all the wallets
@@ -62,4 +64,7 @@ export class ReloadTx {
 
   @ManyToOne(() => UserWallet, (userWallet) => userWallet.reloadTxs)
   userWallet: UserWallet;
+
+  @OneToOne(() => WalletTx, (walletTx) => walletTx.reloadTx)
+  walletTx: WalletTx;
 }

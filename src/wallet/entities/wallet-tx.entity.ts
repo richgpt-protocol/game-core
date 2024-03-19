@@ -15,6 +15,7 @@ import { ClaimDetail } from './claim-detail.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { RedeemTx } from './redeem-tx.entity';
 import { GameUsdTx } from './game-usd-tx.entity';
+import { ReloadTx } from './reload-tx.entity';
 
 @Entity()
 export class WalletTx {
@@ -92,4 +93,8 @@ export class WalletTx {
   @OneToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.walletTx)
   @JoinColumn()
   gameUsdTx: GameUsdTx;
+
+  @OneToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.walletTx)
+  @JoinColumn()
+  reloadTx: ReloadTx;
 }

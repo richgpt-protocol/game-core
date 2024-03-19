@@ -22,6 +22,7 @@ export class AdminNotificationService {
     type: string,
     title: string,
     isBroadcast: boolean,
+    walletTxId?: number,
     adminId?: number,
   ) {
     const queryRunner = this.connection.createQueryRunner();
@@ -36,6 +37,7 @@ export class AdminNotificationService {
           type,
           title,
           message,
+          walletTx: walletTxId ? { id: walletTxId } : null,
         }),
       );
 
