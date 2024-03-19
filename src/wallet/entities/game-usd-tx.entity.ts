@@ -20,27 +20,21 @@ export class GameUsdTx {
   @Column({
     comment: 'S - success, P - pending, F - failed',
   })
-  status: 'S' | 'P' | 'F';
-
-  @Column({ nullable: true })
-  txHash: string;
+  status: string;
 
   @Column({
-    type: 'decimal',
-    precision: 30,
-    scale: 18,
-    default: 0,
+    nullable: true,
   })
-  amountInUSD: number;
-
-  @Column()
-  currency: string;
+  txHash: string;
 
   @Column()
   senderAddress: string;
 
   @Column()
   receiverAddress: string;
+
+  @Column()
+  retryCount: number;
 
   @Column()
   walletTxId: number;
