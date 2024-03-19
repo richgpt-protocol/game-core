@@ -40,9 +40,12 @@ export class WalletTx {
   txHash: string;
 
   @Column({
-    comment: 'S - success, P - Pending, F - Failed',
+    comment: 'S - Success, P - Pending, P - Pending for Admin, PD - Pending for Developer, F - Failed',
+    // Pending: pending for on-chain transaction confirmation
+    // Pending for Admin: pending for admin approval, valid for redeem-tx only
+    // Pending for Developer: pending for developer to check
   })
-  status: string;
+  status: 'S' | 'P' | 'PA' | 'PD' | 'F';
 
   @Column({
     type: 'decimal',
@@ -78,7 +81,7 @@ export class WalletTx {
 
   @OneToMany(() => ClaimDetail, (claimDetail) => claimDetail.walletTx)
   @JoinColumn()
-  claimDetail: ClaimDetail;
+  claimDetails: ClaimDetail[];
 
   @OneToMany(() => BetOrder, (betOrder) => betOrder.walletTx)
   betOrders: BetOrder[];
