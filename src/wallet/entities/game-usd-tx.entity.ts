@@ -20,9 +20,9 @@ export class GameUsdTx {
   @Column({
     comment: 'S - success, P - pending, F - failed',
   })
-  status: string;
+  status: 'S' | 'P' | 'F';
 
-  @Column()
+  @Column({ nullable: true })
   txHash: string;
 
   @Column({
