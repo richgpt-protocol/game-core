@@ -10,23 +10,35 @@ export default class CreateGames implements Seeder {
   track = false;
 
   public async run(dataSource: DataSource, factoryManager: SeederFactoryManager): Promise<void> {
-    const maxBetPerNumber = Number(process.env.MAX_BET_PER_NUMBER);
+    const maxBetAmount = Number(process.env.MAX_BET_AMOUNT);
+    const minBetAmount = Number(process.env.MIN_BET_AMOUNT);
 
-    const closeAt = new Date();
-    if (closeAt.getHours() >= 19) {
-      closeAt.setDate(closeAt.getDate() + 1);
+    let startDate = new Date();
+    let endDate = new Date();
+    if (startDate.getHours() >= 19) {
+      endDate.setDate(startDate.getDate() + 1);
     }
-    closeAt.setHours(19, 0, 0, 0);
+    endDate.setHours(18, 59, 0, 0);
 
     for (let epoch = 0; epoch < 31; epoch++) {
       await dataSource
         .createQueryBuilder()
         .insert()
         .into('game')
-        .values([{ epoch, maxBetPerNumber, closeAt }])
+        .values([{
+          epoch: epoch.toString(),
+          maxBetAmount: maxBetAmount,
+          minBetAmount: minBetAmount,
+          drawTxHash: '',
+          startDate: startDate,
+          endDate: endDate,
+          isClosed: false,
+        }])
         .execute();
 
-      closeAt.setDate(closeAt.getDate() + 1);
+      startDate.setDate(endDate.getDate());
+      startDate.setHours(19, 0, 0, 0);
+      endDate.setDate(endDate.getDate() + 1);
     }
   }
 }
