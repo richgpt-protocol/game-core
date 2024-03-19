@@ -2,19 +2,19 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
 import { CreditWalletTx } from './entities/credit-wallet-tx.entity';
-import { ClaimTx } from './entities/claim-tx.entity';
 import { DepositTx } from './entities/deposit-tx.entity';
 import { RedeemTx } from './entities/redeem-tx.entity';
 import { ReloadTx } from './entities/reload-tx.entity';
 import { WalletTx } from './entities/wallet-tx.entity';
 import { GameUsdTx } from './entities/game-usd-tx.entity';
+import { ClaimDetail } from './entities/claim-detail.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       UserWallet,
       CreditWalletTx,
-      ClaimTx,
+      ClaimDetail,
       DepositTx,
       RedeemTx,
       GameUsdTx,

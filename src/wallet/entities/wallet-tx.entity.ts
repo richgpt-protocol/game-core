@@ -11,7 +11,7 @@ import {
 } from 'typeorm';
 import { UserWallet } from './user-wallet.entity';
 import { DepositTx } from './deposit-tx.entity';
-import { ClaimTx } from './claim-tx.entity';
+import { ClaimDetail } from './claim-detail.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { RedeemTx } from './redeem-tx.entity';
 import { GameUsdTx } from './game-usd-tx.entity';
@@ -48,7 +48,7 @@ export class WalletTx {
     type: 'decimal',
     precision: 30,
     scale: 18,
-    default: 0,
+    nullable: true,
   })
   startingBalance: number;
 
@@ -56,7 +56,7 @@ export class WalletTx {
     type: 'decimal',
     precision: 30,
     scale: 18,
-    default: 0,
+    nullable: true,
   })
   endingBalance: number;
 
@@ -76,9 +76,9 @@ export class WalletTx {
   @JoinColumn()
   depositTx: DepositTx;
 
-  @OneToOne(() => ClaimTx, (claimTx) => claimTx.walletTx)
+  @OneToMany(() => ClaimDetail, (claimDetail) => claimDetail.walletTx)
   @JoinColumn()
-  claimTx: ClaimTx;
+  claimDetail: ClaimDetail;
 
   @OneToMany(() => BetOrder, (betOrder) => betOrder.walletTx)
   betOrders: BetOrder[];

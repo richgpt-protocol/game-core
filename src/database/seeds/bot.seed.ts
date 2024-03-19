@@ -42,15 +42,6 @@ export default class CreateBots implements Seeder {
           status: AdminStatus.ACTIVE,
         },
         {
-          username: 'redeemBot',
-          name: 'Redeem Bot',
-          emailAddress: '',
-          password: await bcrypt.hash('redeemBot888*', 10),
-          adminType: AdminType.BOT,
-          createdBy: 'system',
-          status: AdminStatus.ACTIVE,
-        },
-        {
           username: 'payoutBot',
           name: 'Payout Bot',
           emailAddress: '',
@@ -90,19 +81,9 @@ export default class CreateBots implements Seeder {
       ],
     });
 
-    // redeem bot
-    await this.assignPermission(dataSource, {
-      userId: bots.generatedMaps[2].id,
-      userRole: UserRole.ADMIN,
-      role: AdminType.BOT,
-      permissions : [(await dataSource.query(
-        `SELECT id FROM permission WHERE code = 'update_payout_signature'`
-      ))[0].id],
-    });
-
     // payout bot
     await this.assignPermission(dataSource, {
-      userId: bots.generatedMaps[3].id,
+      userId: bots.generatedMaps[2].id,
       userRole: UserRole.ADMIN,
       role: AdminType.BOT,
       permissions : [(await dataSource.query(
