@@ -1,3 +1,4 @@
+import { TelegramService } from './services/telegram.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
@@ -33,7 +34,7 @@ import { AdminNotificationService } from './services/admin-notification.service'
       inject: [ConfigService],
     }),
   ],
-  providers: [SMSService, CacheSettingService, AdminNotificationService],
-  exports: [SMSService, CacheSettingService, AdminNotificationService],
+  providers: [SMSService, CacheSettingService, AdminNotificationService, TelegramService],
+  exports: [SMSService, CacheSettingService, AdminNotificationService, TelegramService],
 })
 export class SharedModule {}

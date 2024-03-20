@@ -1,3 +1,4 @@
+import { TelegramService } from './../shared/services/telegram.service';
 import {
   BadRequestException,
   Body,
@@ -46,6 +47,7 @@ export class UserController {
     private smsService: SMSService,
     private adminService: AdminService,
     private sseService: SseService,
+    private telegramService: TelegramService,
   ) {}
 
   @Post('register')
@@ -156,6 +158,58 @@ export class UserController {
       message: await i18n.translate('user.REQUESTED_OTP_SUCCESSFUL'),
     };
   }
+
+    // @Secure(null, UserRole.USER)
+    @Get('generate-telegram-otp')
+    @ApiHeader({
+      name: 'x-custom-lang',
+      description: 'Custom Language',
+    })
+    @ApiResponse({
+      status: HttpStatus.CREATED,
+      description: 'Created Successful.',
+      type: ResponseVo,
+    })
+    async generateTelegramOtp(
+      @Request() req,
+      @IpAddress() ipAddress,
+      @HandlerClass() classInfo: IHandlerClass,
+      // @I18n() i18n: I18nContext,
+    ): Promise<ResponseVo<any>> {
+      const user = await this.userService.findOneWithoutHiddenFields(
+        req.user.userId,
+      );
+  
+      if (!user) {
+        throw new BadRequestException('User is not found.');
+      }
+  
+      if (user.isMobileVerified) {
+        throw new BadRequestException('user.OTP_IS_VERIFIED');
+      }
+  
+      const code = RandomUtil.generateRandomNumber(6);
+      await this.userService.update(user.id, {
+        verificationCode: code,
+        otpGenerateTime: new Date(),
+      });
+  
+      await this.telegramService.sendOtp(user.phoneNumber, code);
+  
+      await this.auditLogService.userInsert({
+        module: classInfo.class,
+        actions: classInfo.method,
+        userId: user.id.toString(),
+        content: 'Requested OTP Successful.',
+        ipAddress,
+      });
+  
+      return {
+        statusCode: HttpStatus.OK,
+        data: {},
+        message: 'user.REQUESTED_OTP_SUCCESSFUL',
+      };
+    }
 
   @Secure(null, UserRole.USER)
   @Post('verify-otp')
