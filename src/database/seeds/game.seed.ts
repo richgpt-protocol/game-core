@@ -23,7 +23,7 @@ export default class CreateGames implements Seeder {
         .createQueryBuilder()
         .insert()
         .into('game')
-        .values([{ epoch, maxBetPerNumber, closeAt }])
+        .values([{ epoch, maxBetPerNumber, closeAt, startDate: new Date(), endDate: new Date()}])
         .execute();
 
       closeAt.setDate(closeAt.getDate() + 1);

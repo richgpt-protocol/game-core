@@ -126,23 +126,24 @@ export class AuthService {
       };
     }
 
-    const { ...result } = user;
-    if (payload.code === result.verificationCode) {
-      // Clear Login Attempt
-      await this.userService.update(user.id, {
-        loginAttempt: 0,
-      });
-    } else {
-      // Increase failed login attempt
-      await this.userService.update(user.id, {
-        loginAttempt: user.loginAttempt + 1,
-      });
-      return {
-        error: 'user.WRONG_EMAIL_PASSWORD',
-      };
-    }
+    // const { ...result } = user;
+    // if (payload.code === result.verificationCode) {
+    //   // Clear Login Attempt
+    //   await this.userService.update(user.id, {
+    //     loginAttempt: 0,
+    //   });
+    // } else {
+    //   // Increase failed login attempt
+    //   await this.userService.update(user.id, {
+    //     loginAttempt: user.loginAttempt + 1,
+    //   });
+    //   return {
+    //     error: 'user.WRONG_EMAIL_PASSWORD',
+    //   };
+    // }
 
-    return result;
+    // return result;
+    return user
   }
 
   async createToken(user: any, role: string) {

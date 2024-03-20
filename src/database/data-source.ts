@@ -18,6 +18,7 @@ const options: DataSourceOptions & SeederOptions = {
   ],
 
   seeds: ['src/database/seeds/*{.ts,.js}'],
+  // seeds: ['src/database/seeds/test.seed.ts'],
   seedTracking: false,
   factories: ['src/database/factories/**/*{.ts,.js}'],
 };

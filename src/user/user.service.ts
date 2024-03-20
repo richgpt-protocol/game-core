@@ -79,7 +79,7 @@ export class UserService {
     return await this.userRepository
       .createQueryBuilder('row')
       .select('row')
-      .addSelect('row.password')
+      // .addSelect('row.password')
       .addSelect('row.isReset')
       .addSelect('row.verificationCode')
       .addSelect('row.loginAttempt')
@@ -93,7 +93,7 @@ export class UserService {
     const query = await this.userRepository
       .createQueryBuilder('row')
       .select('row')
-      .addSelect('row.password')
+      // .addSelect('row.password')
       .addSelect('row.isReset')
       .addSelect('row.verificationCode')
       .addSelect('row.loginAttempt')
@@ -202,10 +202,13 @@ export class UserService {
       loginAttempt: 0,
       status: UserStatus.PENDING,
       isReset: false,
+      referralCode: '',
+      otpMethod: 'sms',
     });
     const result = await this.userRepository.save(user);
 
     const wallet = this.walletRepository.create({
+      userId: result.id,
       user,
       walletAddress,
       privateKey: hdNodeWallet.privateKey, // temporarily
