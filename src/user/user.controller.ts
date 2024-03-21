@@ -12,8 +12,6 @@ import {
 } from '@nestjs/common';
 import { ApiHeader, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { I18n, I18nContext } from 'nestjs-i18n';
-import { AdminService } from 'src/admin/admin.service';
-import { SseService } from 'src/admin/sse/sse.service';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { MobileCountries } from 'src/shared/constants/mobile-country.constant';
 import { HandlerClass } from 'src/shared/decorators/handler-class.decorator';
@@ -22,8 +20,6 @@ import { Secure } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { IHandlerClass } from 'src/shared/interfaces/handler-class.interface';
 import { SMSService } from 'src/shared/services/sms.service';
-import { DateUtil } from 'src/shared/utils/date.util';
-import { RandomUtil } from 'src/shared/utils/random.util';
 import {
   ErrorResponseVo,
   ResponseListVo,
@@ -34,7 +30,6 @@ import {
   RegisterUserDto,
   UpdateUserByAdminDto,
   UpdateUserDto,
-  VerifyOtpDto,
 } from './dto/register-user.dto';
 import { UserService } from './user.service';
 
@@ -45,12 +40,10 @@ export class UserController {
     private userService: UserService,
     private auditLogService: AuditLogService,
     private smsService: SMSService,
-    private adminService: AdminService,
-    private sseService: SseService,
     private telegramService: TelegramService,
   ) {}
 
-  @Post('register')
+  @Post('sign-up')
   @ApiHeader({
     name: 'x-custom-lang',
     description: 'Custom Language',
@@ -65,7 +58,7 @@ export class UserController {
     description: 'Bad Request',
     type: ErrorResponseVo,
   })
-  async register(
+  async signUp(
     @IpAddress() ipAddress,
     @HandlerClass() classInfo: IHandlerClass,
     @Body() payload: RegisterUserDto,
@@ -73,32 +66,32 @@ export class UserController {
   ): Promise<ResponseVo<any>> {
     try {
       const result = await this.userService.register(payload);
-      if (result) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        // const { password, ...log } = payload;
-        const log = payload;
+      if (result.data) {
+        const user = result.data;
+
+        // record into userAuditLog
         await this.auditLogService.userInsert({
           module: classInfo.class,
           actions: classInfo.method,
-          userId: result.id.toString(),
-          content: 'Registered User Account Successful: ' + JSON.stringify(log),
+          userId: user.id.toString(),
+          content: 'Registered User Account Successful: ' + JSON.stringify(user),
           ipAddress,
         });
 
         return {
           statusCode: HttpStatus.OK,
-          data: {
-            ...result,
-          },
-          message: 'Registered User Account Successful.',
+          data: user,
+          message: 'otp sent',
         };
+
       } else {
         return {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
           data: {},
-          message: await i18n.translate('user.FAILED_REGISTER_FIRST_DRAFT'),
+          message: await i18n.translate(result.error),
         };
       }
+
     } catch (ex) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
@@ -108,8 +101,7 @@ export class UserController {
     }
   }
 
-  @Secure(null, UserRole.USER)
-  @Get('generate-otp')
+  @Post('sign-in')
   @ApiHeader({
     name: 'x-custom-lang',
     description: 'Custom Language',
@@ -119,181 +111,35 @@ export class UserController {
     description: 'Created Successful.',
     type: ResponseVo,
   })
-  async generateOtp(
-    @Request() req,
+  async signIn(
     @IpAddress() ipAddress,
     @HandlerClass() classInfo: IHandlerClass,
+    @Body() payload: { phoneNumber: string },
     @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const user = await this.userService.findOneWithoutHiddenFields(
-      req.user.userId,
-    );
+    try {
+      const result = await this.userService.signIn(payload.phoneNumber);
+      if (result.data) {
+        return {
+          statusCode: HttpStatus.OK,
+          data: result.data,
+          message: 'otp sent',
+        };
 
-    if (!user) {
-      throw new BadRequestException('User is not found.');
-    }
-
-    if (user.isMobileVerified) {
-      throw new BadRequestException('user.OTP_IS_VERIFIED');
-    }
-
-    const code = RandomUtil.generateRandomNumber(6);
-    await this.userService.update(user.id, {
-      verificationCode: code,
-      otpGenerateTime: new Date(),
-    });
-    await this.smsService.sendUserRegistrationOTP(user.phoneNumber, code);
-
-    await this.auditLogService.userInsert({
-      module: classInfo.class,
-      actions: classInfo.method,
-      userId: user.id.toString(),
-      content: 'Requested OTP Successful.',
-      ipAddress,
-    });
-
-    return {
-      statusCode: HttpStatus.OK,
-      data: {},
-      message: await i18n.translate('user.REQUESTED_OTP_SUCCESSFUL'),
-    };
-  }
-
-    // @Secure(null, UserRole.USER)
-    @Get('generate-telegram-otp')
-    @ApiHeader({
-      name: 'x-custom-lang',
-      description: 'Custom Language',
-    })
-    @ApiResponse({
-      status: HttpStatus.CREATED,
-      description: 'Created Successful.',
-      type: ResponseVo,
-    })
-    async generateTelegramOtp(
-      @Request() req,
-      @IpAddress() ipAddress,
-      @HandlerClass() classInfo: IHandlerClass,
-      // @I18n() i18n: I18nContext,
-    ): Promise<ResponseVo<any>> {
-      const user = await this.userService.findOneWithoutHiddenFields(
-        req.user.userId,
-      );
-  
-      if (!user) {
-        throw new BadRequestException('User is not found.');
+      } else {
+        return {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          data: {},
+          message: await i18n.translate(result.error),
+        };
       }
-  
-      if (user.isMobileVerified) {
-        throw new BadRequestException('user.OTP_IS_VERIFIED');
-      }
-  
-      const code = RandomUtil.generateRandomNumber(6);
-      await this.userService.update(user.id, {
-        verificationCode: code,
-        otpGenerateTime: new Date(),
-      });
-  
-      await this.telegramService.sendOtp(user.phoneNumber, code);
-  
-      await this.auditLogService.userInsert({
-        module: classInfo.class,
-        actions: classInfo.method,
-        userId: user.id.toString(),
-        content: 'Requested OTP Successful.',
-        ipAddress,
-      });
-  
-      return {
-        statusCode: HttpStatus.OK,
-        data: {},
-        message: 'user.REQUESTED_OTP_SUCCESSFUL',
-      };
-    }
 
-  @Secure(null, UserRole.USER)
-  @Post('verify-otp')
-  @ApiHeader({
-    name: 'x-custom-lang',
-    description: 'Custom Language',
-  })
-  @ApiResponse({
-    status: HttpStatus.CREATED,
-    description: 'Created Successful.',
-    type: ResponseVo,
-  })
-  async verifyOtp(
-    @Request() req,
-    @IpAddress() ipAddress,
-    @HandlerClass() classInfo: IHandlerClass,
-    @Body() payload: VerifyOtpDto,
-    @I18n() i18n: I18nContext,
-  ): Promise<ResponseVo<any>> {
-    const user = await this.userService.findOneWithoutHiddenFields(
-      req.user.userId,
-    );
-
-    if (!user) {
-      throw new BadRequestException('User is not found.');
-    }
-
-    if (user.isMobileVerified) {
-      throw new BadRequestException('user.OTP_IS_VERIFIED');
-    }
-
-    // Verify OTP
-    const validUser = await this.userService.verifyOtp(payload.otp, user.id);
-    if (!validUser) {
-      await this.auditLogService.userInsert({
-        module: classInfo.class,
-        actions: classInfo.method,
-        userId: '',
-        content: 'Failed to verify OTP - ' + payload.otp,
-        ipAddress,
-      });
-
+    } catch (ex) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
         data: {},
-        message: await i18n.translate('user.FAILED_VERIFY_OTP'),
+        message: await i18n.translate(ex.message),
       };
-    } else {
-      // Verify OTP expiration time
-      const otpExpiryTime = user.otpGenerateTime;
-      otpExpiryTime.setSeconds(30); // Verify within 30 seconds
-      if (DateUtil.compareDate(new Date(), otpExpiryTime) <= 1) {
-        await this.userService.update(user.id, {
-          verificationCode: null,
-          isMobileVerified: true,
-        });
-
-        await this.auditLogService.userInsert({
-          module: classInfo.class,
-          actions: classInfo.method,
-          userId: user.id.toString(),
-          content: 'Verify OTP successful.',
-          ipAddress,
-        });
-        return {
-          statusCode: HttpStatus.OK,
-          data: await this.userService.findOneWithoutHiddenFields(user.id),
-          message: await i18n.translate('user.VERIFY_OTP_SUCCESSFUL'),
-        };
-      } else {
-        await this.auditLogService.userInsert({
-          module: classInfo.class,
-          actions: classInfo.method,
-          userId: user.id.toString(),
-          content: 'OTP is expired - ' + payload.otp,
-          ipAddress,
-        });
-
-        return {
-          statusCode: HttpStatus.BAD_REQUEST,
-          data: {},
-          message: await i18n.translate('user.OTP_EXPIRED'),
-        };
-      }
     }
   }
 
