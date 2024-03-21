@@ -53,19 +53,17 @@ export class TelegramService {
       if (tgUserDetails.username) {
         return tgUserDetails.username 
       } else {
-        throw Logger.error('[Telegram Service]: Useername not available')
+        throw Logger.error('[Telegram Service]: Username not available')
       }
     } catch (e) {
       console.log('Err - ', e);
     }
   }
 
-  public async sendOtp(mobileNumber: string, otp: string) {
+  public async sendOtp(mobileNumber: string, message: string) {
     await this.client.connect();
     const username = await this.onGetUsername(mobileNumber)
-    const sent = await this.client.sendMessage(`@${username}`,{
-      message: this.generateMessage(otp)
-    })
+    const sent = await this.client.sendMessage(`@${username}`, { message })
   }
   public async disconnect() {
     await this.client.disconnect();
