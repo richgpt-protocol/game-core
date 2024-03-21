@@ -24,6 +24,7 @@ import { AdminNotificationService } from 'src/shared/services/admin-notification
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { SharedModule } from 'src/shared/shared.module';
+import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SharedModule } from 'src/shared/shared.module';
       Notification,
       UserNotification,
       Admin,
+      ReferralTx,
     ]),
     // HttpModule,
     // AuditLogModule,

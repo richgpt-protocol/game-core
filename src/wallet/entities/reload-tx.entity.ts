@@ -64,7 +64,4 @@ export class ReloadTx {
 
   @ManyToOne(() => UserWallet, (userWallet) => userWallet.reloadTxs)
   userWallet: UserWallet;
-
-  @OneToOne(() => WalletTx, (walletTx) => walletTx.reloadTx)
-  walletTx: WalletTx;
 }

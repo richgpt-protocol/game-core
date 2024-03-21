@@ -20,6 +20,8 @@ import { DepositDTO } from './dto/deposit.dto';
 import { Provider, ethers, parseUnits } from 'ethers';
 import { Cron } from '@nestjs/schedule';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
+import { User } from 'src/user/entities/user.entity';
+import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 @Injectable()
@@ -31,11 +33,28 @@ export class DepositService {
     private reloadTxRepository: Repository<ReloadTx>,
     @InjectRepository(GameUsdTx)
     private gameUsdTxRepository: Repository<GameUsdTx>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    @InjectRepository(ReferralTx)
+    private referralTxRepository: Repository<ReferralTx>,
     // private httpService: HttpService,
     private readonly configService: ConfigService,
     private adminNotificationService: AdminNotificationService,
     private dataSource: DataSource,
   ) {}
+
+  private referralCommissionByRank = (rank: number) => {
+    switch (rank) {
+      case 1:
+        return 0.1;
+      case 2:
+        return 0.15;
+      case 3:
+        return 0.2;
+      default:
+        throw new Error('Invalid rank');
+    }
+  };
 
   async processDeposit(payload: DepositDTO) {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -192,6 +211,51 @@ export class DepositService {
     }
   }
 
+  private async handleReferralFlow(userId: number, depositAmount: number) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const userInfo = await queryRunner.manager
+        .createQueryBuilder(User, 'user')
+        .leftJoinAndSelect('user.referralUser', 'referralUser')
+        .leftJoinAndSelect('referralUser.wallet', 'wallet')
+        .where('user.id = :id', { id: userId })
+        .getOne();
+
+      if (!userInfo || userInfo.referralUserId == null) return;
+
+      const commisionAmount =
+        depositAmount * this.referralCommissionByRank(userInfo.referralRank);
+
+      const walletTx = new WalletTx();
+      walletTx.txType = 'REFERRAL';
+      walletTx.txAmount = commisionAmount;
+      walletTx.status = 'P';
+      walletTx.userWalletId = userInfo.referralUserId;
+
+      await queryRunner.manager.save(walletTx);
+
+      const gameUsdTx = new GameUsdTx();
+      gameUsdTx.amount = commisionAmount;
+      gameUsdTx.status = 'P';
+      gameUsdTx.retryCount = 0;
+      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
+      gameUsdTx.receiverAddress =
+        userInfo.referralUser.referralUser.wallet.walletAddress;
+      gameUsdTx.walletTx = walletTx;
+
+      await queryRunner.manager.save(gameUsdTx);
+    } catch (error) {
+      console.error('Error in referral tx', error);
+      await queryRunner.rollbackTransaction();
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
   isGameUSDCronRunning = false;
   @Cron('*/10 * * * * *')
   private async handleGameUsdTx() {
@@ -276,6 +340,18 @@ export class DepositService {
             (previousWalletTx?.endingBalance || 0) + tx.amount;
 
           walletTx.userWallet.walletBalance = walletTx.endingBalance;
+
+          if (walletTx.txType == 'REFERRAL') {
+            const referralTx = new ReferralTx();
+            referralTx.rewardAmount = walletTx.txAmount;
+            referralTx.referralType = 'DEPOSIT';
+            referralTx.status = 'S';
+            referralTx.userId = walletTx.userWallet.user.id;
+            referralTx.walletTx = walletTx;
+            walletTx.userWallet.redeemableBalance = tx.amount;
+
+            await queryRunner.manager.save(referralTx);
+          }
 
           await queryRunner.manager.save(walletTx.userWallet);
           await queryRunner.manager.save(walletTx);
@@ -413,6 +489,8 @@ export class DepositService {
           gameUsdTx.walletTxId = tx.walletTx.id;
           await queryRunner.manager.save(tx);
           await queryRunner.manager.save(gameUsdTx);
+
+          await this.handleReferralFlow(userWallet.id, tx.walletTx.txAmount);
         } else if (receipt && receipt.status != 1) {
           tx.retryCount += 1;
           await queryRunner.manager.save(tx);
@@ -453,18 +531,11 @@ export class DepositService {
           tx.status = 'F';
           await this.reloadTxRepository.save(tx);
 
-          const walletTx = await queryRunner.manager.findOne(WalletTx, {
-            where: {
-              reloadTx: tx,
-            },
-          });
-
           await this.adminNotificationService.setAdminNotification(
             `Reload transaction after 5 times for reload.tx.entity: ${tx.id}`,
             'RELOAD_FAILED_5_TIMES',
             'Native token transfer failed',
             false,
-            walletTx.id,
           );
 
           continue;
