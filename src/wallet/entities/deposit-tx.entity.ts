@@ -35,9 +35,6 @@ export class DepositTx {
   })
   txHash: string;
 
-  @Column()
-  walletTxId: number;
-
   @OneToOne(() => WalletTx, (walletTx) => walletTx.depositTx)
   walletTx: WalletTx;
 
