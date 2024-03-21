@@ -1,5 +1,6 @@
 import { Column, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { WalletTx } from './wallet-tx.entity';
+import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 
 @Entity()
 export class DepositTx {
@@ -39,4 +40,7 @@ export class DepositTx {
 
   @OneToOne(() => WalletTx, (walletTx) => walletTx.depositTx)
   walletTx: WalletTx;
+
+  @OneToOne(() => ReferralTx, (referralTx) => referralTx.depositTx)
+  referralTx: ReferralTx;
 }

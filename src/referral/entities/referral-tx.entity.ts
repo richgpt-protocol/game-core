@@ -1,9 +1,13 @@
+import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { User } from 'src/user/entities/user.entity';
+import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
   ManyToOne,
+  OneToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
@@ -16,7 +20,7 @@ export class ReferralTx {
   rewardAmount: number;
 
   @Column({
-    comment: 'DEPOSIT, PRIZE',
+    comment: 'DEPOSIT, PRIZE, BET',
   })
   referralType: string;
 
@@ -45,4 +49,18 @@ export class ReferralTx {
 
   @ManyToOne(() => User, (user) => user.referredTx)
   referralUser: User;
+
+  @Column()
+  depositTxId: number;
+
+  @OneToOne(() => DepositTx, (depositTx) => depositTx.referralTx)
+  @JoinColumn()
+  depositTx: DepositTx;
+
+  @Column()
+  betOrderId: number;
+
+  @OneToOne(() => BetOrder, (betOrder) => betOrder.referralTx)
+  @JoinColumn()
+  betOrder: BetOrder;
 }
