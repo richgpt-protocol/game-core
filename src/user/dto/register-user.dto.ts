@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  IsNumber,
 } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { UserStatus } from 'src/shared/enum/status.enum';
@@ -27,8 +28,18 @@ export class RegisterUserDto {
   @IsString()
   @IsOptional()
   referralCode?: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  otpMethod: 'WHATSAPP' | 'TELEGRAM' | 'SMS';
 }
 export class VerifyOtpDto {
+  @ApiProperty()
+  @IsNumber()
+  @IsNotEmpty()
+  userId: number;
+
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
