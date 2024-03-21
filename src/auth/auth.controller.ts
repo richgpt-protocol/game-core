@@ -151,22 +151,22 @@ export class AuthController {
         ipAddress,
       });
       throw new UnauthorizedException(message);
+
     } else {
       await this.auditLogService.userInsert({
         module: classInfo.class,
         actions: classInfo.method,
         userId: user.id,
-        content: `Login Successful with ${user.emailAddress} `,
+        content: `Login Successful with ${user.phoneNumber} `,
         ipAddress,
       });
 
       const response = {
         id: user.id,
-        emailAddress: user.emailAddress,
         status: user.status,
         phoneNumber: user.phoneNumber,
-        name: user.firstName,
-        isReset: user.isReset,
+        referralCode: user.referralCode,
+        isMobileVerified: user.isMobileVerified,
       };
 
       const result = await this.authService.createToken(
