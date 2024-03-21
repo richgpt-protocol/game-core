@@ -15,7 +15,7 @@ import { ClaimDetail } from './claim-detail.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { RedeemTx } from './redeem-tx.entity';
 import { GameUsdTx } from './game-usd-tx.entity';
-import { ReloadTx } from './reload-tx.entity';
+import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 
 @Entity()
 export class WalletTx {
@@ -23,7 +23,7 @@ export class WalletTx {
   id: number;
 
   @Column({
-    comment: 'DEPOSIT, PLAY, CLAIM, REDEEM',
+    comment: 'DEPOSIT, PLAY, CLAIM, REDEEM, REFERRAL',
   })
   txType: string;
 
@@ -94,7 +94,6 @@ export class WalletTx {
   @JoinColumn()
   gameUsdTx: GameUsdTx;
 
-  @OneToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.walletTx)
-  @JoinColumn()
-  reloadTx: ReloadTx;
+  @OneToOne(() => ReferralTx, (referralTx) => referralTx.walletTx)
+  referralTx: ReferralTx;
 }
