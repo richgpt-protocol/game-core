@@ -23,13 +23,19 @@ export class User {
   @Column()
   phoneNumber: string;
 
-  @Column()
+  @Column({ nullable: true })
   referralCode: string;
 
   @Column({
     comment:
       'A - active, I - inactive, S - Suspended, T - Terminated, U - Unverified, P - Pending',
   })
+  // active - active account
+  // inactive - 
+  // suspended - 3 times wrong otp input
+  // terminated -
+  // unverified - sign up but not yet verified via otp
+  // pending - pending for admin/developer to review
   status: string;
 
   @Column({
