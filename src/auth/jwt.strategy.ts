@@ -33,9 +33,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         }
         break;
       case UserRole.USER:
-        const user = await this.userService.findByEmail(payload.username);
-        if (!user) {
-          throw new UnauthorizedException();
+        const user = await this.userService.findOneWithoutHiddenFields(payload.id);
+        if (user.status !== 'A') {
+          throw new UnauthorizedException('user is not active');
+        }
+        if (user.isMobileVerified === false) {
+          throw new UnauthorizedException('phone number not verified');
         }
         break;
       default:
