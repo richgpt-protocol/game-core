@@ -207,8 +207,9 @@ export class ClaimService {
       await queryRunner.rollbackTransaction();
 
       // update walletTx
-      walletTx.status = 'PD';
-      await queryRunner.manager.save(walletTx);
+      await this.walletTxRepository.update(walletTx, {
+        status: 'PD',
+      });
 
       // inform admin for rollback transaction
       await this.adminNotificationService.setAdminNotification(
@@ -234,7 +235,6 @@ export class ClaimService {
     const txResponse = await this.provider.getTransaction(payload.txHash);
     const txReceipt = await txResponse.wait();
 
-    // const walletTx = await this.walletTxRepository.findOneBy({ id: payload.walletTxId });
     const walletTx = await this.walletTxRepository.findOne({
       where: { id: payload.walletTxId },
       relations: { userWallet: true },
