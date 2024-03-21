@@ -25,10 +25,13 @@ export class ReferralTx {
   })
   referralType: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, comment: 'only used for SET_REFERRAL' })
   txHash: string;
 
-  @Column({ nullable: true, comment: 'S - success, P - pending, F - failed' })
+  @Column({
+    nullable: true,
+    comment: 'S - success, P - pending, F - failed, only used for SET_REFERRAL',
+  })
   status: string;
 
   @Column({
