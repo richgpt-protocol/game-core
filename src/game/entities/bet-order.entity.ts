@@ -57,6 +57,9 @@ export class BetOrder {
   @UpdateDateColumn()
   updatedDate: Date;
 
+  @Column({ default: false })
+  isMasked: boolean;
+
   // Foreign Keys
 
   @Column()
