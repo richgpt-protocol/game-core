@@ -1,47 +1,30 @@
 import {
-  Body,
   Controller,
   Get,
   HttpStatus,
-  Post,
   Query,
-  Request,
 } from '@nestjs/common';
 import { ApiHeader, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Secure } from 'src/shared/decorators/secure.decorator';
-import { UserRole } from 'src/shared/enum/role.enum';
 import { ResponseVo } from 'src/shared/vo/response.vo';
 import { GameService } from './game.service';
-// import { SendMessageDto } from './dto/bet.dto';
-import { DrawResultDto } from './dto/drawResult.dto';
-import { PermissionEnum } from 'src/shared/enum/permission.enum';
 
 @ApiTags('Game')
 @Controller('api/v1/game')
 export class GameController {
   constructor(private gameService: GameService) {}
 
-  // TODO: bet close 1 minute before draw result
-  @Secure(PermissionEnum.SET_BET_CLOSE, UserRole.ADMIN)
-  @Post('set-bet-close')
-  async setBetClose() {
-    return {
-      statusCode: HttpStatus.OK,
-      data: null,
-      message: 'set bet close success',
-    };
-  }
-
-  @Secure(null, UserRole.ADMIN)
-  @Post('set-draw-result')
-  async setDrawResult(@Request() req, @Body() payload: DrawResultDto) {
+  @Secure()
+  @Get('get-all-bets')
+  async getAllBets() {
     try {
-      await this.gameService.setDrawResult(req.user.userId, payload);
+      const result = await this.gameService.getAllBets();
       return {
         statusCode: HttpStatus.OK,
-        data: null,
-        message: 'set draw result success',
+        data: result.data,
+        message: 'get all bets success',
       };
+
     } catch (error) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
