@@ -7,8 +7,5 @@ insert into permission (code, description, roles) values ('get_setting', 'Get Se
 insert into permission (code, description, roles) values ('manage_wallet', 'Manage User Wallet', 'S');
 insert into permission (code, description, roles) values ('update_user_status', 'Update user status', 'S');
 insert into permission (code, description, roles) values ('supply_game_usd', 'Supply GameUSD', 'S, B');
-insert into permission (code, description, roles) values ('set_bet_close', 'Set bet close', 'S, B');
-insert into permission (code, description, roles) values ('fetch_draw_result', 'Fetch draw result', 'S, B');
-insert into permission (code, description, roles) values ('submit_last_minute_draw', 'Submit last minute draw', 'S, B');
 insert into permission (code, description, roles) values ('update_payout_signature', 'Update payout signature', 'S, B');
 insert into permission (code, description, roles) values ('payout', 'Payout USDT', 'S, B');

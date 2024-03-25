@@ -33,15 +33,6 @@ export default class CreateBots implements Seeder {
           status: AdminStatus.ACTIVE,
         },
         {
-          username: 'vrfCoordinatorBot',
-          name: 'VRF Coordinator Bot',
-          emailAddress: '',
-          password: await bcrypt.hash('vrfCoordinatorBot888*', 10),
-          adminType: AdminType.BOT,
-          createdBy: 'system',
-          status: AdminStatus.ACTIVE,
-        },
-        {
           username: 'payoutBot',
           name: 'Payout Bot',
           emailAddress: '',
@@ -63,27 +54,9 @@ export default class CreateBots implements Seeder {
       ))[0].id],
     });
 
-    // vrf coordinator
-    await this.assignPermission(dataSource, {
-      userId: bots.generatedMaps[1].id,
-      userRole: UserRole.ADMIN,
-      role: AdminType.BOT,
-      permissions : [
-        (await dataSource.query(
-          `SELECT id FROM permission WHERE code = 'set_bet_close'`
-        ))[0].id,
-        (await dataSource.query(
-          `SELECT id FROM permission WHERE code = 'fetch_draw_result'`
-        ))[0].id,
-        (await dataSource.query(
-          `SELECT id FROM permission WHERE code = 'submit_last_minute_draw'`
-        ))[0].id,
-      ],
-    });
-
     // payout bot
     await this.assignPermission(dataSource, {
-      userId: bots.generatedMaps[2].id,
+      userId: bots.generatedMaps[1].id,
       userRole: UserRole.ADMIN,
       role: AdminType.BOT,
       permissions : [(await dataSource.query(
