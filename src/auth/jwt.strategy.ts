@@ -27,7 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     switch (payload.role) {
       case UserRole.ADMIN:
-        const admin = await this.adminService.findOne(payload.username);
+        const admin = await this.adminService.findById(payload.sub);
         if (!admin) {
           throw new UnauthorizedException();
         }
