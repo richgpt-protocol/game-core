@@ -15,11 +15,16 @@ import { GameService } from './game.service';
 // import { SendMessageDto } from './dto/bet.dto';
 import { DrawResultDto } from './dto/drawResult.dto';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
+import { BetDto } from './dto/Bet.dto';
+import { BetService } from './bet.service';
 
 @ApiTags('Game')
 @Controller('api/v1/game')
 export class GameController {
-  constructor(private gameService: GameService) {}
+  constructor(
+    private gameService: GameService,
+    private betService: BetService,
+  ) {}
 
   // TODO: bet close 1 minute before draw result
   @Secure(PermissionEnum.SET_BET_CLOSE, UserRole.ADMIN)
@@ -100,4 +105,39 @@ export class GameController {
   // TODO, after finalize xp
   @Get('get-xp-leaderboard')
   async getXPLeaderboard() {}
+
+  @Secure(null, UserRole.USER)
+  @Post('bet')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async bet(
+    @Request() req,
+    @Body() payload: BetDto[],
+    // @IpAddress() ipAddress,
+    // @HandlerClass() classInfo: IHandlerClass,
+    // @I18n() i18n: I18nContext,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.betService.bet(req.user.userId, payload);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'bet success',
+      };
+    } catch (error) {
+      console.log(error);
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        data: null,
+        message: '',
+      };
+    }
+  }
 }

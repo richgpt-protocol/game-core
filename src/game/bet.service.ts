@@ -72,12 +72,16 @@ export class BetService {
 
       await this.validateBets(payload);
 
+      const betOrders = await this.createBetOrders(payload);
       const {
         creditRemaining,
         walletBalanceRemaining,
         walletBalanceUsed,
         creditBalanceUsed,
-      } = this.validateCreditAndBalance(userInfo, payload);
+      } = this.validateCreditAndBalance(userInfo, payload, betOrders);
+
+      console.log(`Check whether credit is added`); //TODO delete
+      console.log(`bet orders: ${betOrders}`);
 
       const walletTx = new WalletTx();
       walletTx.txType = 'DEPOSIT';
@@ -98,8 +102,6 @@ export class BetService {
         await queryRunner.manager.save(creditTx);
       }
 
-      const betOrders = await this.createBetOrders(payload);
-
       await queryRunner.manager.save(betOrders);
 
       const gameUsdTx = new GameUsdTx();
@@ -116,7 +118,7 @@ export class BetService {
       await queryRunner.commitTransaction();
 
       await this.eventEmitter.emit('bet.submitTx', {
-        payload,
+        betOrders,
         walletTx,
         gameUsdTx,
         creditWalletTx: creditTx,
@@ -202,6 +204,7 @@ export class BetService {
   private validateCreditAndBalance(
     userInfo: User,
     payload: BetDto[],
+    bets: BetOrder[],
   ): {
     creditRemaining: number;
     walletBalanceRemaining: number;
@@ -215,40 +218,68 @@ export class BetService {
     let totalBetAmount = 0;
     let creditRemaining = totalCredits;
     let totalCreditUsed = 0;
-    if (totalCredits && +maxAllowedCreditAmount) {
-      payload.forEach((bet) => {
-        const betCount =
-          this._getPermutationCount(bet.numberPair.padStart(4, '0')) *
-          bet.epochs.length;
-        const betAmountPerEpoch = bet.isPermutation
-          ? (bet.bigForecastAmount + bet.smallForecastAmount) * betCount
-          : bet.bigForecastAmount + bet.smallForecastAmount;
+    let walletBalanceUsed = 0;
 
-        const betAmount = betAmountPerEpoch * bet.epochs.length;
+    bets.forEach((bet) => {
+      if (creditRemaining) {
+        const betAmonut = bet.bigForecastAmount + bet.smallForecastAmount;
+        const creditToBeUsed =
+          creditRemaining > +maxAllowedCreditAmount
+            ? +maxAllowedCreditAmount
+            : creditRemaining;
+        const gameUsdAmount =
+          betAmonut > creditToBeUsed ? betAmonut - creditToBeUsed : 0;
 
-        const maximumCreditAmountNeeded = betCount * +maxAllowedCreditAmount;
-        totalBetAmount += betAmount;
+        walletBalanceUsed += gameUsdAmount;
 
-        //enough credits
-        if (creditRemaining >= maximumCreditAmountNeeded) {
-          totalCreditUsed +=
-            betAmount > maximumCreditAmountNeeded
-              ? maximumCreditAmountNeeded
-              : betAmount;
-          creditRemaining -=
-            betAmount > maximumCreditAmountNeeded
-              ? maximumCreditAmountNeeded
-              : betAmount;
-        } else if (creditRemaining > 0) {
-          totalCreditUsed += creditRemaining;
-          creditRemaining = 0;
-        } else {
-          // creditRemaining is zero
-        }
-      });
-    }
+        totalBetAmount += betAmonut;
+        totalCreditUsed += creditToBeUsed;
+        creditRemaining -= creditToBeUsed;
 
-    const walletBalanceUsed = totalBetAmount - totalCreditUsed;
+        bet.creditWalletTx = new CreditWalletTx();
+        bet.creditWalletTx.amount = creditToBeUsed;
+        bet.creditWalletTx.txType = 'PLAY';
+        bet.creditWalletTx.status = 'P';
+        bet.creditWalletTx.walletId = userInfo.wallet.id;
+      } else {
+        bet.creditWalletTx = null;
+        totalBetAmount += bet.bigForecastAmount + bet.smallForecastAmount;
+      }
+    });
+
+    // if (totalCredits && +maxAllowedCreditAmount) {
+    //   payload.forEach((bet) => {
+    //     const betCount =
+    //       this._getPermutationCount(bet.numberPair.padStart(4, '0')) *
+    //       bet.epochs.length;
+    //     const betAmountPerEpoch = bet.isPermutation
+    //       ? (bet.bigForecastAmount + bet.smallForecastAmount) * betCount
+    //       : bet.bigForecastAmount + bet.smallForecastAmount;
+
+    //     const betAmount = betAmountPerEpoch * bet.epochs.length;
+
+    //     const maximumCreditAmountNeeded = betCount * +maxAllowedCreditAmount;
+    //     totalBetAmount += betAmount;
+
+    //     //enough credits
+    //     if (creditRemaining >= maximumCreditAmountNeeded) {
+    //       totalCreditUsed +=
+    //         betAmount > maximumCreditAmountNeeded
+    //           ? maximumCreditAmountNeeded
+    //           : betAmount;
+    //       creditRemaining -=
+    //         betAmount > maximumCreditAmountNeeded
+    //           ? maximumCreditAmountNeeded
+    //           : betAmount;
+    //     } else if (creditRemaining > 0) {
+    //       totalCreditUsed += creditRemaining;
+    //       creditRemaining = 0;
+    //     } else {
+    //       // creditRemaining is zero
+    //     }
+    //   });
+    // }
+    // const walletBalanceUsed = totalBetAmount - totalCreditUsed;
 
     if (walletBalanceUsed > walletBalance) {
       throw new BadRequestException('Insufficient balance');
@@ -383,7 +414,7 @@ export class BetService {
   }
 
   private async _betWithCredit(
-    payload: BetDto[],
+    payload: BetOrder[],
     creditUsed: number,
     userSigner,
     provider,
@@ -402,13 +433,11 @@ export class BetService {
           ? bet.bigForecastAmount
           : bet.smallForecastAmount;
 
-      bet.epochs.map((epoch) => {
-        bets.push({
-          epoch,
-          numberPair: bet.numberPair,
-          amount: parseUnits(betAmount.toString(), 18),
-          forecast: bet.smallForecastAmount <= 0 ? 1 : 0,
-        });
+      bets.push({
+        epoch: bet.game.epoch,
+        numberPair: bet.numberPair,
+        amount: parseUnits(betAmount.toString(), 18),
+        forecast: bet.smallForecastAmount <= 0 ? 1 : 0,
       });
     });
 
@@ -423,7 +452,7 @@ export class BetService {
     return tx;
   }
 
-  private async _betWithouCredit(payload: BetDto[], userSigner, provider) {
+  private async _betWithouCredit(payload: BetOrder[], userSigner, provider) {
     const coreContractAddr = this.configService.get('CORE_CONTRACT');
     const coreContract = Core__factory.connect(coreContractAddr, provider);
 
@@ -434,13 +463,11 @@ export class BetService {
           ? bet.bigForecastAmount
           : bet.smallForecastAmount;
 
-      bet.epochs.map((epoch) => {
-        bets.push({
-          epoch,
-          numberPair: bet.numberPair,
-          amount: parseUnits(betAmount.toString(), 18),
-          forecast: bet.smallForecastAmount <= 0 ? 1 : 0,
-        });
+      bets.push({
+        epoch: bet.game.epoch,
+        numberPair: bet.numberPair,
+        amount: parseUnits(betAmount.toString(), 18),
+        forecast: bet.smallForecastAmount <= 0 ? 1 : 0,
       });
     });
 
@@ -453,7 +480,7 @@ export class BetService {
 
   @OnEvent('bet.submitTx', { async: true })
   async submitBetTx(payload: {
-    betsPayload: BetDto[];
+    betsPayload: BetOrder[];
     walletTx: WalletTx;
     gameUsdTx: GameUsdTx;
     creditWalletTx: CreditWalletTx;
@@ -616,36 +643,45 @@ export class BetService {
         const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
 
         const walletTx = gameUsdTx.walletTx;
-        const creditWalletTx = gameUsdTx.walletTx;
+        const betOrders = gameUsdTx.walletTx.betOrders;
+        const useCredit = betOrders.some((bet) => bet.creditWalletTx);
+        //TODO all bets underCreditWalletTx won't have credits
 
-        // let tx = null;
-        // const userSigner = new Wallet(
-        //   payload.walletTx.userWallet.privateKey,
-        //   provider,
-        // );
-        // if (payload.creditBalanceUsed > 0) {
-        //   tx = await this._betWithCredit(
-        //     payload.betsPayload,
-        //     payload.creditBalanceUsed,
-        //     userSigner,
-        //     provider,
-        //   );
-        // } else {
-        //   tx = await this._betWithouCredit(
-        //     payload.betsPayload,
-        //     userSigner,
-        //     provider,
-        //   );
-        // }
+        const totalCreditsUsed = betOrders.reduce((acc, bet) => {
+          if (bet.creditWalletTx) {
+            acc += bet.creditWalletTx.amount;
+          }
+          return acc;
+        }, 0);
 
-        const txStatus = await provider.getTransactionReceipt(gameUsdTx.txHash);
+        let tx = null;
+        const userSigner = new Wallet(walletTx.userWallet.privateKey, provider);
 
-        if (txStatus.status === 1) {
-          gameUsdTx.status = 'S';
-          await queryRunner.manager.save(gameUsdTx);
-        } else {
+        try {
+          if (totalCreditsUsed > 0) {
+            tx = await this._betWithCredit(
+              betOrders,
+              totalCreditsUsed,
+              userSigner,
+              provider,
+            );
+          } else {
+            tx = await this._betWithouCredit(betOrders, userSigner, provider);
+          }
+        } catch (error) {
           gameUsdTx.retryCount += 1;
           await queryRunner.manager.save(gameUsdTx);
+        }
+
+        if (tx) {
+          const txStatus = await provider.getTransactionReceipt(tx);
+          if (txStatus.status && txStatus.status === 1) {
+            gameUsdTx.status = 'S';
+            await queryRunner.manager.save(gameUsdTx);
+          } else if (txStatus.status && txStatus.status != 1) {
+            gameUsdTx.retryCount += 1;
+            await queryRunner.manager.save(gameUsdTx);
+          }
         }
       }
     } catch (error) {

@@ -10,6 +10,9 @@ import { User } from 'src/user/entities/user.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
 import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
+import { BetService } from './bet.service';
+import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
+import { ConfigModule } from 'src/config/config.module';
 
 @Module({
   imports: [
@@ -21,10 +24,12 @@ import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
       ClaimDetail,
       RedeemTx,
       DrawResult,
+      GameUsdTx,
     ]),
     PermissionModule,
+    ConfigModule,
   ],
-  providers: [GameService],
+  providers: [GameService, BetService],
   controllers: [GameController],
   exports: [GameService],
 })

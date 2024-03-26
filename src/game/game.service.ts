@@ -23,18 +23,18 @@ dotenv.config();
 @Injectable()
 export class GameService {
   constructor(
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
-    @InjectRepository(UserWallet)
-    private walletRepository: Repository<UserWallet>,
+    // @InjectRepository(User)
+    // private userRepository: Repository<User>,
+    // @InjectRepository(UserWallet)
+    // private walletRepository: Repository<UserWallet>,
     @InjectRepository(Game)
     private gameRepository: Repository<Game>,
-    @InjectRepository(BetOrder)
-    private betRepository: Repository<BetOrder>,
-    @InjectRepository(ClaimDetail)
-    private claimRepository: Repository<ClaimDetail>,
-    @InjectRepository(RedeemTx)
-    private redeemRepository: Repository<RedeemTx>,
+    // @InjectRepository(BetOrder)
+    // private betRepository: Repository<BetOrder>,
+    // @InjectRepository(ClaimDetail)
+    // private claimRepository: Repository<ClaimDetail>,
+    // @InjectRepository(RedeemTx)
+    // private redeemRepository: Repository<RedeemTx>,
     @InjectRepository(DrawResult)
     private drawResultRepository: Repository<DrawResult>,
   ) {}
