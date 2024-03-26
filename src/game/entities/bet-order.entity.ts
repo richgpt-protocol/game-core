@@ -48,9 +48,6 @@ export class BetOrder {
   })
   availableClaim: boolean;
 
-  @Column()
-  txHash: string;
-
   @CreateDateColumn()
   createdDate: Date;
 
@@ -74,7 +71,9 @@ export class BetOrder {
   @ManyToOne(() => WalletTx, (walletTx) => walletTx.betOrders)
   walletTx: WalletTx;
 
-  @Column({ nullable: true })
+  @Column({
+    nullable: true,
+  })
   creditWalletTxId: number;
 
   @OneToOne(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.betOrder)
