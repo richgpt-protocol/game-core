@@ -8,7 +8,7 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, DataSource, MoreThanOrEqual } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
-import { Cron } from '@nestjs/schedule';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { BetDto } from 'src/game/dto/Bet.dto';
 import { Game } from './entities/game.entity';
 import { RedeemDto } from '../redeem/dto/redeem.dto';
@@ -20,11 +20,12 @@ import { BetOrder } from './entities/bet-order.entity';
 import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 import { ConfigService } from 'src/config/config.service';
 
-import { JsonRpcProvider, Wallet, parseUnits } from 'ethers';
+import { Contract, JsonRpcProvider, Wallet, parseUnits } from 'ethers';
 import { Core__factory, Helper__factory } from 'src/contract';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
+import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 
 dotenv.config();
 
@@ -49,16 +50,54 @@ export class BetService {
     private drawResultRepository: Repository<DrawResult>,
     @InjectRepository(GameUsdTx)
     private gameUsdTxRepository: Repository<GameUsdTx>,
+    @InjectRepository(WalletTx)
+    private walletTxRepository: Repository<WalletTx>,
     private configService: ConfigService,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
   ) {}
 
-  async bet(userId: number, payload: BetDto[]): Promise<any> {
-    const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
-    const coreContractAddr = this.configService.get('CORE_CONTRACT');
-    const coreContract = Core__factory.connect(coreContractAddr, provider);
+  maskingIntervalInSeconds = 120; //seconds before endTime of currentEpoch after which masking will start
 
+  private referralCommissionByRank = (rank: number) => {
+    switch (rank) {
+      case 1:
+        return 0.1;
+      case 2:
+        return 0.15;
+      case 3:
+        return 0.2;
+      default:
+        throw new Error('Invalid rank');
+    }
+  };
+
+  async getBets(
+    userId: number,
+    startEpoch?: number,
+    page: number = 1,
+    pageSize: number = 10,
+  ) {
+    try {
+      const bets = await this.betRepository
+        .createQueryBuilder('bet')
+        .leftJoinAndSelect('bet.game', 'game')
+        .leftJoinAndSelect('bet.walletTx', 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .where('userWallet.userId = :userId', { userId })
+        .andWhere('game.epoch >= :startEpoch', { startEpoch: startEpoch || 0 })
+        .skip((page - 1) * pageSize)
+        .take(pageSize)
+        .getMany();
+
+      return bets;
+    } catch (error) {
+      console.error(error);
+      throw new BadRequestException('Error in getBets');
+    }
+  }
+
+  async bet(userId: number, payload: BetDto[]): Promise<any> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -70,9 +109,19 @@ export class BetService {
         .where('user.id = :userId', { userId })
         .getOne();
 
+      console.log(`Validating bets`); //TODO delete
+
       await this.validateBets(payload);
 
-      const betOrders = await this.createBetOrders(payload);
+      console.log(`Creating bet orders`); //TODO delete
+
+      const walletTx = new WalletTx();
+      walletTx.txType = 'DEPOSIT';
+      walletTx.status = 'P';
+      walletTx.userWalletId = userInfo.wallet.id;
+      await queryRunner.manager.save(walletTx);
+
+      const betOrders = await this.createBetOrders(payload, walletTx);
       const {
         creditRemaining,
         walletBalanceRemaining,
@@ -81,26 +130,10 @@ export class BetService {
       } = this.validateCreditAndBalance(userInfo, payload, betOrders);
 
       console.log(`Check whether credit is added`); //TODO delete
-      console.log(`bet orders: ${betOrders}`);
+      console.log(betOrders);
 
-      const walletTx = new WalletTx();
-      walletTx.txType = 'DEPOSIT';
-      walletTx.txAmount = walletBalanceUsed;
-      walletTx.status = 'P';
-      walletTx.userWalletId = userInfo.wallet.id;
-
+      walletTx.txAmount = 0;
       await queryRunner.manager.save(walletTx);
-
-      let creditTx = null;
-      if (creditBalanceUsed > 0) {
-        creditTx = new CreditWalletTx();
-        creditTx.txType = 'PLAY';
-        creditTx.amount = creditBalanceUsed;
-        creditTx.status = 'P';
-        creditTx.walletId = userInfo.wallet.id;
-
-        await queryRunner.manager.save(creditTx);
-      }
 
       await queryRunner.manager.save(betOrders);
 
@@ -113,25 +146,29 @@ export class BetService {
       gameUsdTx.receiverAddress = this.configService.get(
         'GAMEUSD_POOL_ADDRESS',
       );
+      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      gameUsdTx.retryCount = 0;
 
       await queryRunner.manager.save(gameUsdTx);
+
       await queryRunner.commitTransaction();
 
       await this.eventEmitter.emit('bet.submitTx', {
-        betOrders,
+        betsPayload: betOrders,
         walletTx,
         gameUsdTx,
-        creditWalletTx: creditTx,
         creditBalanceUsed,
       });
     } catch (error) {
+      console.error(`Rolling back Db transaction`);
       console.error(error);
       await queryRunner.rollbackTransaction();
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
+
+      throw new BadRequestException('Error in bet');
     }
   }
-
   private async validateBets(payload: BetDto[]) {
     const currentEpoch = await this._getCurrentEpoch();
 
@@ -152,7 +189,7 @@ export class BetService {
     const betHistory = await this.betRepository.find({
       where: {
         numberPair: In(numberPairs),
-        game: In(allGamesArr),
+        game: In(Object.keys(allGamesArr)),
       },
     });
 
@@ -164,6 +201,15 @@ export class BetService {
 
         if (allGamesObj[epoch].isClosed) {
           throw new BadRequestException('Bet for this epoch is closed');
+        }
+
+        if (
+          (new Date().getTime() - allGamesObj[epoch].endDate.getTime()) / 1000 >
+          this.maskingIntervalInSeconds
+        ) {
+          throw new BadRequestException(
+            'Bet for this epoch is closed (Masking)',
+          );
         }
 
         if (epoch < +currentEpoch.toString()) {
@@ -199,6 +245,8 @@ export class BetService {
         }
       });
     }
+
+    console.log(`Bets validated`); //TODO delete
   }
 
   private validateCreditAndBalance(
@@ -211,6 +259,7 @@ export class BetService {
     walletBalanceUsed: number;
     creditBalanceUsed: number;
   } {
+    console.log(userInfo);
     const totalCredits = userInfo.wallet.creditBalance;
     const walletBalance = userInfo.wallet.walletBalance;
 
@@ -293,7 +342,10 @@ export class BetService {
     };
   }
 
-  private async createBetOrders(payload: BetDto[]): Promise<Array<BetOrder>> {
+  private async createBetOrders(
+    payload: BetDto[],
+    walletTx: WalletTx,
+  ): Promise<Array<BetOrder>> {
     const allEpochs = payload.map((bet) => bet.epochs).flat();
     const allGames = await this.gameRepository.find({
       where: {
@@ -321,6 +373,7 @@ export class BetService {
           betOrder.smallForecastAmount = bet.smallForecastAmount;
           betOrder.game = allGames.find((game) => +game.epoch === epoch);
           betOrder.gameId = betOrder.game.id;
+          betOrder.walletTxId = walletTx.id;
 
           betOrders.push(betOrder);
         });
@@ -331,13 +384,24 @@ export class BetService {
   }
 
   private async _getCurrentEpoch() {
-    const coreContractAddr = this.configService.get('CORE_CONTRACT');
-    const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
-    const coreContract = Core__factory.connect(coreContractAddr, provider);
+    const earliestNonClosedGame = await this.gameRepository.findOne({
+      where: {
+        isClosed: false,
+      },
+      order: {
+        epoch: 'ASC',
+      },
+    });
 
-    const currentEpoch = await coreContract.currentEpoch();
-    console.log(currentEpoch.toString());
-    return currentEpoch;
+    // console.log(`earliestNonClosedGame`); //TODO delete
+    // console.log(earliestNonClosedGame); //TODO delete
+    // const coreContractAddr = this.configService.get('CORE_CONTRACT');
+    // const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+    // const coreContract = Core__factory.connect(coreContractAddr, provider);
+
+    // const currentEpoch = await coreContract.currentEpoch();
+    // console.log(currentEpoch.toString());
+    return earliestNonClosedGame.epoch;
   }
 
   private _generatePermutations(numberPair: string): Array<string> {
@@ -427,6 +491,7 @@ export class BetService {
     );
 
     const bets = [];
+    console.log(payload); //TODO delete
     payload.map((bet) => {
       const betAmount =
         bet.smallForecastAmount <= 0
@@ -465,7 +530,7 @@ export class BetService {
 
       bets.push({
         epoch: bet.game.epoch,
-        numberPair: bet.numberPair,
+        number: bet.numberPair,
         amount: parseUnits(betAmount.toString(), 18),
         forecast: bet.smallForecastAmount <= 0 ? 1 : 0,
       });
@@ -483,30 +548,44 @@ export class BetService {
     betsPayload: BetOrder[];
     walletTx: WalletTx;
     gameUsdTx: GameUsdTx;
-    creditWalletTx: CreditWalletTx;
     creditBalanceUsed: number;
   }) {
     const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
 
+    const userWallet = await this.walletRepository.findOne({
+      where: {
+        id: payload.walletTx.userWalletId,
+      },
+    });
+
     try {
       let tx = null;
-      const userSigner = new Wallet(
-        payload.walletTx.userWallet.privateKey,
-        provider,
-      );
-      if (payload.creditBalanceUsed > 0) {
-        tx = await this._betWithCredit(
-          payload.betsPayload,
-          payload.creditBalanceUsed,
-          userSigner,
-          provider,
+      const userSigner = new Wallet(userWallet.privateKey, provider);
+
+      try {
+        if (payload.creditBalanceUsed > 0) {
+          tx = await this._betWithCredit(
+            payload.betsPayload,
+            payload.creditBalanceUsed,
+            userSigner,
+            provider,
+          );
+        } else {
+          console.log(`betting without credit`); //TODO delete
+          tx = await this._betWithouCredit(
+            payload.betsPayload,
+            userSigner,
+            provider,
+          );
+        }
+      } catch (error) {
+        console.error(
+          `error sending gameUSDTx in bet.service for gameUDSTxId: ${payload.gameUsdTx.id}`,
         );
-      } else {
-        tx = await this._betWithouCredit(
-          payload.betsPayload,
-          userSigner,
-          provider,
-        );
+        console.error(error);
+
+        payload.gameUsdTx.retryCount += 1;
+        await this.gameUsdTxRepository.save(payload.gameUsdTx);
       }
 
       if (tx) {
@@ -517,7 +596,6 @@ export class BetService {
             tx,
             walletTx: payload.walletTx,
             gameUsdTx: payload.gameUsdTx,
-            creditWalletTx: payload.creditWalletTx,
           });
         } else {
           payload.gameUsdTx.retryCount += 1;
@@ -534,7 +612,7 @@ export class BetService {
     tx: any;
     walletTx: WalletTx;
     gameUsdTx: GameUsdTx;
-    creditWalletTx: CreditWalletTx;
+    // creditWalletTx: CreditWalletTx;
   }) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -571,17 +649,28 @@ export class BetService {
       payload.walletTx.txHash = payload.tx.hash;
       payload.walletTx.startingBalance = lastValidWalletTx.endingBalance;
       payload.walletTx.endingBalance =
-        lastValidWalletTx.endingBalance + payload.gameUsdTx.amount;
+        lastValidWalletTx.endingBalance - payload.gameUsdTx.amount;
 
-      payload.creditWalletTx.startingBalance =
-        lastValidCreditWalletTx.endingBalance;
-      payload.creditWalletTx.endingBalance =
-        lastValidCreditWalletTx.endingBalance - payload.creditWalletTx.amount;
-      payload.creditWalletTx.status = 'S';
+      const betOrders = payload.gameUsdTx.walletTx.betOrders;
+
+      let previousEndingCreditBalance =
+        lastValidCreditWalletTx.endingBalance || 0;
+      for (let i = 0; i < betOrders.length; i++) {
+        const currentCreditWalletTx = betOrders[i].creditWalletTx;
+        currentCreditWalletTx.startingBalance = previousEndingCreditBalance;
+
+        const endBalance =
+          previousEndingCreditBalance - currentCreditWalletTx.amount;
+        currentCreditWalletTx.endingBalance = endBalance;
+
+        currentCreditWalletTx.status = 'S';
+        await queryRunner.manager.save(currentCreditWalletTx);
+
+        previousEndingCreditBalance = endBalance;
+      }
 
       await queryRunner.manager.save(payload.walletTx);
       await queryRunner.manager.save(payload.gameUsdTx);
-      await queryRunner.manager.save(payload.creditWalletTx);
 
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
         where: {
@@ -589,11 +678,19 @@ export class BetService {
         },
       });
 
-      userWallet.walletBalance += payload.walletTx.endingBalance;
-      userWallet.creditBalance = payload.creditWalletTx.endingBalance;
+      userWallet.walletBalance = payload.walletTx.endingBalance;
+      userWallet.creditBalance = previousEndingCreditBalance;
       userWallet.redeemableBalance -= payload.walletTx.txAmount;
 
       await queryRunner.manager.save(userWallet);
+
+      const user = await queryRunner.manager.findOne(User, {
+        where: {
+          id: userWallet.userId,
+        },
+      });
+
+      await this.handleReferralFlow(user.id, payload.walletTx.txAmount); //TODO
 
       await queryRunner.commitTransaction();
     } catch (error) {
@@ -604,49 +701,184 @@ export class BetService {
     }
   }
 
-  isRetryCronRunning = false;
-  @Cron('*/10 * * * * *')
-  private async handleRetryTxns() {
-    if (this.isRetryCronRunning) return;
-    this.isRetryCronRunning = true;
-
+  private async handleReferralFlow(userId: number, depositAmount: number) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+
     try {
-      const pendingGameUsdTx = await queryRunner.manager
-        .createQueryBuilder(GameUsdTx, 'gameUsdTx')
-        .leftJoinAndSelect(
-          WalletTx,
-          'walletTx',
-          'walletTx.id = gameUsdTx.walletTxId',
-        )
-        .leftJoinAndSelect(
-          CreditWalletTx,
-          'creditWalletTx',
-          'creditWalletTx.walletId = walletTx.userWalletId AND creditWalletTx.status = :status',
-          { status: 'P' },
-        )
-        .where(
-          'gameUsdTx.status = :gameStatus AND gameUsdTx.retryCount >= :retryCount',
-          { gameStatus: 'P', retryCount: MoreThanOrEqual(1) },
-        )
-        .getMany();
+      const userInfo = await queryRunner.manager
+        .createQueryBuilder(User, 'user')
+        .leftJoinAndSelect('user.referralUser', 'referralUser')
+        .leftJoinAndSelect('referralUser.wallet', 'wallet')
+        .where('user.id = :id', { id: userId })
+        .getOne();
 
-      for (const gameUsdTx of pendingGameUsdTx) {
-        if (gameUsdTx.retryCount >= 5) {
-          gameUsdTx.status = 'F';
-          await queryRunner.manager.save(gameUsdTx);
-          continue;
-        }
+      if (!userInfo || userInfo.referralUserId == null) return;
 
-        const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+      const commisionAmount =
+        depositAmount * this.referralCommissionByRank(userInfo.referralRank);
 
-        const walletTx = gameUsdTx.walletTx;
-        const betOrders = gameUsdTx.walletTx.betOrders;
-        const useCredit = betOrders.some((bet) => bet.creditWalletTx);
-        //TODO all bets underCreditWalletTx won't have credits
+      const walletTx = new WalletTx();
+      walletTx.txType = 'REFERRAL';
+      walletTx.txAmount = commisionAmount;
+      walletTx.status = 'P';
+      walletTx.userWalletId = userInfo.referralUserId;
 
+      await queryRunner.manager.save(walletTx);
+
+      const gameUsdTx = new GameUsdTx();
+      gameUsdTx.amount = commisionAmount;
+      gameUsdTx.status = 'P';
+      gameUsdTx.retryCount = 0;
+      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
+      gameUsdTx.receiverAddress =
+        userInfo.referralUser.referralUser.wallet.walletAddress;
+      gameUsdTx.walletTx = walletTx;
+
+      await queryRunner.manager.save(gameUsdTx);
+    } catch (error) {
+      console.error('Error in referral tx', error);
+      await queryRunner.rollbackTransaction();
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  private async handleReferralGameUSDTx(gameUsdTx: GameUsdTx) {
+    // const queryRunner = this.dataSource.createQueryRunner();
+    // await queryRunner.connect();
+    // await queryRunner.startTransaction();
+    try {
+      if (gameUsdTx.retryCount >= 5) {
+        gameUsdTx.status = 'F';
+        await this.gameUsdTxRepository.save(gameUsdTx);
+        // await queryRunner.manager.save(gameUsdTx);
+        return;
+      }
+
+      const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+
+      const gameUsdWallet = new Wallet(
+        this.configService.get('DEPOSIT_BOT_PK'),
+        provider,
+      );
+
+      const gameUsdContract = new Contract(
+        this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
+        [`function deposit(address user, uint256 amount) external`],
+        gameUsdWallet,
+      );
+
+      const onchainGameUsdTx = await gameUsdContract.deposit(
+        gameUsdTx.receiverAddress,
+        parseUnits(gameUsdTx.amount.toString(), 18), //18 decimals for gameUSD
+      );
+
+      const receipt = onchainGameUsdTx.wait();
+      if (receipt && receipt.status == 1) {
+        const referrelTx = new ReferralTx();
+        referrelTx.rewardAmount = gameUsdTx.amount;
+        referrelTx.referralType = 'BET';
+        referrelTx.walletTx = gameUsdTx.walletTx;
+
+        gameUsdTx.status = 'S';
+        gameUsdTx.txHash = onchainGameUsdTx.hash;
+
+        gameUsdTx.walletTx.status = 'S';
+
+        //select last walletTx of referrer
+        const lastValidWalletTx = await this.walletTxRepository.findOne({
+          where: {
+            userWalletId: gameUsdTx.walletTx.userWalletId,
+            status: 'S',
+          },
+          order: {
+            updatedDate: 'DESC',
+          },
+        });
+
+        gameUsdTx.walletTx.startingBalance = lastValidWalletTx.endingBalance;
+        gameUsdTx.walletTx.endingBalance =
+          lastValidWalletTx.endingBalance + gameUsdTx.walletTx.txAmount;
+
+        await this.gameUsdTxRepository.save(gameUsdTx);
+        await this.walletTxRepository.save(gameUsdTx.walletTx);
+
+        const referrerWallet = await this.walletRepository.findOne({
+          where: {
+            id: gameUsdTx.walletTx.userWalletId,
+          },
+        });
+
+        referrerWallet.walletBalance = gameUsdTx.walletTx.endingBalance;
+        referrerWallet.redeemableBalance += gameUsdTx.amount; //commision amount
+      } else {
+        throw 'Game USD Tx Failed';
+      }
+    } catch (error) {
+      console.error(error);
+      gameUsdTx.retryCount += 1;
+      await this.gameUsdTxRepository.save(gameUsdTx);
+    }
+  }
+
+  isRetryCronRunning = false;
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async handleRetryTxns() {
+    if (this.isRetryCronRunning) return;
+    this.isRetryCronRunning = true;
+
+    const pendingGameUsdTx = await this.gameUsdTxRepository
+      .createQueryBuilder('gameUsdTx')
+      .leftJoinAndSelect('gameUsdTx.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.betOrders', 'betOrders')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('betOrders.creditWalletTx', 'creditWalletTx')
+      .where(
+        'gameUsdTx.status = :gameStatus AND gameUsdTx.retryCount >= :retryCount',
+        { gameStatus: 'P', retryCount: 1 },
+      )
+      .getMany();
+
+    const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+
+    for (const gameUsdTx of pendingGameUsdTx) {
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      if (gameUsdTx.walletTx.txType == 'REFERRAL') {
+        await this.handleReferralGameUSDTx(gameUsdTx);
+        continue;
+      }
+
+      if (gameUsdTx.retryCount >= 5) {
+        gameUsdTx.status = 'F';
+        gameUsdTx.walletTx.status = 'F';
+
+        await queryRunner.manager
+          .createQueryBuilder()
+          .update(CreditWalletTx)
+          .set({ status: 'F' })
+          .where('id IN (:...ids)', {
+            ids: gameUsdTx.walletTx.betOrders.map(
+              (betOrder) => betOrder.creditWalletTx.id,
+            ),
+          })
+          .execute();
+
+        await queryRunner.manager.save(gameUsdTx);
+        await queryRunner.manager.save(gameUsdTx.walletTx);
+
+        await queryRunner.commitTransaction();
+        continue;
+      }
+
+      const walletTx = gameUsdTx.walletTx;
+      const betOrders = gameUsdTx.walletTx.betOrders;
+      try {
         const totalCreditsUsed = betOrders.reduce((acc, bet) => {
           if (bet.creditWalletTx) {
             acc += bet.creditWalletTx.amount;
@@ -669,6 +901,7 @@ export class BetService {
             tx = await this._betWithouCredit(betOrders, userSigner, provider);
           }
         } catch (error) {
+          console.error(error);
           gameUsdTx.retryCount += 1;
           await queryRunner.manager.save(gameUsdTx);
         }
@@ -678,20 +911,25 @@ export class BetService {
           if (txStatus.status && txStatus.status === 1) {
             gameUsdTx.status = 'S';
             await queryRunner.manager.save(gameUsdTx);
+
+            await this.handleTxSuccess({
+              tx,
+              gameUsdTx,
+              walletTx: gameUsdTx.walletTx,
+            });
           } else if (txStatus.status && txStatus.status != 1) {
             gameUsdTx.retryCount += 1;
             await queryRunner.manager.save(gameUsdTx);
           }
         }
+      } catch (error) {
+        console.error(error);
+        await queryRunner.rollbackTransaction();
+      } finally {
+        if (!queryRunner.isReleased) await queryRunner.release();
+        this.isRetryCronRunning = false;
+        //TODO add admin notification
       }
-    } catch (error) {
-      console.error(error);
-      await queryRunner.rollbackTransaction();
-    } finally {
-      if (!queryRunner.isReleased) await queryRunner.release();
-      this.isRetryCronRunning = false;
-
-      //TODO add admin notification
     }
 
     this.isRetryCronRunning = false;
