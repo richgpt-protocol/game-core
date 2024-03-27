@@ -40,10 +40,16 @@ export class GameService {
     return drawResult;
   }
 
-  @Cron('0 0 */1 * * *', { utcOffset: 0 }) // every hour UTC time
-  async setBetClose() {
-    try {
+  // process of closing bet for current epoch, set draw result, and announce draw result
+  // 1. GameService.setBetClose: scheduled at :00UTC, also submit masked betOrder to Core contract
+  // 2. Local script: cron at :01UTC create drawResult records and save directly into database
+  // 3. GameGateway.emitDrawResult: scheduled at :02UTC, emit draw result to all connected clients
+  // 4. follow by GameService.updateDrawResult: submit draw result to Core contract
+  // 5. :05UTC, allow claim
 
+  @Cron('0 0 */1 * * *', { utcOffset: 0 }) // every hour UTC time
+  async setBetClose(): Promise<void> {
+    try {
       // set bet close in game record for current epoch
       const game = await this.gameRepository.findOne({
         where: { isClosed: false },
@@ -61,7 +67,8 @@ export class GameService {
       // temporarily, private key will fetch shares from mpc server via address and combine
       const helperBot = new ethers.Wallet(process.env.HELPER_BOT_PRIVATE_KEY, this.provider);
       const helperContract = Helper__factory.connect(process.env.HELPER_CONTRACT_ADDRESS, helperBot);
-      
+      // construct params for Helper.betLastMinutes()
+      // [key: string] is userWalletAddress, one user might have multiple bets
       const userBets: { [key: string]: ICore.BetParamsStruct[] } = {}
       for (let i = 0; i < betOrders.length; i++) {
         const betOrder = betOrders[i];
@@ -70,24 +77,28 @@ export class GameService {
           relations: { userWallet: true }
         })
         const userAddress = walletTx.userWallet.walletAddress;
-        if (betOrder.bigForecastAmount > 0) {
+        if (!userBets[userAddress]) userBets[userAddress] = [];
+        // big forecast & small forecast is treat as separate bet in contract
+        const bigForecastAmount = Number(betOrder.bigForecastAmount);
+        if (bigForecastAmount > 0) {
           userBets[userAddress].push({
             epoch: game.epoch,
-            number: betOrder.numberPair,
-            amount: betOrder.bigForecastAmount,
+            number: Number(betOrder.numberPair), // contract treat numberPair as uint256
+            amount: ethers.parseEther(bigForecastAmount.toString()),
             forecast: 1, // big
           });
         }
-        if (betOrder.smallForecastAmount > 0) {
+        const smallForecastAmount = Number(betOrder.smallForecastAmount);
+        if (smallForecastAmount > 0) {
           userBets[userAddress].push({
             epoch: game.epoch,
-            number: betOrder.numberPair,
-            amount: betOrder.smallForecastAmount,
+            number: Number(betOrder.numberPair), // contract treat numberPair as uint256
+            amount: ethers.parseEther(smallForecastAmount.toString()),
             forecast: 0, // small
           });
         }
       }
-      const params: IHelper.BetLastMinuteParamsStruct[] = []
+      const params: IHelper.BetLastMinuteParamsStruct[] = [];
       for (let userAddress in userBets) {
         params.push({
           user: userAddress,
@@ -96,11 +107,13 @@ export class GameService {
       }
       const estimatedGas = await helperContract.betLastMinutes.estimateGas(params);
       const txResponse = await helperContract.betLastMinutes(params, {
+        // increase gasLimit by 30%
         gasLimit: estimatedGas * ethers.toBigInt(13) / ethers.toBigInt(10),
       });
       const txReceipt = await txResponse.wait();
 
-      if (txReceipt.status === 1) {
+      if (txReceipt.status === 1) { // tx success
+        // update walletTx status & txHash for each betOrders
         for (const betOrder of betOrders) {
           const walletTx = await this.walletTxRepository.findOne({
             where: { id: betOrder.walletTxId },
@@ -110,8 +123,9 @@ export class GameService {
           await this.walletTxRepository.save(walletTx);
         }
 
-      } else {
+      } else { // tx failed
         for (const betOrder of betOrders) {
+          // only update txHash for each betOrders, status remain pending
           const walletTx = await this.walletTxRepository.findOne({
             where: { id: betOrder.walletTxId },
           })
@@ -127,12 +141,13 @@ export class GameService {
       await this.adminNotificationService.setAdminNotification(
         `Error occur in game.service.setBetClose, error: ${err}`,
         'ExecutionError',
-        'Execution Error',
+        'Execution Error in setBetClose()',
         true,
       );
     }
   }
 
+  // this function called by emitDrawResult() in game.gateway
   async updateDrawResult(payload: DrawResult[], gameId: number): Promise<void> {
     try {
       // submit draw result to Core contract
@@ -140,19 +155,20 @@ export class GameService {
       const coreContract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, setDrawResultBot);
       const numberPairs = payload.map((result) => result.numberPair);
       // TODO: set gasLimit
-      const txResponse = await coreContract.setDrawResults(numberPairs, process.env.MAX_BET_AMOUNT, '');
+      const txResponse = await coreContract.setDrawResults(numberPairs, process.env.MAX_BET_AMOUNT, '0x');
       const txReceipt = await txResponse.wait();
 
-      // await queryRunner.manager.update(
+      // update txHash into game record
       const game = await this.gameRepository.findOneBy({ id: gameId });
       game.drawTxHash = txReceipt.hash;
       game.drawTxStatus = 'P';
       await this.gameRepository.save(game);
 
-      if (txReceipt.status === 1) {
+      if (txReceipt.status === 1) { // on-chain tx success
         game.drawTxStatus = 'S';
         await this.gameRepository.save(game);
 
+        // find betOrder that numberPair matched and update availableClaim to true
         for (const result of payload) {
           const betOrders = await this.betOrderRepository.find({
             where: {
@@ -160,24 +176,24 @@ export class GameService {
               numberPair: result.numberPair,
             }
           });
+          // there might be more than 1 betOrder that numberPair matched
           for (const betOrder of betOrders) {
             betOrder.availableClaim = true;
             await this.betOrderRepository.save(betOrder);
           }
         }
 
-      } else {
-        throw new Error(`setDrawResults() on-chain transaction failed, txHash: ${txReceipt.hash}`)
+      } else { // on-chain tx failed
+        throw new Error(`setDrawResults() on-chain transaction failed, txHash: ${txReceipt.hash}`);
       }
 
     } catch (err) {
       await this.adminNotificationService.setAdminNotification(
         `Error in game.service.updateDrawResult, error: ${err}`,
         'executionError',
-        'Execution Error in Game Service',
+        'Execution Error in updateDrawResult()',
         true,
       );
-
     }
   }
 
