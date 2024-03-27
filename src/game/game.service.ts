@@ -154,8 +154,12 @@ export class GameService {
       const setDrawResultBot = new ethers.Wallet(process.env.RESULT_BOT_PRIVATE_KEY, this.provider); // temporarily
       const coreContract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, setDrawResultBot);
       const numberPairs = payload.map((result) => result.numberPair);
-      // TODO: set gasLimit
-      const txResponse = await coreContract.setDrawResults(numberPairs, process.env.MAX_BET_AMOUNT, '0x');
+      const txResponse = await coreContract.setDrawResults(
+        numberPairs,
+        ethers.parseEther(process.env.MAX_BET_AMOUNT),
+        '0x',
+        { gasLimit: 1100000 }
+      );
       const txReceipt = await txResponse.wait();
 
       // update txHash into game record
