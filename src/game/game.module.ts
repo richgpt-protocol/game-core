@@ -16,6 +16,7 @@ import { Notification } from 'src/notification/entities/notification.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { Admin } from 'src/admin/entities/admin.entity';
 import { GameGateway } from './game.gateway';
+import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 
 @Module({
   imports: [
@@ -34,7 +35,7 @@ import { GameGateway } from './game.gateway';
     ]),
     PermissionModule,
   ],
-  providers: [GameService, AdminNotificationService, GameGateway],
+  providers: [GameService, AdminNotificationService, GameGateway, CacheSettingService],
   controllers: [GameController],
   exports: [GameService],
 })
