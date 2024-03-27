@@ -25,6 +25,7 @@ type ClaimEvent = {
   userId: number;
   txHash: string;
   walletTxId: number;
+  gameUsdTxId: number;
   betOrderIds: number[];
 };
 
@@ -60,6 +61,12 @@ export class ClaimService {
   ) {}
 
   async claim(userId: number): Promise<ClaimResponse> {
+    // claim is not available within 5 minutes after last game ended
+    const lastGame = await this.gameRepository.findOneBy({ isClosed: true });
+    if (new Date().getTime() < new Date(lastGame.endDate).getTime() + (5 * 60 * 1000)) {
+      return { error: 'Claim is not available yet', data: null };
+    }
+
     let walletTx: WalletTx;
 
     const lastClaimWalletTx = await this.walletTxRepository
@@ -93,6 +100,23 @@ export class ClaimService {
       gameUsdTx: null,
     });
     await this.walletTxRepository.save(walletTx);
+
+    // create gameUsdTx
+    const userWallet = await this.userWalletRepository.findOneBy({ userId })
+    const gameUsdTx = this.gameUsdTxRepository.create({
+      amount: 0,
+      chainId: Number(process.env.CHAIN_ID),
+      status: 'P',
+      txHash: null,
+      senderAddress: userWallet.walletAddress,
+      receiverAddress: userWallet.walletAddress,
+      retryCount: 0,
+      walletTxId: walletTx.id,
+    });
+    await this.gameUsdTxRepository.save(gameUsdTx);
+
+    // set gameUsdTx to walletTx
+    await this.walletTxRepository.update(walletTx, { gameUsdTx });
 
     // start queryRunner
     const queryRunner = this.dataSource.createQueryRunner();
@@ -197,6 +221,7 @@ export class ClaimService {
         userId,
         txHash: txResponse.hash,
         walletTxId: walletTx.id,
+        gameUsdTxId: gameUsdTx.id,
         betOrderIds: betOrders.map(betOrder => betOrder.id),
       }
       this.eventEmitter.emit('wallet.claim', eventPayload);
@@ -265,17 +290,11 @@ export class ClaimService {
           await queryRunner.manager.save(pointTx);
         }
 
-        // create GameUsdTx
-        const gameUsdTx = this.gameUsdTxRepository.create({
-          amount: walletTx.txAmount,
-          chainId: Number(process.env.CHAIN_ID),
-          status: 'S',
-          txHash: txReceipt.hash,
-          senderAddress: process.env.GAMEUSD_POOL_CONTRACT_ADDRESS,
-          receiverAddress: walletTx.userWallet.walletAddress,
-          retryCount: 0,
-          walletTxId: walletTx.id,
-        });
+        // update GameUsdTx
+        const gameUsdTx = await this.gameUsdTxRepository.findOneBy({ id: payload.gameUsdTxId });
+        gameUsdTx.amount = walletTx.txAmount;
+        gameUsdTx.status = 'S';
+        gameUsdTx.txHash = txReceipt.hash;
         await queryRunner.manager.save(gameUsdTx);
 
         // update walletTx
@@ -286,7 +305,6 @@ export class ClaimService {
         walletTx.startingBalance = latestWalletTx.endingBalance;
         walletTx.endingBalance = Number(walletTx.startingBalance) + Number(walletTx.txAmount);
         walletTx.status = 'S';
-        walletTx.gameUsdTx = gameUsdTx;
         await queryRunner.manager.save(walletTx);
 
         // update userWallet
@@ -332,7 +350,7 @@ export class ClaimService {
   }
 
   async getPendingClaim(userId: number): Promise<ClaimResponse> {
-    // fetch user all walletTxs for query
+    // fetch user walletTxs for query, where the walletTx is with betOrder(txType PLAY), and status success
     const userWallet = await this.userWalletRepository.findOneBy({ userId });
     const walletTxs = await this.walletTxRepository.find({
       where: {
@@ -348,6 +366,8 @@ export class ClaimService {
       const _betOrders = await this.betOrderRepository.find({
         where: {
           walletTxId: walletTx.id,
+          // availableClaim=true only after live results end
+          // so this function won't return matched numberPair within live results
           availableClaim: true,
           isClaimed: false
         },
