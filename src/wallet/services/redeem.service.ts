@@ -94,7 +94,7 @@ export class RedeemService {
       };
     }
 
-    // create redeemTx & walletTx
+    // create redeemTx
     const setting = await this.settingRepository.findOneBy(
       { key: `WITHDRAWAL_FEES_${payload.chainId}` }
     );
@@ -118,27 +118,42 @@ export class RedeemService {
       admin: null,
       walletTx: null,
     });
+    await this.redeemTxRepository.save(redeemTx);
+
+    const walletTx = this.walletTxRepository.create({
+      txType: 'REDEEM',
+      txAmount: payload.amount,
+      txHash: null,
+      status: 'P', // pending
+      startingBalance: null,
+      endingBalance: null,
+      userWalletId: userId,
+      redeemTx,
+      gameUsdTx: null,
+    });
+    await this.walletTxRepository.save(walletTx);
+
+    // update redeemTx with walletTx
+    await this.redeemTxRepository.update(redeemTx.id, { walletTx });
+
+    // create gameUsdTx
+    const gameUsdTx = this.gameUsdTxRepository.create({
+      amount: redeemTx.amount,
+      chainId: redeemTx.chainId,
+      status: 'P', // pending
+      txHash: null,
+      senderAddress: userWallet.walletAddress,
+      receiverAddress: process.env.GAMEUSD_POOL_CONTRACT_ADDRESS,
+      retryCount: 0,
+      walletTxId: walletTx.id,
+    });
+    await this.gameUsdTxRepository.save(gameUsdTx);
 
     // start queryRunner
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-
-      const walletTx = this.walletTxRepository.create({
-        txType: 'REDEEM',
-        txAmount: payload.amount,
-        txHash: null,
-        status: 'P', // pending
-        startingBalance: null,
-        endingBalance: null,
-        userWalletId: userId,
-        redeemTx,
-        gameUsdTx: null,
-      });
-
-      redeemTx.walletTx = walletTx;
-      await queryRunner.manager.save([walletTx, redeemTx]);
 
       // check if Payout contract has sufficient USDT to payout for requested amount
       const usdt_token_contract = GameUSD__factory.connect(
@@ -263,19 +278,6 @@ export class RedeemService {
         walletTx.status = 'P';
         await queryRunner.manager.save(walletTx);
 
-        // create gameUsdTx
-        const gameUsdTx = this.gameUsdTxRepository.create({
-          amount: redeemTx.amount,
-          chainId: redeemTx.chainId,
-          status: 'P', // pending
-          txHash: null,
-          senderAddress: walletTx.userWallet.walletAddress,
-          receiverAddress: process.env.GAMEUSD_POOL_CONTRACT_ADDRESS,
-          retryCount: 0,
-          walletTxId: walletTx.id,
-        });
-        await queryRunner.manager.save(gameUsdTx);
-
         // execute redeem() on Redeem contract
         const userWallet = walletTx.userWallet;
         const signer = new ethers.Wallet(userWallet.privateKey, this.provider) // TEMP: userWallet.privateKey
@@ -289,8 +291,10 @@ export class RedeemService {
         // update txHash for walletTx & gameUsdTx
         // this txHash might be in pending, is success, is failed, or is disappeared(in very rare case)
         walletTx.txHash = txResponse.hash;
+        await queryRunner.manager.save(walletTx);
+        const gameUsdTx = await this.gameUsdTxRepository.findOneBy({ walletTxId: walletTx.id });
         gameUsdTx.txHash = txResponse.hash;
-        await queryRunner.manager.save([walletTx, gameUsdTx]);
+        await queryRunner.manager.save(gameUsdTx);
 
         // pass to handleClaimEvent() to check & update database
         const eventPayload: RequestRedeemEvent = {
