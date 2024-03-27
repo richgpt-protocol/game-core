@@ -64,6 +64,8 @@ export class GameService {
           isMasked: true,
         },
       });
+      if (betOrders.length === 0) return; // no masked betOrder to submit
+
       // temporarily, private key will fetch shares from mpc server via address and combine
       const helperBot = new ethers.Wallet(process.env.HELPER_BOT_PRIVATE_KEY, this.provider);
       const helperContract = Helper__factory.connect(process.env.HELPER_CONTRACT_ADDRESS, helperBot);
