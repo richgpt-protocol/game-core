@@ -416,7 +416,6 @@ export class BetService {
     const numbers = numberPair.replace(/^0+/, '').split(''); //remove leading zeros if any
     const uniqueNumbers = new Set(numbers);
 
-    //TODO include the cases when less than 4 digits are included
     switch (uniqueNumbers.size) {
       case 4:
         return 24;
@@ -491,7 +490,6 @@ export class BetService {
     );
 
     const bets = [];
-    console.log(payload); //TODO delete
     payload.map((bet) => {
       const betAmount =
         bet.smallForecastAmount <= 0
@@ -512,7 +510,11 @@ export class BetService {
       credit: parseUnits(creditUsed.toString(), 18),
     };
 
-    const tx = await helperContract.betWithCredit(betWithCreditParams);
+    const gasLimit =
+      await helperContract.betWithCredit.estimateGas(betWithCreditParams);
+    const tx = await helperContract.betWithCredit(betWithCreditParams, {
+      gasLimit: gasLimit + gasLimit * BigInt(0.3),
+    });
 
     return tx;
   }
@@ -536,9 +538,16 @@ export class BetService {
       });
     });
 
+    const gasLimit =
+      await coreContract['bet((uint256,uint256,uint256,uint8)[])'].estimateGas(
+        bets,
+      );
+
     const tx = await coreContract
       .connect(userSigner)
-      ['bet((uint256,uint256,uint256,uint8)[])'](bets);
+      ['bet((uint256,uint256,uint256,uint8)[])'](bets, {
+        gasLimit: gasLimit + gasLimit * BigInt(0.3),
+      });
 
     return tx;
   }
@@ -571,7 +580,6 @@ export class BetService {
             provider,
           );
         } else {
-          console.log(`betting without credit`); //TODO delete
           tx = await this._betWithouCredit(
             payload.betsPayload,
             userSigner,
@@ -771,9 +779,17 @@ export class BetService {
         gameUsdWallet,
       );
 
+      const gasLimit = await gameUsdContract.deposit.estimateGas(
+        gameUsdTx.receiverAddress,
+        parseUnits(gameUsdTx.amount.toString(), 18),
+      );
+
       const onchainGameUsdTx = await gameUsdContract.deposit(
         gameUsdTx.receiverAddress,
         parseUnits(gameUsdTx.amount.toString(), 18), //18 decimals for gameUSD
+        {
+          gasLimit: gasLimit + gasLimit * BigInt(0.3),
+        },
       );
 
       const receipt = onchainGameUsdTx.wait();
@@ -837,8 +853,12 @@ export class BetService {
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .leftJoinAndSelect('betOrders.creditWalletTx', 'creditWalletTx')
       .where(
-        'gameUsdTx.status = :gameStatus AND gameUsdTx.retryCount >= :retryCount',
-        { gameStatus: 'P', retryCount: 1 },
+        'gameUsdTx.status = :gameStatus AND gameUsdTx.retryCount >= :retryCount AND gameUsdTx.receiverAddress = :gameUsdPoolAddress',
+        {
+          gameStatus: 'P',
+          retryCount: 1,
+          gameUsdPoolAddress: this.configService.get('GAMEUSD_POOL_ADDRESS'),
+        },
       )
       .getMany();
 
