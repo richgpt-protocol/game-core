@@ -3,10 +3,12 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
+  In,
   LessThan,
   MoreThan,
   MoreThanOrEqual,
   Not,
+  Or,
   Repository,
 } from 'typeorm';
 // import { CreateDeopsitRequestDto, SupplyDto } from './dto/deposit.dto';
@@ -201,9 +203,15 @@ export class DepositService {
         this.configService.get('SUPPLY_ACCOUNT_PK'),
         this.getProvider(chainId),
       );
+      const gasLimit = await supplyWallet.provider.estimateGas({
+        to: target,
+        value: ethers.parseEther(amount.toString()),
+      });
+
       const tx = await supplyWallet.sendTransaction({
         to: target,
         value: ethers.parseEther(amount.toString()),
+        gasLimit: gasLimit + gasLimit * BigInt(0.3),
       });
       return tx;
     } catch (error) {
@@ -258,7 +266,7 @@ export class DepositService {
 
   isGameUSDCronRunning = false;
   @Cron('*/10 * * * * *')
-  private async handleGameUsdTx() {
+  async handleGameUsdTx() {
     if (this.isGameUSDCronRunning) return;
 
     this.isGameUSDCronRunning = true;
@@ -267,6 +275,10 @@ export class DepositService {
     const pendingGameUsdTx = await this.gameUsdTxRepository.find({
       where: {
         status: 'P',
+        senderAddress: In([
+          this.configService.get('DEPOSIT_BOT_ADDRESS'),
+          this.configService.get('GAMEUSD_POOL_ADDRESS'),
+        ]),
       },
     });
 
@@ -303,9 +315,17 @@ export class DepositService {
           gameUsdWallet,
         );
 
+        const gasLimit = await gameUsdContract.deposit.estimateGas(
+          tx.receiverAddress,
+          parseUnits(tx.amount.toString(), 18),
+        );
+
         const onchainGameUsdTx = await gameUsdContract.deposit(
           tx.receiverAddress,
           parseUnits(tx.amount.toString(), 18), //18 decimals for gameUSD
+          {
+            gasLimit: gasLimit + gasLimit * BigInt(0.3),
+          },
         );
 
         const receipt = await onchainGameUsdTx.wait();
@@ -436,9 +456,16 @@ export class DepositService {
             userBalance >=
             parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals)
           ) {
+            const gasLimit = await tokenContract.transfer.estimateGas(
+              escrowAddress,
+              parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals),
+            );
             const onchainEscrowTx = await tokenContract.transfer(
               escrowAddress,
               parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals),
+              {
+                gasLimit: gasLimit + gasLimit * BigInt(0.3),
+              },
             );
 
             receipt = await onchainEscrowTx.wait(1);
