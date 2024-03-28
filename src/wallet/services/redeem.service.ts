@@ -1,17 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Game } from 'src/game/entities/game.entity';
-import { DataSource, IsNull, Repository } from 'typeorm';
-import { ClaimDto } from '../dto/claim.dto';
+import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { UserWallet } from '../entities/user-wallet.entity';
-import { ClaimDetail } from '../entities/claim-detail.entity';
-import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { WalletTx } from '../entities/wallet-tx.entity';
-import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { ethers } from 'ethers';
-import { Core__factory, GameUSD__factory, Payout__factory, Redeem__factory } from 'src/contract';
-import { ICore } from 'src/contract/Core';
-import { PointTx } from 'src/point/entities/point-tx.entity';
+import { GameUSD__factory, Payout__factory, Redeem__factory } from 'src/contract';
 import { RedeemDto } from '../dto/redeem.dto';
 import { RedeemTx } from '../entities/redeem-tx.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
@@ -20,12 +13,11 @@ import { AdminNotificationService } from 'src/shared/services/admin-notification
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
 import { Admin } from 'src/admin/entities/admin.entity';
-import { RedeemedEvent } from 'src/contract/Redeem';
 import { Setting } from 'src/setting/entities/setting.entity';
-import { PayoutDto } from '../dto/payout.dto';
 import { ReviewRedeemDto } from '../dto/ReviewRedeem.dto';
-import * as dotenv from 'dotenv';
 import { User } from 'src/user/entities/user.entity';
+import { Cron } from '@nestjs/schedule';
+import * as dotenv from 'dotenv';
 dotenv.config();
 
 type RedeemResponse = {
@@ -41,11 +33,6 @@ type RequestRedeemEvent = {
   gameUsdTxId: number;
 };
 
-type PayoutEvent = {
-  txHash: string;
-  redeemTxId: number;
-}
-
 @Injectable()
 export class RedeemService {
   provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
@@ -53,18 +40,8 @@ export class RedeemService {
   constructor(
     @InjectRepository(UserWallet)
     private userWalletRepository: Repository<UserWallet>,
-    @InjectRepository(BetOrder)
-    private betOrderRepository: Repository<BetOrder>,
-    @InjectRepository(Game)
-    private gameRepository: Repository<Game>,
-    @InjectRepository(ClaimDetail)
-    private claimDetailRepository: Repository<ClaimDetail>,
     @InjectRepository(WalletTx)
     private walletTxRepository: Repository<WalletTx>,
-    @InjectRepository(DrawResult)
-    private drawResultRepository: Repository<DrawResult>,
-    @InjectRepository(PointTx)
-    private pointTxRepository: Repository<PointTx>,
     @InjectRepository(RedeemTx)
     private redeemTxRepository: Repository<RedeemTx>,
     @InjectRepository(Notification)
@@ -107,7 +84,7 @@ export class RedeemService {
       payoutStatus: null,
       fromAddress: null,
       receiverAddress: payload.receiverAddress,
-      isPayoutTransferred: null,
+      isPayoutTransferred: false,
       chainId: payload.chainId,
       fees: Number(setting.value),
       tokenSymbol: payload.tokenSymbol,
@@ -456,147 +433,122 @@ export class RedeemService {
     }
   }
 
-  async payout(adminId: number, payload: PayoutDto) {
+  @Cron('0 */5 * * * *', { utcOffset: 0 }) // every 5 minutes
+  async payout(): Promise<void> {
     // fetch redeemTx
-    const redeemTx = await this.redeemTxRepository.findOne({
-      where: { id: payload.redeemTxId },
+    const redeemTxs = await this.redeemTxRepository.find({
+      where: {
+        payoutSignature: Not(IsNull()),
+        payoutTxHash: IsNull(),
+        payoutStatus: 'P',
+        isPayoutTransferred: false,
+        reviewedBy: Not(IsNull()),
+      },
       relations: { walletTx: true }
     });
 
-    // check if redeemTx exists
-    if (redeemTx === null) {
-      return { error: `redeemTxId: ${payload.redeemTxId} not found`, data: null };
-    }
-
-    // check if this redeemTx is already payout
-    if (redeemTx.isPayoutTransferred) {
-      return { error: `This redeem request is already payout`, data: null };
-    }
-
-    // start queryRunner
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    try {
-      
-      const amountAfterFees = Number(redeemTx.amount) - Number(redeemTx.fees);
-      const destinationAddress = redeemTx.receiverAddress;
-
-      // interact with Payout Pool contract
-      const chain_provider_url = redeemTx.chainId === 56
-        ? process.env.BNB_PROVIDER_RPC_URL
-        : process.env.OPBNB_PROVIDER_RPC_URL;
-      const chain_provider = new ethers.JsonRpcProvider(chain_provider_url)
-      const payoutBotSigner = new ethers.Wallet(process.env.PAYOUT_BOT_PRIVATE_KEY, chain_provider); // TEMP: fetch private key from env
-      const payoutPoolContractAddress = redeemTx.chainId === 56
-        ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
-        : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
-      const payoutPoolContract = Payout__factory.connect(payoutPoolContractAddress, payoutBotSigner);
-      const txResponse = await payoutPoolContract.payout(
-        ethers.parseEther(amountAfterFees.toString()),
-        destinationAddress,
-        payload.signature,
-        { gasLimit: 120000 } // increased by ~30% from actual gas used
-      );
-      const txReceipt = await txResponse.wait();
-
-      // update signature, txHash & fromAddress for redeemTx
-      redeemTx.payoutSignature = payload.signature;
-      redeemTx.payoutTxHash = txReceipt.hash;
-      redeemTx.fromAddress = payoutBotSigner.address;
-      await queryRunner.manager.save(redeemTx);
-
-      if (txReceipt.status === 1) {
-        // update redeemTx
-        redeemTx.fromAddress = payoutBotSigner.address;
-        redeemTx.isPayoutTransferred = true;
-        redeemTx.payoutStatus = 'S';
-        await queryRunner.manager.save(redeemTx);
-
-        // update walletTx
-        const walletTx = await this.walletTxRepository.findOneBy({ id: redeemTx.walletTx.id });
-        walletTx.status = 'S';
-        await queryRunner.manager.save(walletTx);
-
-        // send notification to user for successful payout
-        const notification = this.notificationRepository.create({
-          type: 'info',
-          title: 'Payout Successful',
-          message: `Your payout request for amount ${walletTx.txAmount} has been processed successfully.`,
-          walletTx: walletTx,
-        });
-        await queryRunner.manager.save(notification);
-        const userNotification = this.userNotificationRepository.create({
-          notification,
-          user: await this.userRepository.findOneBy({ id: walletTx.userWalletId }),
-        });
-        await queryRunner.manager.save(userNotification);
-
-      } else { // txReceipt.status === 0
-        // update redeemTx
-        redeemTx.isPayoutTransferred = false;
-        await queryRunner.manager.save(redeemTx);
-
-        // update walletTx
-        const walletTx = redeemTx.walletTx;
-        walletTx.status = 'PD';
-        await queryRunner.manager.save(walletTx);
-
-        // send notification to admin to check for failed payout
-        await this.adminNotificationService.setAdminNotification(
-          `Payout for redeemTxId ${payload.redeemTxId} has failed. Please check.`,
-          'error',
-          'Payout Failed',
-          true
-        );
-      }
-
-      await queryRunner.commitTransaction();
-
-    } catch (err) {
-      // rollback queryRunner
-      await queryRunner.rollbackTransaction();
-
-      // update walletTx
+    for (const redeemTx of redeemTxs) {
       const walletTx = await this.walletTxRepository.findOneBy({ id: redeemTx.walletTx.id });
-      walletTx.status = 'PD';
-      await this.walletTxRepository.save(walletTx);
 
-      // inform admin for rollback transaction
-      await this.adminNotificationService.setAdminNotification(
-        `Transaction in redeem.service.payout had been rollback, error: ${err}`,
-        'rollbackTxError',
-        'Transaction Rollbacked',
-        true
-      );
+      // start queryRunner
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      try {
+        
+        const amountAfterFees = Number(redeemTx.amount) - Number(redeemTx.fees);
+        const destinationAddress = redeemTx.receiverAddress;
 
-      return { error: err, data: null };
+        // interact with Payout Pool contract
+        const chain_provider_url = redeemTx.chainId === 56
+          ? process.env.BNB_PROVIDER_RPC_URL
+          : process.env.OPBNB_PROVIDER_RPC_URL;
+        const chain_provider = new ethers.JsonRpcProvider(chain_provider_url)
+        const payoutBotSigner = new ethers.Wallet(process.env.PAYOUT_BOT_PRIVATE_KEY, chain_provider); // TEMP: fetch private key from env
+        const payoutPoolContractAddress = redeemTx.chainId === 56
+          ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
+          : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
+        const payoutPoolContract = Payout__factory.connect(payoutPoolContractAddress, payoutBotSigner);
+        const txResponse = await payoutPoolContract.payout(
+          ethers.parseEther(amountAfterFees.toString()),
+          destinationAddress,
+          redeemTx.payoutSignature,
+          { gasLimit: 120000 } // increased by ~30% from actual gas used
+        );
+        const txReceipt = await txResponse.wait();
 
-    } finally {
-      // finalize queryRunner
-      await queryRunner.release();
-    }
+        // update signature, txHash & fromAddress for redeemTx
+        redeemTx.payoutTxHash = txReceipt.hash;
+        redeemTx.fromAddress = payoutBotSigner.address;
+        await queryRunner.manager.save(redeemTx);
 
-    return { error: null, data: { redeemTx: redeemTx } };
-  }
+        if (txReceipt.status === 1) { // on-chain transaction success
+          // update redeemTx
+          redeemTx.isPayoutTransferred = true;
+          redeemTx.payoutStatus = 'S';
+          await queryRunner.manager.save(redeemTx);
 
-  async getCurrentRedeemable(userId: number): Promise<RedeemResponse> {
-    const userWallet = await this.userWalletRepository.findOneBy({ userId });
-    return {
-      error: null,
-      data: {
-        currentRedeemable: userWallet.redeemableBalance,
+          // update walletTx
+          walletTx.status = 'S';
+          await queryRunner.manager.save(walletTx);
+
+          // send notification to user for successful payout
+          const notification = this.notificationRepository.create({
+            type: 'info',
+            title: 'Payout Successful',
+            message: `Your payout request for amount ${walletTx.txAmount} has been processed successfully.`,
+            walletTx: walletTx,
+          });
+          await queryRunner.manager.save(notification);
+          const userNotification = this.userNotificationRepository.create({
+            notification,
+            user: await this.userRepository.findOneBy({ id: walletTx.userWalletId }),
+          });
+          await queryRunner.manager.save(userNotification);
+
+        } else { // txReceipt.status === 0, on-chain transaction failed
+          // update redeemTx
+          redeemTx.isPayoutTransferred = false;
+          await queryRunner.manager.save(redeemTx);
+
+          // update walletTx
+          const walletTx = redeemTx.walletTx;
+          walletTx.status = 'PD';
+          await queryRunner.manager.save(walletTx);
+
+          // send notification to admin to check for failed payout
+          await this.adminNotificationService.setAdminNotification(
+            `Payout for redeemTxId ${redeemTx.id} has failed. Please check.`,
+            'error',
+            'Payout Failed',
+            true,
+            walletTx.id
+          );
+        }
+
+        await queryRunner.commitTransaction();
+
+      } catch (err) {
+        // rollback queryRunner
+        await queryRunner.rollbackTransaction();
+
+        // update walletTx
+        walletTx.status = 'PD';
+        await this.walletTxRepository.save(walletTx);
+
+        // inform admin for rollback transaction
+        await this.adminNotificationService.setAdminNotification(
+          `Transaction in redeem.service.payout had been rollback, error: ${err}`,
+          'rollbackTxError',
+          'Transaction Rollbacked',
+          true,
+          walletTx.id
+        );
+
+      } finally {
+        // finalize queryRunner
+        await queryRunner.release();
       }
-    };
-  }
-
-  async getPendingPayout(): Promise<RedeemTx[]> {
-    const pendingPayout = await this.redeemTxRepository.find({
-      where: {
-        payoutCanProceed: true,
-        payoutSignature: IsNull(),
-      },
-    });
-    return pendingPayout;
+    }
   }
 }
