@@ -45,7 +45,7 @@ export class RedeemTx {
   @Column()
   receiverAddress: string;
 
-  @Column({ nullable: true })
+  @Column({ default: false })
   isPayoutTransferred: boolean;
 
   @Column()
