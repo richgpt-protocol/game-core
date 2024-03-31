@@ -41,7 +41,7 @@ export class GameService {
   }
 
   // process of closing bet for current epoch, set draw result, and announce draw result
-  // 1. GameService.setBetClose: scheduled at :00UTC, also submit masked betOrder to Core contract
+  // 1. GameService.setBetClose: scheduled at :00UTC, create new game, and also submit masked betOrder to Core contract
   // 2. Local script: cron at :01UTC create drawResult records and save directly into database
   // 3. GameGateway.emitDrawResult: scheduled at :02UTC, emit draw result to all connected clients
   // 4. follow by GameService.updateDrawResult: submit draw result to Core contract
@@ -56,6 +56,24 @@ export class GameService {
       });
       game.isClosed = true;
       await this.gameRepository.save(game);
+
+      // create new game record for future
+      const lastFutureGame = await this.gameRepository.findOne({
+        order: { id: 'DESC' },
+      });
+      await this.gameRepository.save(
+        this.gameRepository.create({
+          epoch: (Number(lastFutureGame.epoch) + 1).toString(),
+          maxBetAmount: Number(process.env.MAX_BET_AMOUNT),
+          minBetAmount: Number(process.env.MIN_BET_AMOUNT),
+          drawTxHash: null,
+          drawTxStatus: null,
+          // startDate & endDate: previous date + 1 hour
+          startDate: new Date(lastFutureGame.startDate.getTime() + 3600000),
+          endDate: new Date(lastFutureGame.endDate.getTime() + 3600000),
+          isClosed: false,
+        })
+      )
 
       // submit masked betOrder on-chain
       const betOrders = await this.betOrderRepository.find({
