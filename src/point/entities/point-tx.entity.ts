@@ -62,9 +62,6 @@ export class PointTx {
   @JoinColumn()
   betOrder: BetOrder;
 
-  @Column()
-  campaignId: number;
-
   @ManyToOne(() => Campaign, (campaign) => campaign.pointTx)
   campaign: Campaign;
 }
