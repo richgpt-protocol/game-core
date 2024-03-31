@@ -61,6 +61,13 @@ export class RedeemService {
     private eventEmitter: EventEmitter2,
   ) {}
 
+  // how redeem & payout work
+  // 1. user request redeem via /request-redeem
+  // 2. if redeem < $100, proceed with reviewRedeem(). else, pending admin to execute reviewRedeem()
+  // 3. local server redeem bot run every 5 minutes to check if any pending redeem request,
+  // generate signature for the redeem request & update directly through backend database
+  // 4. payout() run every 5 minutes to execute payout if any
+
   async requestRedeem(userId: number, payload: RedeemDto): Promise<RedeemResponse> {
     // check if user has sufficient amount for redeem
     const userWallet = await this.userWalletRepository.findOneBy({ userId });
@@ -69,6 +76,30 @@ export class RedeemService {
         error: 'Insufficient redeemable balance',
         data: null,
       };
+    }
+
+    // check if there is any pending redeem
+    const lastRedeemWalletTx = await this.walletTxRepository.findOne({
+      where: [
+        {
+          txType: 'REDEEM',
+          userWalletId: userId,
+          status: 'P'
+        },
+        {
+          txType: 'REDEEM',
+          userWalletId: userId,
+          status: 'PD'
+        },
+        {
+          txType: 'REDEEM',
+          userWalletId: userId,
+          status: 'PA'
+        },
+      ]
+    })
+    if (lastRedeemWalletTx) {
+      return { error: 'Redeem is in pending', data: null };
     }
 
     // create redeemTx
@@ -111,7 +142,8 @@ export class RedeemService {
     await this.walletTxRepository.save(walletTx);
 
     // update redeemTx with walletTx
-    await this.redeemTxRepository.update(redeemTx.id, { walletTx });
+    redeemTx.walletTx = walletTx;
+    await this.redeemTxRepository.save(redeemTx)
 
     // create gameUsdTx
     const gameUsdTx = this.gameUsdTxRepository.create({
@@ -126,22 +158,37 @@ export class RedeemService {
     });
     await this.gameUsdTxRepository.save(gameUsdTx);
 
+    // update walletTx with gameUsdTx
+    walletTx.gameUsdTx = gameUsdTx;
+    await this.walletTxRepository.save(walletTx);
+
     // start queryRunner
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
 
-      // check if Payout contract has sufficient USDT to payout for requested amount
-      const usdt_token_contract = GameUSD__factory.connect(
-        // borrow interface from GameUSD token contract
-        process.env.USDT_TOKEN_ADDRESS,
-        this.provider
-      );
-      const usdt_balance = await usdt_token_contract.balanceOf(
-        process.env.PAYOUT_POOL_CONTRACT_ADDRESS
-      );
-      if (usdt_balance < payload.amount) {
+      // check if Payout contract has sufficient USDT to payout for requested amount based on the chainId
+      let usdt_balance: bigint;
+      if (payload.chainId === 56) {
+        const _provider = new ethers.JsonRpcProvider(process.env.BNB_PROVIDER_RPC_URL);
+        const usdt_token_contract = GameUSD__factory.connect(
+          // borrow interface from GameUSD token contract
+          process.env.BNB_USDT_TOKEN_ADDRESS,
+          _provider
+        );
+        usdt_balance = await usdt_token_contract.balanceOf(process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS);
+
+      } else {
+        const _provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
+        const usdt_token_contract = GameUSD__factory.connect(
+          process.env.OPBNB_USDT_TOKEN_ADDRESS,
+          _provider
+        );
+        usdt_balance = await usdt_token_contract.balanceOf(process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS);
+      }
+
+      if (Number(usdt_balance) < payload.amount) {
         // send notification to admin for reload payout pool
         this.adminNotificationService.setAdminNotification(
           `Payout contract has insufficient USDT to payout for amount ${payload.amount}. Please reload payout pool.`,
@@ -255,14 +302,27 @@ export class RedeemService {
         walletTx.status = 'P';
         await queryRunner.manager.save(walletTx);
 
-        // execute redeem() on Redeem contract
+        // check if userWallet did max approval on redeem contract
         const userWallet = walletTx.userWallet;
         const signer = new ethers.Wallet(userWallet.privateKey, this.provider) // TEMP: userWallet.privateKey
+        const redeemTxCount = await this.redeemTxRepository.count();
+        if (redeemTxCount === 1) {
+          // first redeem request, approve max amount to redeem contract
+          const gameUsdTokenContract = GameUSD__factory.connect(process.env.GAMEUSD_CONTRACT_ADDRESS, signer);
+          const txResponse = await gameUsdTokenContract.approve(
+            process.env.REDEEM_CONTRACT_ADDRESS,
+            ethers.MaxUint256,
+            { gasLimit: 100000 } // increased by ~30% from actual gas used
+          );
+          await txResponse.wait();
+        }
+
+        // execute redeem() on Redeem contract
         const redeemContract = Redeem__factory.connect(process.env.REDEEM_CONTRACT_ADDRESS, signer);
         const txResponse = await redeemContract.redeem(
           ethers.parseEther(Number(redeemTx.amount).toString()),
           redeemTx.receiverAddress,
-          { gasLimit: 100000 } // increased by ~30% from actual gas used
+          { gasLimit: 70000 } // increased by ~30% from actual gas used
         );
 
         // update txHash for walletTx & gameUsdTx
@@ -313,7 +373,7 @@ export class RedeemService {
 
       // update walletTx
       walletTx.status = 'PD';
-      await queryRunner.manager.save(walletTx);
+      await this.walletTxRepository.save(walletTx);
 
       // inform admin for rollback transaction
       await this.adminNotificationService.setAdminNotification(
