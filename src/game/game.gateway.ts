@@ -36,6 +36,7 @@ export class GameGateway {
           id: Number(key),
           prizeCategory: currentResult[key].prizeCategory,
           numberPair: currentResult[key].numberPair,
+          gameId: currentResult[key].gameId,
         }
       })
       // id is drawResult.id, drawResult record created from first prize to consolation prize,
@@ -58,12 +59,12 @@ export class GameGateway {
       // loop through drawResult in reverse order(consolation, special...) and emit to client
       for (let i = drawResult.length - 1; i >= 0; i--) {
         // omit unnecessary fields to reduce payload size
-        const {id, prizeIndex, createdDate, ...result} = drawResult[i];
+        const {prizeIndex, createdDate, ...result} = drawResult[i];
         // TODO: use return instead of emit, to utilize nestjs functions(i.e. interceptor)
         // return { event: 'events', data: result };
         this.server.emit('liveDrawResult', result);
         // cache draw result with id as key to determine the order of draw result
-        this.cacheSettingService.set(id.toString(), result);
+        this.cacheSettingService.set(result.id.toString(), result);
         // result emit every 2 seconds
         await this.delay(2000);
       }
