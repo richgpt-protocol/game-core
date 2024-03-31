@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Game } from 'src/game/entities/game.entity';
 import { DataSource, Repository } from 'typeorm';
-import { ClaimDto } from '../dto/claim.dto';
 import { UserWallet } from '../entities/user-wallet.entity';
 import { ClaimDetail } from '../entities/claim-detail.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
@@ -28,11 +27,6 @@ type ClaimEvent = {
   gameUsdTxId: number;
   betOrderIds: number[];
 };
-
-interface BetOrderPendingClaim extends BetOrder {
-  bigForcastWinAmount: number;
-  smallForecastWinAmount: number;
-}
 
 @Injectable()
 export class ClaimService {
@@ -63,17 +57,17 @@ export class ClaimService {
   async claim(userId: number): Promise<ClaimResponse> {
     // claim is not available within 5 minutes after last game ended
     const lastGame = await this.gameRepository.findOneBy({ isClosed: true });
+    if (!lastGame) return { error: 'Claim is not available yet', data: null }
     if (new Date().getTime() < new Date(lastGame.endDate).getTime() + (5 * 60 * 1000)) {
       return { error: 'Claim is not available yet', data: null };
     }
 
-    let walletTx: WalletTx;
-
+    // check if there is any pending claim
     const lastClaimWalletTx = await this.walletTxRepository
       .createQueryBuilder()
       .where('txType = :txType', { txType: 'CLAIM' })
       .andWhere('userWalletId = :userWalletId', { userWalletId: userId })
-      .andWhere('status = :status', { status: 'P' })
+      .orWhere('status = :status', { status: 'P' })
       .orWhere('status = :status', { status: 'PD' })
       .getOne();
     if (lastClaimWalletTx) {
@@ -88,7 +82,7 @@ export class ClaimService {
     }
 
     // create walletTx
-    walletTx = this.walletTxRepository.create({
+    const walletTx = this.walletTxRepository.create({
       txType: 'CLAIM',
       txAmount: 0,
       txHash: null,
@@ -105,7 +99,7 @@ export class ClaimService {
     const userWallet = await this.userWalletRepository.findOneBy({ userId })
     const gameUsdTx = this.gameUsdTxRepository.create({
       amount: 0,
-      chainId: Number(process.env.CHAIN_ID),
+      chainId: Number(process.env.OPBNB_CHAIN_ID),
       status: 'P',
       txHash: null,
       senderAddress: userWallet.walletAddress,
@@ -116,7 +110,8 @@ export class ClaimService {
     await this.gameUsdTxRepository.save(gameUsdTx);
 
     // set gameUsdTx to walletTx
-    await this.walletTxRepository.update(walletTx, { gameUsdTx });
+    walletTx.gameUsdTx = gameUsdTx;
+    await this.walletTxRepository.save(walletTx);
 
     // start queryRunner
     const queryRunner = this.dataSource.createQueryRunner();
@@ -153,10 +148,10 @@ export class ClaimService {
 
         // create claimDetail
         const claimDetails = this.claimDetailRepository.create({
-          prize: '1',
+          prize: drawResult.prizeCategory,
           claimAmount: totalWinningAmount,
           bonusAmount: 0,
-          pointAmount: 0,
+          pointAmount: 0, // TODO
           walletTxId: walletTx.id,
           drawResultId: drawResult.id,
           betOrder,
@@ -232,9 +227,8 @@ export class ClaimService {
       await queryRunner.rollbackTransaction();
 
       // update walletTx
-      await this.walletTxRepository.update(walletTx, {
-        status: 'PD',
-      });
+      walletTx.status = 'PD';
+      await this.walletTxRepository.save(walletTx);
 
       // inform admin for rollback transaction
       await this.adminNotificationService.setAdminNotification(
