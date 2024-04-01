@@ -1,0 +1,66 @@
+<html>
+  <head></head>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    .child-container {
+        width: 500px;
+        padding: 15px;
+        /* backdrop-filter: blur(20px); */
+        border-radius: 32px;
+        text-align: center;
+    }
+
+    .header-1 {
+        font-weight: 700;
+        font-size: 20px;
+        text-align: center;
+        letter-spacing: -0.02em;
+        color: #667085;
+    }
+
+    .header {
+      width: 100%;
+      display: flex;
+      padding: 12px 6px;
+      background: #e0e0e0;
+      justify-content: center;
+      align-items: center;
+      gap: 22px;
+    }
+    .h-btn {
+      cursor: pointer;
+    }
+    .h-btn a {
+      text-decoration: none;
+      color: #000;
+    }
+
+    @media screen and (max-width: 500px) {
+      .child-container {
+        width: unset;
+      }
+
+      .header-1 {
+        font-size: 16px;
+      }
+    }
+  </style>
+  <body>
+    <div class="child-container">
+      <img class="img" src="/images/app.icon.svg" />
+      <p class="title">4DGPT (Admin Panel)</p>
+
+      <span class="header-1">User Listing</span>
+      <!-- {{!-- <p class="content">Pre<a href="#" onclick="window.history.back();">Go back</a>, or head over to <a href="{{data.appUrl}}">Dashboard</a> to choose a new direction.</p> --}} -->
+    </div>
+    <div class="header">
+      <div class="h-btn"><a href="/back-office/users">USER</a></div>
+      <div class="h-btn"><a href="/back-office/wallets">WALLET</a></div>
+      <div class="h-btn"><a href="/back-office/staffs">STAFF</a></div>
+      <div class="h-btn"><a href="/back-office/transactions">TRANSACTIONS</a></div>
+      <div class="h-btn"><a href="/back-office/results-history">RESULT & HISTORY</a></div>
+    </div>
+  </body>
+</html>

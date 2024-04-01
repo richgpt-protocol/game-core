@@ -27,6 +27,7 @@ import { WalletlModule } from './wallet/wallet.module';
 import { GameModule } from './game/game.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
+import { BackOfficeModule } from './back-office/back-office.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { ChatbotModule } from './chatbot/chatbot.module';
       ignoreErrors: false,
     }),
     ChatbotModule,
+    BackOfficeModule,
   ],
   controllers: [AppController],
   providers: [
