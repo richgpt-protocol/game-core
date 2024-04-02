@@ -28,7 +28,7 @@ export default class CreateGames implements Seeder {
           epoch: epoch.toString(),
           maxBetAmount: maxBetAmount,
           minBetAmount: minBetAmount,
-          drawTxHash: '',
+          drawTxHash: null,
           startDate: startDate,
           endDate: endDate,
           isClosed: false,
