@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -59,6 +59,8 @@ export class GameService {
 
       // create new game record for future
       const lastFutureGame = await this.gameRepository.findOne({
+        // findOne() must provide where option
+        where: { isClosed: false },
         order: { id: 'DESC' },
       });
       await this.gameRepository.save(
@@ -232,5 +234,48 @@ export class GameService {
     } catch (error) {
       return { error: error, data: null };
     }
+  }
+
+  async getPastDrawResults(gameIds:number[]) {
+    const games = [];
+    for (const gameId of gameIds) {
+      const game = await this.gameRepository.findOne({
+        where: {
+          id: gameId,
+          isClosed: true,
+          // game that just closed within 5 minutes won't be included
+          endDate: LessThan(new Date(Date.now() - 18000)),
+        },
+        relations: {
+          drawResult: true,
+        },
+      });
+
+      if (!game) {
+        // game is not closed yet, or just closed within 5 minutes
+        games.push(null);
+        continue;
+      }
+
+      game.drawResult = game.drawResult.map(result => (
+        // to save payload
+        {
+          id: result.id,
+          prizeCategory: result.prizeCategory,
+          numberPair: result.numberPair,
+          gameId: result.gameId,
+        }
+      )) as DrawResult[];
+      games.push({
+        // to save payload
+        id: game.id,
+        epoch: game.epoch,
+        startDate: game.startDate,
+        endDate: game.endDate,
+        drawResult: game.drawResult,
+      });
+    }
+
+    return { error: null, data: games };
   }
 }
