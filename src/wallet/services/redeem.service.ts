@@ -18,6 +18,7 @@ import { ReviewRedeemDto } from '../dto/ReviewRedeem.dto';
 import { User } from 'src/user/entities/user.entity';
 import { Cron } from '@nestjs/schedule';
 import * as dotenv from 'dotenv';
+import { WalletService } from '../wallet.service';
 dotenv.config();
 
 type RedeemResponse = {
@@ -58,6 +59,7 @@ export class RedeemService {
     private settingRepository: Repository<Setting>,
     private dataSource: DataSource,
     private adminNotificationService: AdminNotificationService,
+    private walletService: WalletService,
     private eventEmitter: EventEmitter2,
   ) {}
 
@@ -69,11 +71,21 @@ export class RedeemService {
   // 4. payout() run every 5 minutes to execute payout if any
 
   async requestRedeem(userId: number, payload: RedeemDto): Promise<RedeemResponse> {
-    // check if user has sufficient amount for redeem
     const userWallet = await this.userWalletRepository.findOneBy({ userId });
+
+    // check if user has sufficient amount for redeem
     if (userWallet.redeemableBalance < payload.amount) {
       return {
         error: 'Insufficient redeemable balance',
+        data: null,
+      };
+    }
+
+    // check if user has sufficient level to redeem
+    const userLevel = this.walletService.calculateLevel(userWallet.pointBalance);
+    if (userLevel < 10) {
+      return {
+        error: 'Insufficient level to redeem',
         data: null,
       };
     }
