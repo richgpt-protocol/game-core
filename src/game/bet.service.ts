@@ -1,12 +1,16 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ChatCompletionMessageParam } from 'openai/resources';
 // import { SendMessageDto } from './dto/bet.dto';
 // import { MongoClient, WithId } from 'mongodb'
 import * as dotenv from 'dotenv';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository, DataSource, MoreThanOrEqual } from 'typeorm';
+import { In, Repository, DataSource, MoreThanOrEqual, LessThan } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BetDto } from 'src/game/dto/Bet.dto';
@@ -123,10 +127,12 @@ export class BetService {
         walletBalanceRemaining,
         walletBalanceUsed,
         creditBalanceUsed,
+        creditWalletTxns,
       } = this.validateCreditAndBalance(userInfo, payload, betOrders);
 
-
-      walletTx.txAmount = 0;
+      await queryRunner.manager.save(creditWalletTxns);
+      walletTx.txAmount = walletBalanceUsed;
+      walletTx.betOrders = betOrders;
       await queryRunner.manager.save(walletTx);
 
       await queryRunner.manager.save(betOrders);
@@ -157,6 +163,12 @@ export class BetService {
       console.error(`Rolling back Db transaction`);
       console.error(error);
       await queryRunner.rollbackTransaction();
+
+      if (error instanceof BadRequestException) {
+        throw new BadRequestException(error.message);
+      } else {
+        throw new BadRequestException('Error in bet');
+      }
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
@@ -212,9 +224,9 @@ export class BetService {
           throw new BadRequestException('Invalid Epoch');
         }
 
-        const totalAmount = bet.bigForecastAmount + bet.smallForecastAmount;
+        const totalAmount = +bet.bigForecastAmount + bet.smallForecastAmount;
 
-        if (totalAmount < allGamesObj[epoch].minBetAmount) {
+        if (totalAmount < +allGamesObj[epoch].minBetAmount) {
           throw new BadRequestException('Bet amount is less than min allowed');
         }
 
@@ -237,7 +249,6 @@ export class BetService {
         }
       });
     }
-
   }
 
   private validateCreditAndBalance(
@@ -249,6 +260,7 @@ export class BetService {
     walletBalanceRemaining: number;
     walletBalanceUsed: number;
     creditBalanceUsed: number;
+    creditWalletTxns: CreditWalletTx[];
   } {
     console.log(userInfo);
     const totalCredits = userInfo.wallet.creditBalance;
@@ -260,15 +272,21 @@ export class BetService {
     let totalCreditUsed = 0;
     let walletBalanceUsed = 0;
 
+    const creditWalletTxns = [];
+
     bets.forEach((bet) => {
       if (creditRemaining) {
         const betAmonut = bet.bigForecastAmount + bet.smallForecastAmount;
-        const creditToBeUsed =
+        const creditAvailable =
           creditRemaining > +maxAllowedCreditAmount
             ? +maxAllowedCreditAmount
             : creditRemaining;
-        const gameUsdAmount =
-          betAmonut > creditToBeUsed ? betAmonut - creditToBeUsed : 0;
+
+        const creditToBeUsed =
+          betAmonut > creditAvailable ? creditAvailable : betAmonut;
+
+        const gameUsdAmount = betAmonut - creditToBeUsed;
+        // betAmonut > creditToBeUsed ? betAmonut - creditToBeUsed : 0;
 
         walletBalanceUsed += gameUsdAmount;
 
@@ -276,14 +294,20 @@ export class BetService {
         totalCreditUsed += creditToBeUsed;
         creditRemaining -= creditToBeUsed;
 
-        bet.creditWalletTx = new CreditWalletTx();
-        bet.creditWalletTx.amount = creditToBeUsed;
-        bet.creditWalletTx.txType = 'PLAY';
-        bet.creditWalletTx.status = 'P';
-        bet.creditWalletTx.walletId = userInfo.wallet.id;
+        const creditWalletTxn = new CreditWalletTx();
+        creditWalletTxn.amount = creditToBeUsed;
+        creditWalletTxn.txType = 'PLAY';
+        creditWalletTxn.status = 'P';
+        creditWalletTxn.walletId = userInfo.wallet.id;
+        // creditWalletTxn.campaignId = 0; //TODO
+
+        creditWalletTxns.push(creditWalletTxn);
+
+        bet.creditWalletTx = creditWalletTxn;
       } else {
         bet.creditWalletTx = null;
         totalBetAmount += bet.bigForecastAmount + bet.smallForecastAmount;
+        walletBalanceUsed += bet.bigForecastAmount + bet.smallForecastAmount;
       }
     });
 
@@ -330,6 +354,7 @@ export class BetService {
       walletBalanceRemaining: walletBalance - walletBalanceUsed,
       walletBalanceUsed,
       creditBalanceUsed: totalCreditUsed,
+      creditWalletTxns,
     };
   }
 
@@ -396,27 +421,12 @@ export class BetService {
   }
 
   private _generatePermutations(numberPair: string): Array<string> {
-    const numbers = numberPair.replace(/^0+/, '').split(''); //remove leading zeros if any
-    const uniqueNumbers = new Set(numbers);
-
-    const noOfPermutations = this._getPermutationCount(numberPair);
-    return this._permutations(numbers, 4, noOfPermutations);
-  }
-
-  private _getPermutationCount(numberPair: string): number {
-    const numbers = numberPair.replace(/^0+/, '').split(''); //remove leading zeros if any
-    const uniqueNumbers = new Set(numbers);
-
-    switch (uniqueNumbers.size) {
-      case 4:
-        return 24;
-      case 3:
-        return 12;
-      case 2:
-        return 6;
-      case 1:
-        return 4;
+    if (numberPair.length !== 4) {
+      numberPair = numberPair.padStart(4, '0');
     }
+    const numbers = numberPair.replace(/^0+/, '').split(''); //remove leading zeros if any
+
+    return this._permutations(numbers, 4, 24);
   }
 
   //   private _generatePermutations(
@@ -489,7 +499,7 @@ export class BetService {
 
       bets.push({
         epoch: bet.game.epoch,
-        numberPair: bet.numberPair,
+        number: bet.numberPair,
         amount: parseUnits(betAmount.toString(), 18),
         forecast: bet.smallForecastAmount <= 0 ? 1 : 0,
       });
@@ -524,8 +534,8 @@ export class BetService {
           : bet.smallForecastAmount;
 
       bets.push({
-        epoch: bet.game.epoch,
-        number: bet.numberPair,
+        epoch: +bet.game.epoch,
+        number: +bet.numberPair,
         amount: parseUnits(betAmount.toString(), 18),
         forecast: bet.smallForecastAmount <= 0 ? 1 : 0,
       });
@@ -736,12 +746,12 @@ export class BetService {
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = commisionAmount;
       gameUsdTx.status = 'P';
-      gameUsdTx.retryCount = 0;
+      gameUsdTx.retryCount = 1;
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
-      gameUsdTx.receiverAddress =
-        userInfo.referralUser.referralUser.wallet.walletAddress;
+      gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
       gameUsdTx.walletTx = walletTx;
+      gameUsdTx.walletTxId = walletTx.id;
 
       await queryRunner.manager.save(gameUsdTx);
       await queryRunner.commitTransaction();
@@ -753,10 +763,20 @@ export class BetService {
     }
   }
 
-  private async handleReferralGameUSDTx(gameUsdTx: GameUsdTx) {
+  private async handleReferralGameUSDTx(_gameUsdTx: number) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+
+    console.log('retrying referral gameUSDTx');
+    const gameUsdTx = await queryRunner.manager
+      .createQueryBuilder(GameUsdTx, 'gameUsdTx')
+      .leftJoinAndSelect('gameUsdTx.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .where('gameUsdTx.id = :id', { id: _gameUsdTx })
+      .getOne();
+
+    if (!gameUsdTx) return;
 
     try {
       if (gameUsdTx.retryCount >= 5) {
@@ -798,11 +818,14 @@ export class BetService {
         referrelTx.rewardAmount = gameUsdTx.amount;
         referrelTx.referralType = 'BET';
         referrelTx.walletTx = gameUsdTx.walletTx;
+        referrelTx.userId = gameUsdTx.walletTx.userWallet.userId;
+        referrelTx.referralUserId = gameUsdTx.walletTx.userWallet.userId;
 
         gameUsdTx.status = 'S';
         gameUsdTx.txHash = onchainGameUsdTx.hash;
 
         gameUsdTx.walletTx.status = 'S';
+        await queryRunner.manager.save(gameUsdTx.walletTx);
 
         //select last walletTx of referrer
         const lastValidWalletTx = await queryRunner.manager
@@ -817,12 +840,14 @@ export class BetService {
           .orderBy('walletTx.id', 'DESC')
           .getOne();
 
-        gameUsdTx.walletTx.startingBalance = lastValidWalletTx
-          ? lastValidWalletTx.endingBalance
-          : 0;
-        gameUsdTx.walletTx.endingBalance = lastValidWalletTx
-          ? lastValidWalletTx.endingBalance + gameUsdTx.walletTx.txAmount
-          : gameUsdTx.walletTx.txAmount;
+        gameUsdTx.walletTx.startingBalance =
+          lastValidWalletTx && lastValidWalletTx.endingBalance
+            ? +lastValidWalletTx.endingBalance
+            : 0;
+        gameUsdTx.walletTx.endingBalance =
+          lastValidWalletTx && lastValidWalletTx.endingBalance
+            ? +lastValidWalletTx.endingBalance + gameUsdTx.walletTx.txAmount
+            : gameUsdTx.walletTx.txAmount;
 
         await queryRunner.manager.save(gameUsdTx);
         await queryRunner.manager.save(gameUsdTx.walletTx);
@@ -841,7 +866,8 @@ export class BetService {
         // });
 
         referrerWallet.walletBalance = gameUsdTx.walletTx.endingBalance;
-        referrerWallet.redeemableBalance += gameUsdTx.amount; //commision amount
+        referrerWallet.redeemableBalance =
+          +referrerWallet.redeemableBalance + gameUsdTx.amount; //commision amount
 
         await queryRunner.manager.save(referrerWallet);
         await queryRunner.manager.save(referrelTx);
@@ -859,6 +885,38 @@ export class BetService {
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
+  }
+
+  isReferralCronRunning = false;
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async handleReferralTxns() {
+    if (this.isReferralCronRunning) return;
+    this.isReferralCronRunning = true;
+
+    try {
+      const referralGameUsdTxns = await this.gameUsdTxRepository
+        .createQueryBuilder('gameUsdTx')
+        .innerJoin('gameUsdTx.walletTx', 'walletTx')
+        .where('gameUsdTx.status = :status', { status: 'P' })
+        .andWhere('walletTx.txType = :txType', { txType: 'REFERRAL' })
+        .andWhere('gameUsdTx.senderAddress = :senderAddress', {
+          senderAddress: this.configService.get('GAMEUSD_POOL_ADDRESS'),
+        })
+        .getMany();
+
+      for (const referralGameUsdTx of referralGameUsdTxns) {
+        if (referralGameUsdTx.retryCount >= 5) {
+          referralGameUsdTx.status = 'F';
+          await this.gameUsdTxRepository.save(referralGameUsdTx);
+          continue;
+        }
+        await this.handleReferralGameUSDTx(referralGameUsdTx.id);
+      }
+    } catch (error) {
+      this.isReferralCronRunning = false;
+    }
+
+    this.isReferralCronRunning = false;
   }
 
   isRetryCronRunning = false;
@@ -892,7 +950,7 @@ export class BetService {
       await queryRunner.startTransaction();
 
       if (gameUsdTx.walletTx.txType == 'REFERRAL') {
-        await this.handleReferralGameUSDTx(gameUsdTx);
+        // await this.handleReferralGameUSDTx(gameUsdTx);
         continue;
       }
 
