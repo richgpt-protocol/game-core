@@ -19,4 +19,11 @@ export class WalletService {
       .getOne();
     return walletInfo;
   }
+
+  calculateLevel(point: number): number {
+    // exponential growth xp calculation, refer
+    // https://chat.openai.com/share/f6ad93ae-048d-43bf-bca8-7804a347e6e9
+    const growthFactor = 1.584893192;
+    return Math.floor(Math.log(point) / Math.log(growthFactor));
+  }
 }

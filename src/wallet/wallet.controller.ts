@@ -4,6 +4,7 @@ import {
   Get,
   HttpStatus,
   Post,
+  Query,
   Req,
   Request,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { ClaimService } from './services/claim.service';
 import { RedeemService } from './services/redeem.service';
 import { RedeemDto } from 'src/wallet/dto/redeem.dto';
 import { ReviewRedeemDto } from './dto/ReviewRedeem.dto';
+import { CalculateLevelDto } from './dto/calculateLevel.dto';
 
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
@@ -220,4 +222,15 @@ export class WalletController {
   @Secure(null, UserRole.USER)
   @Post('get-xp')
   async getXP() {}
+
+  @Secure(null, UserRole.USER)
+  @Get('calculate-level')
+  calculateLevel(@Query() payload: CalculateLevelDto): ResponseVo<any> {
+    const level = this.walletService.calculateLevel(payload.point);
+    return {
+      statusCode: HttpStatus.BAD_REQUEST,
+      data: { level },
+      message: '',
+    };
+  }
 }
