@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpStatus,
@@ -8,6 +9,7 @@ import { ApiHeader, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Secure } from 'src/shared/decorators/secure.decorator';
 import { ResponseVo } from 'src/shared/vo/response.vo';
 import { GameService } from './game.service';
+import { UserRole } from 'src/shared/enum/role.enum';
 
 @ApiTags('Game')
 @Controller('api/v1/game')
@@ -38,36 +40,27 @@ export class GameController {
   @Get('get-max-allowed-bet')
   async getMaxAllowedBet() {}
 
-  @Get('get-draw-result')
-  @ApiHeader({
-    name: 'x-custom-lang',
-    description: 'Custom Language',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'OK',
-    type: ResponseVo,
-  })
-  async getDrawResult(
-    @Query('epoch') epoch: number,
-    // @IpAddress() ipAddress,
-    // @HandlerClass() classInfo: IHandlerClass,
-    // @I18n() i18n: I18nContext,
-  ): Promise<ResponseVo<any>> {
-    const { id, ...drawResult } = await this.gameService.getDrawResult(epoch);
-    return {
-      statusCode: HttpStatus.OK,
-      data: drawResult,
-      message: 'draw result get successfully',
-    };
-  }
+  @Secure(null, UserRole.USER)
+  @Get('get-past-draw-results')
+  async getPastDrawResults(
+    @Body() payload: { gameIds: number[] }
+  ) {
+    try {
+      const result = await this.gameService.getPastDrawResults(payload.gameIds);
+      return { 
+        statusCode: HttpStatus.OK,
+        data: result.data,
+        message: 'get past draw result success',
+      };
 
-  // TODO???
-  @Get('get-past-draw-result')
-  async getPastDrawResult(
-    @Query('startEpoch') startEpoch: number,
-    @Query('endEpoch') endEpoch: number, // inclusive
-  ) {}
+    } catch (error) {
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        data: null,
+        message: error.message,
+      };
+    }
+  }
 
   // TODO, sort descending by winner amount
   @Get('get-past-draw-winner')
