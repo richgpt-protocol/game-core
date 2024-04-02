@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Game } from 'src/game/entities/game.entity';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Not, Repository } from 'typeorm';
 import { UserWallet } from '../entities/user-wallet.entity';
 import { ClaimDetail } from '../entities/claim-detail.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
@@ -96,7 +96,7 @@ export class ClaimService {
     await this.walletTxRepository.save(walletTx);
 
     // create gameUsdTx
-    const userWallet = await this.userWalletRepository.findOneBy({ userId })
+    const userWallet = await this.userWalletRepository.findOneBy({ userId });
     const gameUsdTx = this.gameUsdTxRepository.create({
       amount: 0,
       chainId: Number(process.env.OPBNB_CHAIN_ID),
@@ -146,22 +146,46 @@ export class ClaimService {
           throw new Error('Bet order not available for claim');
         }
 
+        // calculate pointAmount
+        const prize = drawResult.prizeCategory;
+        const pointAmount = prize === '1' ? totalWinningAmount * 50000
+          : prize === '2' ? totalWinningAmount * 20000
+          : prize === '3' ? totalWinningAmount * 10000
+          : prize === 'S' ? totalWinningAmount * 3000
+          : totalWinningAmount * 1000; // prize === 'C'
+
         // create claimDetail
-        const claimDetails = this.claimDetailRepository.create({
-          prize: drawResult.prizeCategory,
+        const claimDetail = this.claimDetailRepository.create({
+          prize,
           claimAmount: totalWinningAmount,
           bonusAmount: 0,
-          pointAmount: 0, // TODO
+          pointAmount,
           walletTxId: walletTx.id,
           drawResultId: drawResult.id,
           betOrder,
         });
-        await queryRunner.manager.save(claimDetails);
+        await queryRunner.manager.save(claimDetail);
+
+        // create pointTx for each betOrder
+        const pointTx = this.pointTxRepository.create({
+          txType: 'PAYOUT',
+          amount: pointAmount,
+          startingBalance: null,
+          endingBalance: null,
+          walletId: walletTx.userWalletId,
+          betOrder
+        });
+        await queryRunner.manager.save(pointTx);
 
         // update walletTx
+        // accumulate walletTx.txAmount within betOrders loop
         walletTx.txAmount = Number(walletTx.txAmount) + Number(totalWinningAmount);
-        walletTx.claimDetails.push(claimDetails);
+        walletTx.claimDetails.push(claimDetail);
         await queryRunner.manager.save(walletTx);
+
+        // update userWallet
+        userWallet.pointTx.push(pointTx);
+        await queryRunner.manager.save(userWallet);
 
         // construct claimParams for on-chain transaction
         const epoch = Number(
@@ -192,7 +216,6 @@ export class ClaimService {
       }
 
       // submit transaction on-chain at once for all claims
-      const userWallet = await this.userWalletRepository.findOneBy({ userId });
       const signer = new ethers.Wallet(userWallet.privateKey, this.provider);
       const coreContract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, signer);
       // calculate estimate gas used by on-chain transaction
@@ -266,21 +289,30 @@ export class ClaimService {
     try {
 
       if (txReceipt.status === 1) {
+        let totalPointAmount = 0;
+
         for (const betOrderId of payload.betOrderIds) {
           // update betOrder
           const betOrder = await this.betOrderRepository.findOneBy({ id: betOrderId });
           betOrder.isClaimed = true;
           await queryRunner.manager.save(betOrder);
   
-          // create pointTx for each betOrder
-          const pointTx = this.pointTxRepository.create({
-            txType: 'PAYOUT',
-            amount: 0, // TODO: check xp for payout
-            startingBalance: 0, // TODO: check xp for payout
-            endingBalance: 0, // TODO: check xp for payout
-            walletId: walletTx.userWalletId,
-            betOrder
+          // update pointTx for each betOrder
+          // fetch latest valid pointTx, use queryRunner to query instead of pointTxRepository because,
+          // pointTxRepository is not aware of the pointTx saved by queryRunner before commitTransaction()
+          const latestPointTx = await queryRunner.manager.findOne(PointTx, {
+            where: {
+              startingBalance: Not(null),
+              endingBalance: Not(null),
+            },
           });
+          const pointTx = await this.pointTxRepository.
+            createQueryBuilder('pointTx')
+            .where('pointTx.betOrderId = :betOrderId', { betOrderId })
+            .getOne();
+          pointTx.startingBalance = latestPointTx.endingBalance;
+          pointTx.endingBalance = Number(pointTx.startingBalance) + Number(pointTx.amount);
+          totalPointAmount += pointTx.amount;
           await queryRunner.manager.save(pointTx);
         }
 
@@ -305,6 +337,7 @@ export class ClaimService {
         const userWallet = await this.userWalletRepository.findOneBy({ id: walletTx.userWalletId });
         userWallet.walletBalance = Number(userWallet.walletBalance) + Number(walletTx.txAmount);
         userWallet.redeemableBalance = Number(userWallet.redeemableBalance) + Number(walletTx.txAmount);
+        userWallet.pointBalance = Number(userWallet.pointBalance) + totalPointAmount;
         await queryRunner.manager.save(userWallet);
 
       } else { // txReceipt.status === 0
