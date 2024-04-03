@@ -34,6 +34,13 @@ export class RegisterUserDto {
   @IsNotEmpty()
   otpMethod: 'WHATSAPP' | 'TELEGRAM' | 'SMS';
 }
+export class SignInDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(15)
+  phoneNumber: string;
+}
 export class VerifyOtpDto {
   @ApiProperty()
   @IsNumber()

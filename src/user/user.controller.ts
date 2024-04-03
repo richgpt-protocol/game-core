@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Request,
 } from '@nestjs/common';
 import { ApiHeader, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -28,6 +29,7 @@ import {
 import {
   GetUsersDto,
   RegisterUserDto,
+  SignInDto,
   UpdateUserByAdminDto,
   UpdateUserDto,
 } from './dto/register-user.dto';
@@ -114,7 +116,7 @@ export class UserController {
   async signIn(
     @IpAddress() ipAddress,
     @HandlerClass() classInfo: IHandlerClass,
-    @Body() payload: { phoneNumber: string },
+    @Body() payload: SignInDto,
     @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
     try {
@@ -243,6 +245,34 @@ export class UserController {
         message: await i18n.translate('user.FAILED_GET_PROFILE'),
       };
     }
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('get-notification')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Successful Response',
+    type: ResponseVo,
+  })
+  async getUserNotification(
+    @Request() req,
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+    @I18n() i18n: I18nContext,
+  ) {
+    const notification = await this.userService.getUserNotification(
+      req.user.userId,
+    );
+
+    return {
+      statusCode: 200,
+      data: notification,
+      message: null,
+    };
   }
 
   @Secure(null, UserRole.USER)
@@ -418,18 +448,42 @@ export class UserController {
     }
   }
 
-  // TODO, this endpoint get all user info after login that required by frontend at once
   @Secure(null, UserRole.USER)
-  @Post('get-all-user-info')
-  async getAllUserInfo() {
-    // user - phoneNumber
-    // user - referralCode
-    // wallet - walletAddress
-    // wallet - balance
-    // wallet - redeemable
-    // wallet - xp
-    // credit - all available credit amount
-    // game - current epoch
-    // bet - all numbers(forecast & amount) for current epoch
+  @Get('get-referee-performance')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Successful Response',
+    type: ResponseVo,
+  })
+  async getRefereePerformance(
+    @Request() req,
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+    @I18n() i18n: I18nContext,
+    @Query('count') count: number,
+  ) {
+    try {
+
+      const phoneNumberAndRewardAmount = await this.userService.getRefereePerformance(
+        req.user.userId,
+        count
+      );
+      return {
+        statusCode: 200,
+        data: phoneNumberAndRewardAmount,
+        message: null,
+      };
+
+    } catch (error) {
+      return {
+        statusCode: 400,
+        data: null,
+        message: await i18n.translate('Failed to get referee performance.'),
+      };
+    }
   }
 }
