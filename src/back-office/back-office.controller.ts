@@ -1,11 +1,12 @@
-import { Controller, Get, Render } from '@nestjs/common';
+import { Controller, Get, Query, Render } from '@nestjs/common';
 import { BackOfficeService } from './back-office.service';
-import { ApiExcludeEndpoint } from '@nestjs/swagger';
+import { ApiExcludeEndpoint, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from 'src/config/config.service';
 import { Secure } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 
+@ApiTags('back-office')
 @Controller('back-office')
 export class BackOfficeController {
   constructor(
@@ -91,6 +92,41 @@ export class BackOfficeController {
     return {
       data: {
         appUrl: this.configService.get('APP_FRONTEND_URL'),
+      },
+    };
+  }
+
+  @Get('referralListing')
+
+  async referralListing() {
+    const result = await this.backOfficeService.getReferralListing();
+    return {
+      data: {
+        referrals: result.data,
+        currentPage: result.currentPage,
+        totalPages: result.totalPages,
+      },
+    };
+  }
+
+  @Get('betListing')
+  async betListing(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const result = await this.backOfficeService.bettingListing(
+      new Date(startDate),
+      new Date(endDate),
+      page,
+      limit,
+    );
+    return {
+      data: {
+        bets: result.data,
+        currentPage: result.currentPage,
+        totalPages: result.totalPages,
       },
     };
   }

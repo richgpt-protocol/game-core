@@ -10,10 +10,21 @@ import { PermissionModule } from 'src/permission/permission.module';
 import { SharedModule } from 'src/shared/shared.module';
 import { AdminModule } from 'src/admin/admin.module';
 import { Admin } from 'src/admin/entities/admin.entity';
+import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
+import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
+import { BetOrder } from 'src/game/entities/bet-order.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, UserWallet, Admin, WalletTx]),
+    TypeOrmModule.forFeature([
+      User,
+      UserWallet,
+      Admin,
+      WalletTx,
+      DepositTx,
+      GameUsdTx,
+      BetOrder,
+    ]),
     ConfigModule,
     PermissionModule,
     SharedModule,
