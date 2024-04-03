@@ -25,6 +25,7 @@ import { SMSService } from 'src/shared/services/sms.service';
 import { UserLoginDto } from 'src/auth/dto/login.dto';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
+import { UserNotification } from 'src/notification/entities/user-notification.entity';
 
 const serverUrls = [
   // TO CHANGE
@@ -147,12 +148,32 @@ export class UserService {
     }
   }
 
-  async getUserInfo(id: number) {
-    const { verificationCode, ...result } = await this.userRepository.findOneBy(
-      {
-        id,
-      },
-    );
+  async getUserInfo(userId: number) {
+    const {
+      id,
+      status,
+      isReset,
+      verificationCode,
+      loginAttempt,
+      isMobileVerified,
+      otpGenerateTime,
+      emailVerificationCode,
+      updatedDate,
+      updatedBy,
+      referralUserId,
+      ...result
+    } = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: {
+        wallet: true,
+      }
+    });
+
+    {
+      const {id, privateKey, updatedDate, userId, ...wallet} = result.wallet;
+      result.wallet = wallet as UserWallet;
+    }
+
     return result;
   }
 
@@ -656,5 +677,29 @@ export class UserService {
   ) {
     const isMatched = await bcrypt.compare(plainTextPassword, hashedPassword);
     return isMatched;
+  }
+
+  async getUserNotification(userId: number): Promise<UserNotification[]> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: { userNotifications: true },
+    });
+    return user.userNotifications;
+  }
+
+  async getRefereePerformance(userId: number, count: number) {
+    const referralTxs = await this.referralTxRepository.find({
+      where: { referralUserId: userId },
+      relations: { user: true },
+      order: { createdDate: 'DESC' },
+      take: count,
+    });
+
+    return referralTxs.map(referralTx => {
+      return {
+        phoneNumber: referralTx.user.phoneNumber,
+        rewardAmount: referralTx.rewardAmount,
+      }
+    });
   }
 }
