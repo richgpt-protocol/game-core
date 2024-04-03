@@ -233,4 +233,89 @@ export class WalletController {
       message: '',
     };
   }
+
+  @Secure(null, UserRole.USER)
+  @Get('get-wallet-tx')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async getWalletTx(
+    @Request() req,
+    // @IpAddress() ipAddress,
+    // @HandlerClass() classInfo: IHandlerClass,
+    // @I18n() i18n: I18nContext,
+    @Query('count') count: number,
+  ): Promise<ResponseVo<any>> {
+    const walletTxs = await this.walletService.getWalletTx(
+      req.user.userId,
+      count
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      data: walletTxs,
+      message: '',
+    };
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('get-user-ticket')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async getTicket(
+    @Request() req,
+    // @IpAddress() ipAddress,
+    // @HandlerClass() classInfo: IHandlerClass,
+    // @I18n() i18n: I18nContext,
+  ): Promise<ResponseVo<any>> {
+    const betOrders = await this.walletService.getTicket(
+      req.user.userId,
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      data: betOrders,
+      message: '',
+    };
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('get-point-history')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async getPointHistory(
+    @Request() req,
+    // @IpAddress() ipAddress,
+    // @HandlerClass() classInfo: IHandlerClass,
+    // @I18n() i18n: I18nContext,
+    @Query('count') count: number,
+  ): Promise<ResponseVo<any>> {
+    const pointTxs = await this.walletService.getPointHistory(
+      req.user.userId,
+      count
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      data: pointTxs,
+      message: '',
+    };
+  }
 }
