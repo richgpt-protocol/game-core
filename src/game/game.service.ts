@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { LessThan, MoreThan, Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -11,6 +11,7 @@ import { IHelper, ICore } from 'src/contract/Helper';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import * as dotenv from 'dotenv';
+import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 dotenv.config();
 
 @Injectable()
@@ -26,19 +27,10 @@ export class GameService {
     private betOrderRepository: Repository<BetOrder>,
     @InjectRepository(WalletTx)
     private walletTxRepository: Repository<WalletTx>,
+    @InjectRepository(ClaimDetail)
+    private claimDetalRepository: Repository<ClaimDetail>,
     private adminNotificationService: AdminNotificationService,
   ) {}
-
-  async getDrawResult(epoch: number) {
-    const game = await this.gameRepository.findOneBy({
-      epoch: epoch.toString(),
-    });
-    const drawResult = await this.drawResultRepository
-      .createQueryBuilder('row')
-      .where({ game })
-      .getOne();
-    return drawResult;
-  }
 
   // process of closing bet for current epoch, set draw result, and announce draw result
   // 1. GameService.setBetClose: scheduled at :00UTC, create new game, and also submit masked betOrder to Core contract
@@ -277,5 +269,118 @@ export class GameService {
     }
 
     return { error: null, data: games };
+  }
+
+  async getAvailableGames() {
+    const games = await this.gameRepository.findBy({ isClosed: false });
+
+    return games.map(game => {
+      // to save payload
+      return {
+        id: game.id,
+        epoch: game.epoch,
+        maxBetAmount: game.maxBetAmount,
+        minBetAmount: game.minBetAmount,
+        startDate: game.startDate,
+        endDate: game.endDate,
+      }
+    })
+  }
+
+  async getLeaderboard(count: number) {
+    // TODO: use better sql query
+
+    const claimDetails = await this.claimDetalRepository.find({
+      relations: {
+        walletTx: {
+          userWallet: true
+        },
+        betOrder: true,
+      }
+    })
+
+    const allObj: { [key: string]: number } = {}
+    for (const claimDetail of claimDetails) {
+      const walletAddress = claimDetail.walletTx.userWallet.walletAddress
+      if (!allObj.hasOwnProperty(walletAddress)) allObj[walletAddress] = 0
+      allObj[walletAddress] += Number(claimDetail.claimAmount)
+    }
+    const allSortedArray = Object.entries(allObj).sort((a, b) => b[1] - a[1])
+    const total = allSortedArray.length > count
+      ? allSortedArray.slice(0, count)
+      : allSortedArray
+
+    const currentDate = new Date()
+
+    const dailyObj: { [key: string]: number } = {}
+    for (const claimDetail of claimDetails) {
+      if (claimDetail.betOrder.createdDate.getTime() > (currentDate.getTime() - (24*60*60*1000))) {
+        const walletAddress = claimDetail.walletTx.userWallet.walletAddress
+        if (!dailyObj.hasOwnProperty(walletAddress)) dailyObj[walletAddress] = 0
+        dailyObj[walletAddress] += Number(claimDetail.claimAmount)
+      }
+    }
+    const dailySortedArray = Object.entries(dailyObj).sort((a, b) => b[1] - a[1])
+    const daily = dailySortedArray.length > count
+      ? dailySortedArray.slice(0, count)
+      : dailySortedArray
+
+    const weeklyObj: { [key: string]: number } = {}
+    for (const claimDetail of claimDetails) {
+      if (claimDetail.betOrder.createdDate.getTime() > (currentDate.getTime() - (7*24*60*60*1000))) {
+        const walletAddress = claimDetail.walletTx.userWallet.walletAddress
+        if (!weeklyObj.hasOwnProperty(walletAddress)) weeklyObj[walletAddress] = 0
+        weeklyObj[walletAddress] += Number(claimDetail.claimAmount)
+      }
+    }
+    const weeklySortedArray = Object.entries(weeklyObj).sort((a, b) => b[1] - a[1])
+    const weekly = weeklySortedArray.length > count
+      ? weeklySortedArray.slice(0, count)
+      : weeklySortedArray
+
+    const monthlyObj: { [key: string]: number } = {}
+    for (const claimDetail of claimDetails) {
+      if (claimDetail.betOrder.createdDate.getTime() > (currentDate.getTime() - (30*24*60*60*1000))) {
+        const walletAddress = claimDetail.walletTx.userWallet.walletAddress
+        if (!monthlyObj.hasOwnProperty(walletAddress)) monthlyObj[walletAddress] = 0
+        monthlyObj[walletAddress] += Number(claimDetail.claimAmount)
+      }
+    }
+    const monthlySortedArray = Object.entries(monthlyObj).sort((a, b) => b[1] - a[1])
+    const monthly = monthlySortedArray.length > count
+      ? monthlySortedArray.slice(0, count)
+      : monthlySortedArray
+
+    return {
+      total,
+      daily,
+      weekly,
+      monthly,
+    }
+  }
+
+  async getPastResult(count?: number, date?: Date, numberPair?: string) {
+    let drawResults;
+
+    if (date) {
+      count = 24;
+      drawResults = await this.drawResultRepository.find({
+        where: { createdDate: MoreThan(date) },
+        take: count,
+      });
+    }
+
+    if (numberPair) {
+      drawResults = await this.drawResultRepository.find({
+        where: { numberPair },
+        order: { id: 'DESC' },
+        take: count,
+      });
+    }
+
+    return drawResults.map(result => {
+      const {id, prizeIndex, ...rest} = result;
+      return rest;
+    });
   }
 }
