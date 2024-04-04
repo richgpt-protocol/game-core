@@ -1,6 +1,7 @@
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
+import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import {
   Column,
   CreateDateColumn,
@@ -61,6 +62,10 @@ export class PointTx {
   @OneToOne(() => BetOrder, (betOrder) => betOrder.pointTx)
   @JoinColumn()
   betOrder: BetOrder;
+
+  @OneToOne(() => WalletTx, (walletTx) => walletTx.pointTx)
+  @JoinColumn()
+  walletTx: WalletTx;
 
   @Column()
   campaignId: number;

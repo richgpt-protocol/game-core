@@ -30,6 +30,7 @@ import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { PointTx } from 'src/point/entities/point-tx.entity';
 
 dotenv.config();
 
@@ -148,6 +149,26 @@ export class BetService {
       );
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.retryCount = 0;
+
+      const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
+        where: {
+          walletId: userInfo.wallet.id,
+        },
+        order: {
+          id: 'DESC',
+        },
+      });
+      const pointTx = new PointTx();
+      pointTx.amount = 0; //TODO
+      pointTx.txType = 'DEPOSIT';
+      pointTx.walletId = userInfo.wallet.id;
+      pointTx.userWallet = userInfo.wallet;
+      pointTx.walletTx = walletTx;
+      pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
+      pointTx.endingBalance = pointTx.startingBalance + pointTx.amount;
+      // pointTx.campaignId = ; //TODO
+
+      await queryRunner.manager.save(pointTx);
 
       await queryRunner.manager.save(gameUsdTx);
 
