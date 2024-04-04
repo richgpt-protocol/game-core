@@ -25,6 +25,7 @@ import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { User } from 'src/user/entities/user.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
+import { PointTx } from 'src/point/entities/point-tx.entity';
 
 @Injectable()
 export class DepositService {
@@ -103,6 +104,24 @@ export class DepositService {
       const reloadTx = await this.reloadWallet(payload, +minimumNativeBalance);
       reloadTx.userWallet = userWallet;
       reloadTx.userWalletId = userWallet.id;
+
+      const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
+        where: {
+          walletId: userWallet.id,
+        },
+        order: {
+          createdDate: 'DESC',
+        },
+      });
+
+      const pointTx = new PointTx();
+      pointTx.amount = 0; //TODO
+      pointTx.txType = 'DEPOSIT';
+      pointTx.walletId = userWallet.id;
+      pointTx.userWallet = userWallet;
+      pointTx.walletTx = walletTx;
+      pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
+      pointTx.endingBalance = pointTx.startingBalance + pointTx.amount;
 
       await queryRunner.manager.save(reloadTx);
 

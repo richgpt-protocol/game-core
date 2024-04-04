@@ -25,6 +25,7 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
 import { Notification } from 'src/notification/entities/notification.entity';
 import { SharedModule } from 'src/shared/shared.module';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { PointTx } from 'src/point/entities/point-tx.entity';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
       UserNotification,
       Admin,
       ReferralTx,
+      PointTx,
     ]),
     // HttpModule,
     // AuditLogModule,
