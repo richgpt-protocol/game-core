@@ -130,4 +130,20 @@ export class BackOfficeController {
       },
     };
   }
+
+  @Get('salesReport')
+  async salesReport(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    const result = await this.backOfficeService.salesReport(
+      new Date(startDate),
+      new Date(endDate),
+    );
+    return {
+      data: {
+        bets: result.data
+      },
+    };
+  }
 }

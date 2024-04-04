@@ -427,4 +427,78 @@ export class BackOfficeService {
       totalPages: Math.ceil(totalBetOrdersCount / limit),
     };
   }
+
+  async salesReport(startDate: Date, endDate: Date) {
+    const betOrders = await this.betOrderRepository
+      .createQueryBuilder('betOrder')
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('betOrder.claimDetail', 'claimDetail')
+      .where('betOrder.createdDate BETWEEN :startDate AND :endDate', {
+        startDate,
+        endDate,
+      })
+      .andWhere('walletTx.status = :status', { status: 'S' })
+      .getManyAndCount();
+
+    const commissions = await this.walletTxRepository
+      .createQueryBuilder('walletTx')
+      .select('txAmount')
+      .addSelect('createdDate')
+      .where('walletTx.txType = :type', { type: 'REFERRAL' })
+      .andWhere('walletTx.createdDate BETWEEN :startDate AND :endDate', {
+        startDate,
+        endDate,
+      })
+      .getRawMany();
+
+    const resultByDate = {};
+    const start = startDate;
+    while (start < endDate) {
+      resultByDate[start.toDateString()] = {
+        totalBetAmount: 0,
+        betCount: 0,
+        userCount: 0,
+        totalPayout: 0,
+        totalPayoutRewards: 0,
+        commissionAmount:
+          commissions.find(
+            (_commision) =>
+              _commision.createdDate.toDateString() === start.toDateString(),
+          )?.txAmount || 0,
+      };
+      start.setDate(start.getDate() + 1);
+    }
+
+    const userByDate = {};
+    betOrders[0].map((betOrder) => {
+      const date = betOrder.createdDate.toDateString();
+      if (!userByDate[date]) {
+        userByDate[date] = new Set();
+      }
+
+      resultByDate[date].totalBetAmount +=
+        +betOrder.bigForecastAmount + +betOrder.smallForecastAmount;
+      resultByDate[date].betCount += 1;
+      resultByDate[date].userCount += userByDate[date].has(
+        betOrder.walletTx.userWallet.userId,
+      )
+        ? 0
+        : 1;
+      userByDate[date].add(betOrder.walletTx.userWallet.userId);
+
+      if (betOrder.claimDetail) {
+        resultByDate[date].totalPayoutRewards +=
+          (+betOrder.claimDetail.claimAmount || 0) +
+          (+betOrder.claimDetail.bonusAmount || 0);
+
+        resultByDate[date].totalPayout +=
+          +betOrder.claimDetail.claimAmount || 0;
+      }
+    });
+
+    return {
+      data: resultByDate,
+    };
+  }
 }
