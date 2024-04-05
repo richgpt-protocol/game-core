@@ -55,13 +55,13 @@ export class VerifyOtpDto {
 export class UpdateUserDto {
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   phoneNumber: string;
 
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  name: string;
+  // @ApiProperty()
+  // @IsString()
+  // @IsNotEmpty()
+  // name: string;
 
   @ApiProperty()
   @IsString()
@@ -69,10 +69,10 @@ export class UpdateUserDto {
   @IsEmail()
   backupEmailAddress: string;
 
-  @ApiProperty()
-  @IsString()
-  @IsOptional()
-  nric: string;
+  // @ApiProperty()
+  // @IsString()
+  // @IsOptional()
+  // nric: string;
 }
 
 export class GetUsersDto extends PaginationDto {
