@@ -72,7 +72,9 @@ export class CreditWalletTx {
   @JoinColumn()
   betOrder: BetOrder;
 
-  @Column()
+  @Column({
+    nullable: true,
+  })
   campaignId: number;
 
   @ManyToOne(() => Campaign, (campaign) => campaign.creditWalletTx)

@@ -15,6 +15,8 @@ import { BetService } from './bet.service';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { ConfigModule } from 'src/config/config.module';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
+import { PointService } from 'src/point/point.service';
+import { PointModule } from 'src/point/point.module';
 
 @Module({
   imports: [
@@ -32,8 +34,9 @@ import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
     PermissionModule,
     ConfigModule,
     ScheduleModule.forRoot(),
+    PointModule,
   ],
-  providers: [GameService, BetService],
+  providers: [GameService, BetService, PointService],
   controllers: [GameController],
   exports: [GameService],
 })

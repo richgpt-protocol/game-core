@@ -31,6 +31,7 @@ import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
+import { PointService } from 'src/point/point.service';
 
 dotenv.config();
 
@@ -60,6 +61,7 @@ export class BetService {
     private configService: ConfigService,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
+    private readonly pointService: PointService,
   ) {}
 
   maskingIntervalInSeconds = 120; //seconds before endTime of currentEpoch after which masking will start
@@ -136,6 +138,11 @@ export class BetService {
       walletTx.betOrders = betOrders;
       await queryRunner.manager.save(walletTx);
 
+      const xpPoints = await this.pointService.getBetPoints(
+        userInfo.id,
+        walletBalanceUsed,
+      );
+
       await queryRunner.manager.save(betOrders);
 
       const gameUsdTx = new GameUsdTx();
@@ -159,7 +166,7 @@ export class BetService {
         },
       });
       const pointTx = new PointTx();
-      pointTx.amount = 0; //TODO
+      pointTx.amount = xpPoints;
       pointTx.txType = 'DEPOSIT';
       pointTx.walletId = userInfo.wallet.id;
       pointTx.userWallet = userInfo.wallet;
@@ -408,7 +415,9 @@ export class BetService {
           betOrder.numberPair = numberPair.toString();
           betOrder.bigForecastAmount = bet.bigForecastAmount;
           betOrder.smallForecastAmount = bet.smallForecastAmount;
-          betOrder.game = allGames.find((game) => +game.epoch === epoch);
+          betOrder.game = allGames.find(
+            (game) => game.epoch === epoch.toString(),
+          );
           betOrder.gameId = betOrder.game.id;
           betOrder.walletTxId = walletTx.id;
 
@@ -1053,6 +1062,8 @@ export class BetService {
             await queryRunner.commitTransaction();
           }
         }
+
+        await queryRunner.commitTransaction();
       } catch (error) {
         console.error(error);
         await queryRunner.rollbackTransaction();

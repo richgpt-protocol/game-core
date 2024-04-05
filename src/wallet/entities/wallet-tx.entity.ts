@@ -89,10 +89,6 @@ export class WalletTx {
   @JoinColumn()
   redeemTx: RedeemTx;
 
-  @OneToOne(() => PointTx, (pointTx) => pointTx.walletTx)
-  @JoinColumn()
-  pointTx: PointTx;
-
   // This is a new field that used to keep track of the gameusd flows for each transaction type.
   // This is required for all the transaction types.
   @OneToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.walletTx)
