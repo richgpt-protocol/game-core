@@ -333,6 +333,7 @@ export class UserService {
   async isOtpGeneratedWithin60Seconds(otpGenerateTime?: Date, userId?: number) {
     if (!otpGenerateTime) {
       const user = await this.userRepository.findOneBy({ id: userId });
+      if (!user.otpGenerateTime) return false;
       otpGenerateTime = user.otpGenerateTime;
     }
     const otpReGenerateTime = otpGenerateTime;
