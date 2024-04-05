@@ -47,6 +47,7 @@ export interface PointRewardInterface extends Interface {
       | "Initialized"
       | "OwnershipTransferred"
       | "ReferralContractSet"
+      | "RewardPointUpdated"
       | "Upgraded"
       | "WhitelistSet"
   ): EventFragment;
@@ -182,6 +183,24 @@ export namespace ReferralContractSetEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace RewardPointUpdatedEvent {
+  export type InputTuple = [
+    user: AddressLike,
+    xp: BigNumberish,
+    action: BigNumberish
+  ];
+  export type OutputTuple = [user: string, xp: bigint, action: bigint];
+  export interface OutputObject {
+    user: string;
+    xp: bigint;
+    action: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace UpgradedEvent {
   export type InputTuple = [implementation: AddressLike];
   export type OutputTuple = [implementation: string];
@@ -291,7 +310,7 @@ export interface PointReward extends BaseContract {
   updateRewardPoint: TypedContractMethod<
     [_action: BigNumberish, params: BytesLike],
     [void],
-    "view"
+    "nonpayable"
   >;
 
   upgradeToAndCall: TypedContractMethod<
@@ -356,7 +375,7 @@ export interface PointReward extends BaseContract {
   ): TypedContractMethod<
     [_action: BigNumberish, params: BytesLike],
     [void],
-    "view"
+    "nonpayable"
   >;
   getFunction(
     nameOrSignature: "upgradeToAndCall"
@@ -389,6 +408,13 @@ export interface PointReward extends BaseContract {
     ReferralContractSetEvent.InputTuple,
     ReferralContractSetEvent.OutputTuple,
     ReferralContractSetEvent.OutputObject
+  >;
+  getEvent(
+    key: "RewardPointUpdated"
+  ): TypedContractEvent<
+    RewardPointUpdatedEvent.InputTuple,
+    RewardPointUpdatedEvent.OutputTuple,
+    RewardPointUpdatedEvent.OutputObject
   >;
   getEvent(
     key: "Upgraded"
@@ -437,6 +463,17 @@ export interface PointReward extends BaseContract {
       ReferralContractSetEvent.InputTuple,
       ReferralContractSetEvent.OutputTuple,
       ReferralContractSetEvent.OutputObject
+    >;
+
+    "RewardPointUpdated(address,uint256,uint8)": TypedContractEvent<
+      RewardPointUpdatedEvent.InputTuple,
+      RewardPointUpdatedEvent.OutputTuple,
+      RewardPointUpdatedEvent.OutputObject
+    >;
+    RewardPointUpdated: TypedContractEvent<
+      RewardPointUpdatedEvent.InputTuple,
+      RewardPointUpdatedEvent.OutputTuple,
+      RewardPointUpdatedEvent.OutputObject
     >;
 
     "Upgraded(address)": TypedContractEvent<
