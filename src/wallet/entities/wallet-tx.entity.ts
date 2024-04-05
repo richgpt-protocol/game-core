@@ -16,6 +16,7 @@ import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { RedeemTx } from './redeem-tx.entity';
 import { GameUsdTx } from './game-usd-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { PointTx } from 'src/point/entities/point-tx.entity';
 
 @Entity()
 export class WalletTx {
@@ -99,4 +100,7 @@ export class WalletTx {
 
   @OneToOne(() => ReferralTx, (referralTx) => referralTx.walletTx)
   referralTx: ReferralTx;
+
+  @OneToOne(() => PointTx, (pointTx) => pointTx.walletTx)
+  pointTx: PointTx;
 }
