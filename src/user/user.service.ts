@@ -42,6 +42,7 @@ type SetReferrerEvent = {
 
 type GenerateOtpEvent = {
   userId: number;
+  phoneNumber?: string;
 };
 
 @Injectable()
@@ -200,7 +201,7 @@ export class UserService {
 
     // check if last otp generated within 60 seconds
     if (user && user.otpGenerateTime) {
-      if (this.isOtpGeneratedWithin60Seconds(user.otpGenerateTime)) {
+      if (await this.isOtpGeneratedWithin60Seconds(user.otpGenerateTime)) {
         return { error: 'otp generated within 60 seconds', data: null };
       }
     }
@@ -290,7 +291,7 @@ export class UserService {
 
     // check if last otp generated within 60 seconds
     if (user.otpGenerateTime) {
-      if (this.isOtpGeneratedWithin60Seconds(user.otpGenerateTime)) {
+      if (await this.isOtpGeneratedWithin60Seconds(user.otpGenerateTime)) {
         return { error: 'otp generated within 60 seconds', data: null };
       }
     }
@@ -315,7 +316,8 @@ export class UserService {
         verificationCode: code,
         otpGenerateTime: new Date(),
       });
-      await this.smsService.sendUserRegistrationOTP(user.phoneNumber, user.otpMethod, code);
+      const phoneNumber = payload.phoneNumber ?? user.phoneNumber;
+      await this.smsService.sendUserRegistrationOTP(phoneNumber, user.otpMethod, code);
 
     } catch (err) {
       // inform admin for failed transaction
@@ -328,7 +330,11 @@ export class UserService {
     }
   }
 
-  private isOtpGeneratedWithin60Seconds(otpGenerateTime: Date) {
+  async isOtpGeneratedWithin60Seconds(otpGenerateTime?: Date, userId?: number) {
+    if (!otpGenerateTime) {
+      const user = await this.userRepository.findOneBy({ id: userId });
+      otpGenerateTime = user.otpGenerateTime;
+    }
     const otpReGenerateTime = otpGenerateTime;
     otpReGenerateTime.setSeconds(60);
     if (DateUtil.compareDate(new Date(), otpReGenerateTime) < 0) {
@@ -416,7 +422,7 @@ export class UserService {
     }
     // check if otp expired
     const otpExpiryTime = user.otpGenerateTime;
-    otpExpiryTime.setSeconds(60); // Verify within 60 seconds
+    otpExpiryTime.setMinutes(otpExpiryTime.getMinutes() + 1); // Verify within 1 minute
     if (DateUtil.compareDate(new Date(), otpExpiryTime) > 0) {
       return { error: 'user.OTP_EXPIRED', data: null };
     }
