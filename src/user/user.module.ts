@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '@nestjs/cache-manager';
 import { User } from './entities/user.entity';
 import { AuditLogModule } from 'src/audit-log/audit-log.module';
 import { PermissionModule } from 'src/permission/permission.module';
@@ -19,6 +20,7 @@ import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
     SharedModule,
     AdminModule,
     SseModule,
+    CacheModule.register(),
   ],
   providers: [UserService],
   controllers: [UserController],
