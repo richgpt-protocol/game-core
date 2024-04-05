@@ -53,10 +53,11 @@ export class ChatbotController {
       };
 
     } catch (error) {
+      console.error(error)
       return {
-        statusCode: HttpStatus.BAD_REQUEST,
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         data: {},
-        message: error,
+        message: "internal server error",
       };
     }
   }
