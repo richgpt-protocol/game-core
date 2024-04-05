@@ -26,6 +26,8 @@ import { Notification } from 'src/notification/entities/notification.entity';
 import { SharedModule } from 'src/shared/shared.module';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
+import { PointService } from 'src/point/point.service';
+import { PointModule } from 'src/point/point.module';
 
 @Module({
   imports: [
@@ -50,12 +52,14 @@ import { PointTx } from 'src/point/entities/point-tx.entity';
     AdminModule,
     ConfigModule,
     SharedModule,
+    PointModule,
     // SseModule,
   ],
   providers: [
     DepositService,
     WalletService,
     AdminNotificationService /* HttpService */,
+    PointService,
   ],
   controllers: [DepositController],
   exports: [],

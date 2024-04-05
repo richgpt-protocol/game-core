@@ -26,6 +26,7 @@ import { User } from 'src/user/entities/user.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { PointTx } from 'src/point/entities/point-tx.entity';
+import { PointService } from 'src/point/point.service';
 
 @Injectable()
 export class DepositService {
@@ -40,10 +41,13 @@ export class DepositService {
     private userRepository: Repository<User>,
     @InjectRepository(ReferralTx)
     private referralTxRepository: Repository<ReferralTx>,
+    @InjectRepository(UserWallet)
+    private userWalletRepository: Repository<UserWallet>,
     // private httpService: HttpService,
     private readonly configService: ConfigService,
     private adminNotificationService: AdminNotificationService,
     private dataSource: DataSource,
+    private readonly pointService: PointService,
   ) {}
 
   private referralCommissionByRank = (rank: number) => {
@@ -58,6 +62,24 @@ export class DepositService {
         throw new Error('Invalid rank');
     }
   };
+
+  async getAllAddress(page: number = 1, limit: number = 100) {
+    const wallets = await this.userWalletRepository
+      .createQueryBuilder('userWallet')
+      .select('userWallet.walletAddress')
+      .take(limit)
+      .skip((page - 1) * limit)
+      .getManyAndCount();
+
+    const walletAddresses = wallets[0].map((wallet) => wallet.walletAddress);
+
+    return {
+      addresses: walletAddresses,
+      total: wallets[1],
+      currentPage: page,
+      totalPages: Math.ceil(wallets[1] / limit),
+    };
+  }
 
   async processDeposit(payload: DepositDTO) {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -80,7 +102,6 @@ export class DepositService {
       walletTx.userWalletId = userWallet.id;
 
       const walletTxResult = await queryRunner.manager.save(walletTx);
-
       const depositTx = new DepositTx();
       depositTx.currency = payload.tokenAddress;
       depositTx.senderAddress = payload.depositerAddress;
@@ -114,8 +135,10 @@ export class DepositService {
         },
       });
 
+      const pointInfo = this.pointService.getDepositPoints(payload.amount);
       const pointTx = new PointTx();
-      pointTx.amount = 0; //TODO
+      pointTx.amount =
+        pointInfo.xp + (payload.amount * pointInfo.bonusPerc) / 100;
       pointTx.txType = 'DEPOSIT';
       pointTx.walletId = userWallet.id;
       pointTx.userWallet = userWallet;
@@ -137,10 +160,10 @@ export class DepositService {
         'Deposit Failed',
         false,
       );
-    } finally {
-      if (!queryRunner.isReleased) await queryRunner.release();
 
       throw new InternalServerErrorException('Error processing deposit');
+    } finally {
+      // if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
@@ -230,7 +253,7 @@ export class DepositService {
       const tx = await supplyWallet.sendTransaction({
         to: target,
         value: ethers.parseEther(amount.toString()),
-        gasLimit: gasLimit + gasLimit * BigInt(0.3),
+        gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
       });
       return tx;
     } catch (error) {
@@ -343,7 +366,7 @@ export class DepositService {
           tx.receiverAddress,
           parseUnits(tx.amount.toString(), 18), //18 decimals for gameUSD
           {
-            gasLimit: gasLimit + gasLimit * BigInt(0.3),
+            gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
           },
         );
 
@@ -413,7 +436,7 @@ export class DepositService {
    * 3. If the user doesn't have enough native balance but have enough token balance, initiate a reload transaction
    */
   @Cron('*/20 * * * * *')
-  private async handleEscrowTx() {
+  async handleEscrowTx() {
     if (this.isEscrowCronRunning) return;
     this.isEscrowCronRunning = true;
     const pendingDepositTxns = await this.depositRepository
@@ -483,7 +506,7 @@ export class DepositService {
               escrowAddress,
               parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals),
               {
-                gasLimit: gasLimit + gasLimit * BigInt(0.3),
+                gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
               },
             );
 
@@ -556,7 +579,7 @@ export class DepositService {
 
   isReloadCronRunning = false;
   @Cron('*/10 * * * * *')
-  private async handleReloadTx() {
+  async handleReloadTx() {
     if (this.isReloadCronRunning) return;
 
     this.isReloadCronRunning = true;

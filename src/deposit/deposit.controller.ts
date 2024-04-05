@@ -66,4 +66,18 @@ export class DepositController {
       message: 'Deposit',
     };
   }
+
+  @Get('all-wallet-addresses')
+  async getAllWalletAddresses(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.depositService.getAllAddress(page, limit);
+
+    return {
+      statusCode: HttpStatus.OK,
+      data: data,
+      message: '',
+    };
+  }
 }
