@@ -15,7 +15,7 @@ import { DrawResult } from 'src/game/entities/draw-result.entity';
     SharedModule,
   ],
   providers: [PointService],
-  exports: [PointService],
-//   controllers: [PointController],
+  exports: [PointService, TypeOrmModule.forFeature([ChatLog])],
+  //   controllers: [PointController],
 })
 export class PointModule {}
