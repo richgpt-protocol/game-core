@@ -182,12 +182,12 @@ export class ClaimService {
 
         // create pointTx for each betOrder
         const pointTx = this.pointTxRepository.create({
-          txType: 'PAYOUT',
+          txType: 'CLAIM',
           amount: pointAmount,
           startingBalance: null,
           endingBalance: null,
-          walletId: walletTx.userWalletId,
-          betOrder
+          userWallet,
+          walletTx,
         });
         await queryRunner.manager.save(pointTx);
 
