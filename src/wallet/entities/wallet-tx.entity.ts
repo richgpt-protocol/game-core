@@ -101,4 +101,7 @@ export class WalletTx {
 
   @OneToOne(() => ReferralTx, (referralTx) => referralTx.walletTx)
   referralTx: ReferralTx;
+
+  @OneToOne(() => PointTx, (pointTx) => pointTx.walletTx)
+  pointTx: PointTx;
 }
