@@ -1,10 +1,11 @@
-import { TelegramService } from './../shared/services/telegram.service';
+// import { TelegramService } from './../shared/services/telegram.service';
 import {
   BadRequestException,
   Body,
   Controller,
   Get,
   HttpStatus,
+  Inject,
   Param,
   Post,
   Put,
@@ -20,7 +21,7 @@ import { IpAddress } from 'src/shared/decorators/ip-address.decorator';
 import { Secure } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { IHandlerClass } from 'src/shared/interfaces/handler-class.interface';
-import { SMSService } from 'src/shared/services/sms.service';
+// import { SMSService } from 'src/shared/services/sms.service';
 import {
   ErrorResponseVo,
   ResponseListVo,
@@ -32,8 +33,12 @@ import {
   SignInDto,
   UpdateUserByAdminDto,
   UpdateUserDto,
+  VerifyOtpDto,
 } from './dto/register-user.dto';
 import { UserService } from './user.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 
 @ApiTags('User')
 @Controller('api/v1/user')
@@ -41,8 +46,10 @@ export class UserController {
   constructor(
     private userService: UserService,
     private auditLogService: AuditLogService,
-    private smsService: SMSService,
-    private telegramService: TelegramService,
+    // private smsService: SMSService,
+    // private telegramService: TelegramService,
+    private eventEmitter: EventEmitter2,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   @Post('sign-up')
@@ -146,56 +153,109 @@ export class UserController {
   }
 
   @Secure(null, UserRole.USER)
-  @Put('update-profile')
+  @Post('update-profile')
   @ApiHeader({
     name: 'x-custom-lang',
     description: 'Custom Language',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Updated Successful.',
-    type: ResponseVo,
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Failed to update.',
-    type: ResponseVo,
-  })
   async updateProfile(
     @Request() req,
-    @IpAddress() ipAddress,
-    @HandlerClass() classInfo: IHandlerClass,
     @Body() payload: UpdateUserDto,
-    @I18n() i18n: I18nContext,
+    // @IpAddress() ipAddress,
+    // @HandlerClass() classInfo: IHandlerClass,
+    // @I18n() i18n: I18nContext,
   ) {
-    const result = await this.userService.update(req.user.userId, {
-      phoneNumber: payload.phoneNumber,
-      firstName: payload.name,
-      backupEmailAddress: payload.backupEmailAddress,
-      nric: payload.nric,
-    });
+    const userId = req.user.userId;
+    const phoneNumber = payload.phoneNumber;
+    const backupEmailAddress = payload.backupEmailAddress;
+    if (!phoneNumber && !backupEmailAddress) {
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        data: {},
+        message: 'Please provide either phoneNumber or backupEmailAddress',
+      };
+    }
 
-    if (result.affected > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      await this.auditLogService.userInsert({
-        module: classInfo.class,
-        actions: classInfo.method,
-        userId: req.user.userId.toString(),
-        content: 'Update User Profile Successful: ' + JSON.stringify(payload),
-        ipAddress,
+    if (await this.userService.isOtpGeneratedWithin60Seconds(null, userId)) {
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        data: {},
+        message: 'otp generated within 60 seconds',
+      };
+    }
+
+    // save payload into cache to use in verifyOtp()
+    // the cache is valid for 60 seconds(60000 milliseconds), which is same expired time as the otp
+    await this.cacheManager.set(`${userId} phoneNumber`, phoneNumber, 60000);
+    await this.cacheManager.set(`${userId} backupEmailAddress`, backupEmailAddress, 60000);
+
+    // pass to handleGenerateOtpEvent() to generate and send otp
+    this.eventEmitter.emit('user.service.otp', { userId, phoneNumber });
+
+    return {
+      statusCode: HttpStatus.OK,
+      data: {},
+      message: 'otp sent',
+    };
+  }
+
+  // this /verify-otp can be used only if the user is logged in(with access token)
+  @Secure(null, UserRole.USER)
+  @Post('verify-otp')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  async verifyOtp(
+    @Request() req,
+    @Body() payload: VerifyOtpDto,
+    // @IpAddress() ipAddress,
+    // @HandlerClass() classInfo: IHandlerClass,
+    // @I18n() i18n: I18nContext,
+  ) {
+    try {
+      const userId = req.user.userId;
+      if (userId != payload.userId) {
+        return {
+          statusCode: HttpStatus.BAD_REQUEST,
+          data: {},
+          message: 'Invalid userId',
+        };
+      }
+
+      const user = await this.userService.getUserInfo(userId);
+      const res = await this.userService.verifyOtp({
+        phoneNumber: user.phoneNumber,
+        code: payload.otp,
+      });
+      if (res.error) {
+        return {
+          statusCode: HttpStatus.BAD_REQUEST,
+          data: {},
+          message: res.error,
+        };
+      }
+
+      // fetch payload from cache & update user profile
+      const phoneNumber = await this.cacheManager.get(`${userId} phoneNumber`);
+      const backupEmailAddress = await this.cacheManager.get(`${userId} backupEmailAddress`);
+      await this.userService.update(req.user.userId, {
+        phoneNumber: phoneNumber ?? user.phoneNumber,
+        backupEmailAddress: backupEmailAddress ?? user.emailAddress,
       });
 
-      const user = await this.userService.getUserInfo(req.user.userId);
       return {
-        statusCode: 200,
-        data: user,
-        message: await i18n.translate('user.PROFILE_UPDATE_SUCCESSFUL'),
-      };
-    } else {
-      return {
-        statusCode: 400,
+        statusCode: HttpStatus.CREATED,
         data: {},
-        message: await i18n.translate('user.PROFILE_UPDATE_FAILED'),
+        message: 'update profile successful',
+      };
+
+    } catch (error) {
+      console.error(error)
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: {},
+        message: 'Failed to update profile, please contact admin',
       };
     }
   }
