@@ -144,7 +144,7 @@ export class DepositService {
       pointTx.userWallet = userWallet;
       pointTx.walletTx = walletTx;
       pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
-      pointTx.endingBalance = pointTx.startingBalance + pointTx.amount;
+      pointTx.endingBalance = pointTx.startingBalance + +pointTx.amount;
 
       await queryRunner.manager.save(reloadTx);
 
@@ -293,9 +293,9 @@ export class DepositService {
       gameUsdTx.retryCount = 0;
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
-      gameUsdTx.receiverAddress =
-        userInfo.referralUser.referralUser.wallet.walletAddress;
+      gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
       gameUsdTx.walletTx = walletTx;
+      gameUsdTx.walletTxId = walletTx.id;
 
       await queryRunner.manager.save(gameUsdTx);
     } catch (error) {
@@ -313,7 +313,6 @@ export class DepositService {
 
     this.isGameUSDCronRunning = true;
 
-    this.isGameUSDCronRunning = true;
     const pendingGameUsdTx = await this.gameUsdTxRepository.find({
       where: {
         status: 'P',
@@ -380,6 +379,7 @@ export class DepositService {
           const walletTx = await queryRunner.manager
             .createQueryBuilder(WalletTx, 'walletTx')
             .innerJoinAndSelect('walletTx.userWallet', 'userWallet')
+            .innerJoinAndSelect('userWallet.user', 'user')
             .where('walletTx.id = :id', { id: tx.walletTxId })
             .getOne();
 
@@ -399,7 +399,7 @@ export class DepositService {
 
           walletTx.startingBalance = previousWalletTx?.endingBalance || 0;
           walletTx.endingBalance =
-            (previousWalletTx?.endingBalance || 0) + tx.amount;
+            (previousWalletTx?.endingBalance || 0) + +tx.amount;
 
           walletTx.userWallet.walletBalance = walletTx.endingBalance;
 
@@ -410,6 +410,8 @@ export class DepositService {
             referralTx.status = 'S';
             referralTx.userId = walletTx.userWallet.user.id;
             referralTx.walletTx = walletTx;
+            referralTx.referralUserId = walletTx.userWallet.user.id;
+            referralTx.referralUser = walletTx.userWallet.user;
             walletTx.userWallet.redeemableBalance = tx.amount;
 
             await queryRunner.manager.save(referralTx);
@@ -421,6 +423,7 @@ export class DepositService {
           await queryRunner.commitTransaction();
         }
       } catch (error) {
+        console.log('Error in gameUSD tx', error);
         await queryRunner.rollbackTransaction();
       } finally {
         if (!queryRunner.isReleased) await queryRunner.release();
@@ -528,6 +531,7 @@ export class DepositService {
             },
             {
               retryCount: 0,
+              status: 'P',
             },
           );
         }
