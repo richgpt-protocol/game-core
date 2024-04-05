@@ -148,11 +148,25 @@ export class ClaimService {
 
         // calculate pointAmount
         const prize = drawResult.prizeCategory;
-        const pointAmount = prize === '1' ? totalWinningAmount * 50000
-          : prize === '2' ? totalWinningAmount * 20000
-          : prize === '3' ? totalWinningAmount * 10000
-          : prize === 'S' ? totalWinningAmount * 3000
-          : totalWinningAmount * 1000; // prize === 'C'
+        const calculatePointAmount = (amount: number): number => {
+          return prize === '1' ? amount * 50000
+            : prize === '2' ? amount * 20000
+            : prize === '3' ? amount * 10000
+            : prize === 'S' ? amount * 3000
+            : amount * 1000; // prize === 'C'
+        }
+        let pointAmount = 0;
+        // it is possible that one numberPair has both big and small forecast(thus win both)
+        if (bigForecastWinAmount > 0) {
+          const betAmount = betOrder.bigForecastAmount;
+          pointAmount += calculatePointAmount(betAmount);
+        }
+        if (smallForecastWinAmount > 0) {
+          // smallForecastWinAmount is 0 when prize != '1' | '2' | '3'
+          // hence it is safe to use same calculatePointAmount()
+          const betAmount = betOrder.smallForecastAmount;
+          pointAmount += calculatePointAmount(betAmount);
+        }
 
         // create claimDetail
         const claimDetail = this.claimDetailRepository.create({
