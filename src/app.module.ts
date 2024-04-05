@@ -29,6 +29,7 @@ import { CampaignModule } from './campaign/campaign.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DepositModule } from './deposit/deposit.module';
+import { PointModule } from './point/point.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { DepositModule } from './deposit/deposit.module';
     }),
     ChatbotModule,
     ScheduleModule.forRoot(),
+    PointModule,
   ],
   controllers: [AppController],
   providers: [

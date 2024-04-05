@@ -10,7 +10,6 @@ import {
 import { Game } from './game.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
-import { PointTx } from 'src/point/entities/point-tx.entity';
 import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 
@@ -48,9 +47,6 @@ export class BetOrder {
   })
   availableClaim: boolean;
 
-  @Column()
-  txHash: string;
-
   @CreateDateColumn()
   createdDate: Date;
 
@@ -71,14 +67,13 @@ export class BetOrder {
   @ManyToOne(() => WalletTx, (walletTx) => walletTx.betOrders)
   walletTx: WalletTx;
 
-  @Column()
+  @Column({
+    nullable: true,
+  })
   creditWalletTxId: number;
 
   @OneToOne(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.betOrder)
   creditWalletTx: CreditWalletTx;
-
-  @OneToOne(() => PointTx, (pointTx) => pointTx.betOrder)
-  pointTx: PointTx;
 
   @OneToOne(() => ClaimDetail, (claimDetail) => claimDetail.betOrder)
   claimDetail: ClaimDetail;

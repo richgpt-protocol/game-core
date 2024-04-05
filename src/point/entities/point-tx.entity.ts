@@ -1,5 +1,5 @@
 import { Campaign } from 'src/campaign/entities/campaign.entity';
-import { BetOrder } from 'src/game/entities/bet-order.entity';
+import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import {
@@ -19,7 +19,7 @@ export class PointTx {
   id: number;
 
   @Column({
-    comment: 'PAYOUT, CAMPAIGN',
+    comment: 'CLAIM, CAMPAIGN, DEPOSIT, BET, CHAT, REFERRAL',
   })
   txType: string;
 
@@ -59,16 +59,30 @@ export class PointTx {
   @ManyToOne(() => UserWallet, (userWallet) => userWallet.pointTx)
   userWallet: UserWallet;
 
-  @OneToOne(() => BetOrder, (betOrder) => betOrder.pointTx)
+  // Used for CHAT
+  @Column({
+    nullable: true,
+  })
+  chatLogId: number;
+
+  @OneToOne(() => ChatLog, (chatLog) => chatLog.pointTx)
   @JoinColumn()
-  betOrder: BetOrder;
+  chatLog: ChatLog;
 
+  @Column({
+    nullable: true,
+  })
+  walletTxId: number;
 
+  // Used for CLAIM, DEPOSIT, BET, REFERRAL
   @OneToOne(() => WalletTx, (walletTx) => walletTx.pointTx)
   @JoinColumn()
   walletTx: WalletTx;
 
-  @Column()
+  // Used for CAMPAIGN
+  @Column({
+    nullable: true,
+  })
   campaignId: number;
 
   @ManyToOne(() => Campaign, (campaign) => campaign.pointTx)
