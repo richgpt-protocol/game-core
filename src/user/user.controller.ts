@@ -166,8 +166,8 @@ export class UserController {
     // @I18n() i18n: I18nContext,
   ) {
     const userId = req.user.userId;
-    const phoneNumber = payload.phoneNumber;
-    const backupEmailAddress = payload.backupEmailAddress;
+    const phoneNumber = payload.phoneNumber ?? null;
+    const backupEmailAddress = payload.backupEmailAddress?? null;
     if (!phoneNumber && !backupEmailAddress) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
@@ -241,7 +241,7 @@ export class UserController {
       const backupEmailAddress = await this.cacheManager.get(`${userId} backupEmailAddress`);
       await this.userService.update(req.user.userId, {
         phoneNumber: phoneNumber ?? user.phoneNumber,
-        backupEmailAddress: backupEmailAddress ?? user.emailAddress,
+        emailAddress: backupEmailAddress ?? user.emailAddress,
       });
 
       return {
