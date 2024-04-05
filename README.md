@@ -180,11 +180,12 @@ ticket history: /api/v1/wallet/get-user-ticket
 
 ### Change Email Address
 
-TODO
+//api/v1/user/update-profile 
+Note: both phoneNumber & backupEmailAddress are optional, but must provide either one
 
 ### Change Phone Number
 
-TODO
+/api/v1/user/verify-otp
 
 ### Level Reward
 
