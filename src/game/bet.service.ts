@@ -688,9 +688,11 @@ export class BetService {
 
       payload.walletTx.status = 'S';
       payload.walletTx.txHash = payload.tx.hash;
-      payload.walletTx.startingBalance = lastValidWalletTx.endingBalance;
+      payload.walletTx.startingBalance = lastValidWalletTx
+        ? lastValidWalletTx.endingBalance
+        : 0;
       payload.walletTx.endingBalance =
-        lastValidWalletTx.endingBalance - payload.gameUsdTx.amount;
+        payload.walletTx.startingBalance - payload.gameUsdTx.amount;
 
       const betOrders = payload.gameUsdTx.walletTx.betOrders;
 
@@ -776,7 +778,7 @@ export class BetService {
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = commisionAmount;
       gameUsdTx.status = 'P';
-      gameUsdTx.retryCount = 1;
+      gameUsdTx.retryCount = 0;
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
       gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
@@ -1059,7 +1061,7 @@ export class BetService {
           } else if (txStatus.status && txStatus.status != 1) {
             gameUsdTx.retryCount += 1;
             await queryRunner.manager.save(gameUsdTx);
-            await queryRunner.commitTransaction();
+            // await queryRunner.commitTransaction();
           }
         }
 
