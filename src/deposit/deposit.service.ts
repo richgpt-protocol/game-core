@@ -306,6 +306,220 @@ export class DepositService {
     }
   }
 
+  // Runs every 10 second.
+  // Sends the native tokens to the user wallet
+  isReloadCronRunning = false;
+  @Cron('*/10 * * * * *')
+  async handleReloadTx() {
+    if (this.isReloadCronRunning) return;
+
+    this.isReloadCronRunning = true;
+    const pendingReloadTx = await this.reloadTxRepository
+      .createQueryBuilder('reloadTx')
+      .innerJoinAndSelect('reloadTx.userWallet', 'userWallet')
+      .where('reloadTx.status IN (:...statuses)', { statuses: ['P', 'F'] })
+      .andWhere('reloadTx.retryCount <= :retryCount', { retryCount: 5 })
+      .getMany();
+
+    for (const tx of pendingReloadTx) {
+      console.log('Processing reload tx', tx);
+
+      try {
+        if (tx.retryCount >= 5) {
+          tx.status = 'F';
+          await this.reloadTxRepository.save(tx);
+
+          await this.adminNotificationService.setAdminNotification(
+            `Reload transaction after 5 times for reload.tx.entity: ${tx.id}`,
+            'RELOAD_FAILED_5_TIMES',
+            'Native token transfer failed',
+            false,
+          );
+
+          continue;
+        }
+
+        //send transaction
+        const onchainTx = await this.transferNative(
+          tx.userWallet.walletAddress,
+          tx.amount,
+          tx.chainId,
+        );
+        const receipt = await onchainTx.wait(1);
+
+        if (receipt.status == 1) {
+          tx.status = 'S';
+          tx.txHash = onchainTx.hash;
+          await this.reloadTxRepository.save(tx);
+        } else {
+          tx.retryCount += 1;
+          await this.reloadTxRepository.save(tx);
+        }
+      } catch (error) {
+        console.log('Error in reload tx', error);
+      }
+    }
+
+    this.isReloadCronRunning = false;
+  }
+
+
+  isEscrowCronRunning = false;
+  /**
+   * 1. Get all pending deposit transactions
+   * 2. For each transaction, check if the user has token balance and native balance, move the tokens to escrow
+   * 3. If the user doesn't have enough native balance but have enough token balance, initiate a reload transaction
+   */
+  @Cron('* * * * *')
+  async handleEscrowTx() {
+    if (this.isEscrowCronRunning) return;
+    this.isEscrowCronRunning = true;
+    const pendingDepositTxns = await this.depositRepository
+      .createQueryBuilder('depositTx')
+      .innerJoinAndSelect('depositTx.walletTx', 'walletTx')
+      .where('depositTx.status = :status', { status: 'P' })
+      .getMany();
+
+    for (const tx of pendingDepositTxns) {
+      console.log('Processing escrow tx', tx.id);
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      try {
+        if (tx.retryCount >= 5) {
+          tx.status = 'F';
+          await queryRunner.manager.save(tx);
+
+          await this.adminNotificationService.setAdminNotification(
+            `Transaction to escrow failed after 5 times for Deposit.tx.entity: ${tx.id}`,
+            'ESCROW_FAILED_5_TIMES',
+            'Transfer to Escrow Failed',
+            false,
+            tx.walletTxId,
+          );
+          continue;
+        }
+
+        const userWallet = await queryRunner.manager.findOne(UserWallet, {
+          where: {
+            id: tx.walletTx.userWalletId,
+          },
+        });
+
+        const provider = this.getProvider(tx.chainId);
+        const userSigner = new ethers.Wallet(userWallet.privateKey, provider);
+        const tokenContract = new ethers.Contract(
+          tx.currency,
+          [
+            `function transfer(address,uint256) external`,
+            `function balanceOf(address) external view returns (uint256)`,
+            `function decimals() external view returns (uint8)`,
+          ],
+          userSigner,
+        );
+
+        const escrowAddress = this.configService.get('ESCROW_ADDRESS');
+        let receipt, onchainEscrowTxHash;
+
+        //reaches catch block if there is not enough native balance.
+        try {
+          const [userBalance, tokenDecimals] = await Promise.all([
+            tokenContract.balanceOf(userWallet.walletAddress),
+            tokenContract.decimals(),
+          ]);
+
+          if (
+            userBalance >=
+            parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals)
+          ) {
+            const gasLimit = await tokenContract.transfer.estimateGas(
+              escrowAddress,
+              parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals),
+            );
+            const onchainEscrowTx = await tokenContract.transfer(
+              escrowAddress,
+              parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals),
+              {
+                gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
+              },
+            );
+
+            receipt = await onchainEscrowTx.wait(1);
+            onchainEscrowTxHash = onchainEscrowTx.hash;
+          } else {
+            console.log('skipping escrow tx', tx.id);
+          }
+        } catch (error) {
+          //user doesn't have enough native balance, but has enough token balance.
+          //trigger the failed reload tx
+
+          //so incase of error, only need to set the deposit tx's status and retry
+          console.log('Error in escrow tx, retrying reload txns', error);
+
+          const reloadTx = await queryRunner.manager.findOne(ReloadTx, {
+            where: {
+              status: 'F',
+              retryCount: MoreThanOrEqual(5),
+              userWalletId: userWallet.id,
+            },
+          });
+
+          if (reloadTx) {
+            reloadTx.retryCount = 0;
+            reloadTx.status = 'P';
+
+            await queryRunner.manager.save(ReloadTx, reloadTx);
+          }
+        }
+
+        console.log(
+          'receipt',
+          receipt,
+          'onchainEscrowTxHash',
+          onchainEscrowTxHash,
+        );
+
+        if (receipt && receipt.status == 1) {
+          tx.status = 'S';
+          tx.txHash = onchainEscrowTxHash;
+          tx.isTransferred = true;
+
+          const gameUsdTx = new GameUsdTx();
+          gameUsdTx.amount = tx.walletTx.txAmount;
+          gameUsdTx.status = 'P';
+          gameUsdTx.txHash = null;
+          gameUsdTx.retryCount = 0;
+          gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+          gameUsdTx.senderAddress = this.configService.get(
+            'DEPOSIT_BOT_ADDRESS',
+          );
+          gameUsdTx.receiverAddress = userWallet.walletAddress;
+          gameUsdTx.walletTx = tx.walletTx;
+          gameUsdTx.walletTxId = tx.walletTx.id;
+          await queryRunner.manager.save(tx);
+          await queryRunner.manager.save(gameUsdTx);
+
+          await this.handleReferralFlow(userWallet.id, tx.walletTx.txAmount);
+        } else if (receipt && receipt.status != 1) {
+          tx.retryCount += 1;
+          await queryRunner.manager.save(tx);
+        }
+
+        await queryRunner.commitTransaction();
+      } catch (err) {
+        console.log('Error in escrow tx', err);
+        await queryRunner.rollbackTransaction();
+      } finally {
+        if (!queryRunner.isReleased) await queryRunner.release();
+      }
+    }
+
+    this.isEscrowCronRunning = false;
+  }
+
+  // Runs every 10 seconds
+  // Sends the gameUSD tokens to the user wallet
   isGameUSDCronRunning = false;
   @Cron('*/10 * * * * *')
   async handleGameUsdTx() {
@@ -431,213 +645,16 @@ export class DepositService {
     }
     this.isGameUSDCronRunning = false;
   }
-
-  isEscrowCronRunning = false;
-  /**
-   * 1. Get all pending deposit transactions
-   * 2. For each transaction, check if the user has token balance and native balance, move the tokens to escrow
-   * 3. If the user doesn't have enough native balance but have enough token balance, initiate a reload transaction
-   */
-  @Cron('*/20 * * * * *')
-  async handleEscrowTx() {
-    if (this.isEscrowCronRunning) return;
-    this.isEscrowCronRunning = true;
-    const pendingDepositTxns = await this.depositRepository
-      .createQueryBuilder('depositTx')
-      .innerJoinAndSelect('depositTx.walletTx', 'walletTx')
-      .where('depositTx.status = :status', { status: 'P' })
-      .getMany();
-
-    for (const tx of pendingDepositTxns) {
-      console.log('Processing escrow tx', tx.id);
-      const queryRunner = this.dataSource.createQueryRunner();
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
-
-      try {
-        if (tx.retryCount >= 5) {
-          tx.status = 'F';
-          await queryRunner.manager.save(tx);
-
-          await this.adminNotificationService.setAdminNotification(
-            `Transaction to escrow failed after 5 times for Deposit.tx.entity: ${tx.id}`,
-            'ESCROW_FAILED_5_TIMES',
-            'Transfer to Escrow Failed',
-            false,
-            tx.walletTxId,
-          );
-          continue;
-        }
-
-        const userWallet = await queryRunner.manager.findOne(UserWallet, {
-          where: {
-            id: tx.walletTx.userWalletId,
-          },
-        });
-
-        const provider = this.getProvider(tx.chainId);
-        const userSigner = new ethers.Wallet(userWallet.privateKey, provider);
-        const tokenContract = new ethers.Contract(
-          tx.currency,
-          [
-            `function transfer(address,uint256) external`,
-            `function balanceOf(address) external view returns (uint256)`,
-            `function decimals() external view returns (uint8)`,
-          ],
-          userSigner,
-        );
-
-        const escrowAddress = this.configService.get('ESCROW_ADDRESS');
-        let receipt, onchainEscrowTxHash;
-
-        //reaches catch block if there is not enough native balance.
-        try {
-          const [userBalance, tokenDecimals] = await Promise.all([
-            tokenContract.balanceOf(userWallet.walletAddress),
-            tokenContract.decimals(),
-          ]);
-
-          if (
-            userBalance >=
-            parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals)
-          ) {
-            const gasLimit = await tokenContract.transfer.estimateGas(
-              escrowAddress,
-              parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals),
-            );
-            const onchainEscrowTx = await tokenContract.transfer(
-              escrowAddress,
-              parseUnits(tx.walletTx.txAmount.toString(), tokenDecimals),
-              {
-                gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
-              },
-            );
-
-            receipt = await onchainEscrowTx.wait(1);
-            onchainEscrowTxHash = onchainEscrowTx.hash;
-          } else {
-            console.log('skipping escrow tx', tx.id);
-          }
-        } catch (error) {
-          //user doesn't have enough native balance, but has enough token balance.
-          //trigger failed reload tx
-          console.log('Error in escrow tx, retrying reload txns', error);
-
-          await queryRunner.manager.update(
-            ReloadTx,
-            {
-              status: 'F',
-              userWalletId: userWallet.id,
-            },
-            {
-              retryCount: 0,
-              status: 'P',
-            },
-          );
-        }
-
-        console.log(
-          'receipt',
-          receipt,
-          'onchainEscrowTxHash',
-          onchainEscrowTxHash,
-        );
-
-        if (receipt && receipt.status == 1) {
-          tx.status = 'S';
-          tx.txHash = onchainEscrowTxHash;
-          tx.isTransferred = true;
-
-          const gameUsdTx = new GameUsdTx();
-          gameUsdTx.amount = tx.walletTx.txAmount;
-          gameUsdTx.status = 'P';
-          gameUsdTx.txHash = null;
-          gameUsdTx.retryCount = 0;
-          gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
-          gameUsdTx.senderAddress = this.configService.get(
-            'DEPOSIT_BOT_ADDRESS',
-          );
-          gameUsdTx.receiverAddress = userWallet.walletAddress;
-          gameUsdTx.walletTx = tx.walletTx;
-          gameUsdTx.walletTxId = tx.walletTx.id;
-          await queryRunner.manager.save(tx);
-          await queryRunner.manager.save(gameUsdTx);
-
-          await this.handleReferralFlow(userWallet.id, tx.walletTx.txAmount);
-        } else if (receipt && receipt.status != 1) {
-          tx.retryCount += 1;
-          await queryRunner.manager.save(tx);
-        }
-
-        await queryRunner.commitTransaction();
-      } catch (err) {
-        console.log('Error in escrow tx', err);
-        await queryRunner.rollbackTransaction();
-      } finally {
-        if (!queryRunner.isReleased) await queryRunner.release();
-      }
-    }
-
-    this.isEscrowCronRunning = false;
-  }
-
-  isReloadCronRunning = false;
-  @Cron('*/10 * * * * *')
-  async handleReloadTx() {
-    if (this.isReloadCronRunning) return;
-
-    this.isReloadCronRunning = true;
-    const pendingReloadTx = await this.reloadTxRepository
-      .createQueryBuilder('reloadTx')
-      .innerJoinAndSelect('reloadTx.userWallet', 'userWallet')
-      .where('reloadTx.status = :status', { status: 'P' })
-      .getMany();
-
-    for (const tx of pendingReloadTx) {
-      console.log('Processing reload tx', tx);
-      const queryRunner = this.dataSource.createQueryRunner();
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
-
-      try {
-        if (tx.retryCount >= 5) {
-          tx.status = 'F';
-          await this.reloadTxRepository.save(tx);
-
-          await this.adminNotificationService.setAdminNotification(
-            `Reload transaction after 5 times for reload.tx.entity: ${tx.id}`,
-            'RELOAD_FAILED_5_TIMES',
-            'Native token transfer failed',
-            false,
-          );
-
-          continue;
-        }
-
-        //send transaction
-        const onchainTx = await this.transferNative(
-          tx.userWallet.walletAddress,
-          tx.amount,
-          tx.chainId,
-        );
-        const receipt = await onchainTx.wait(1);
-
-        if (receipt.status == 1) {
-          tx.status = 'S';
-          tx.txHash = onchainTx.hash;
-          await this.reloadTxRepository.save(tx);
-        } else {
-          tx.retryCount += 1;
-          await this.reloadTxRepository.save(tx);
-        }
-      } catch (error) {
-        console.log('Error in reload tx', error);
-        await queryRunner.rollbackTransaction();
-      } finally {
-        if (!queryRunner.isReleased) await queryRunner.release();
-      }
-    }
-
-    this.isReloadCronRunning = false;
-  }
 }
+
+
+/**
+ * Flow
+ * 1. Process all the relaod transactions first
+ * 2. Process all the deposit transactions every one minute.
+ *     - In case there is no enough native balance, initiates/restarts the reload transaction.
+ *     - In case there is no enough token balance, skips the transaction.
+ *     - In case of success, transfer the gameUSD txns is added to the db.
+ * 3. Process all the gameUSD transactions every 10 seconds.
+ * 
+ */
