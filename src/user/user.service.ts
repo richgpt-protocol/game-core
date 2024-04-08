@@ -188,7 +188,7 @@ export class UserService {
 
     // check if referralCode valid
     let referralUserId = null;
-    if (payload.referralCode) {
+    if (payload.referralCode !== null) {
       const referralUser = await this.userRepository.findOne({
         where: { referralCode: payload.referralCode },
         relations: { wallet: true },

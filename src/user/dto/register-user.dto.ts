@@ -26,8 +26,9 @@ export class RegisterUserDto {
 
   @ApiProperty()
   @IsString()
-  @IsOptional()
-  referralCode?: string;
+  // refer https://trello.com/c/wdYkNJjn
+  // @IsOptional()
+  referralCode: string;
 
   @ApiProperty()
   @IsString()
