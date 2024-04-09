@@ -27,6 +27,7 @@ import { WalletlModule } from './wallet/wallet.module';
 import { GameModule } from './game/game.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
+import { InternalTransferModule } from './internal-transfer/internal-transfer.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ChatbotModule } from './chatbot/chatbot.module';
     WalletlModule,
     GameModule,
     CampaignModule,
+    InternalTransferModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
