@@ -8,6 +8,7 @@ import {
   Request,
 } from '@nestjs/common';
 import {
+  ApiBody,
   ApiHeader,
   ApiParam,
   ApiQuery,
@@ -180,6 +181,23 @@ export class GameController {
       statusCode: HttpStatus.OK,
       data,
       message: 'get bets success',
+    };
+  }
+
+  @Post('estimate-bet-amount')
+  @ApiBody({
+    required: true,
+    type: BetDto,
+    isArray: true,
+  })
+  async estimateBetAmount(@Body() bets: BetDto[]) {
+    const data = await this.betService.estimateBetAmount(bets);
+    return {
+      statusCode: HttpStatus.OK,
+      data: {
+        value: data,
+      },
+      message: '',
     };
   }
 }

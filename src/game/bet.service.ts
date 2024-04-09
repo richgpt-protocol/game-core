@@ -104,6 +104,38 @@ export class BetService {
     }
   }
 
+  async estimateBetAmount(payload: BetDto[]): Promise<number> {
+    try {
+      let totalAmount = 0;
+
+      payload = this._formatBets(payload);
+
+      payload.map((bet) => {
+        const numberPairs = new Set();
+        numberPairs.add(bet.numberPair);
+        if (bet.isPermutation) {
+          const numberPairsGenerated = this._generatePermutations(
+            bet.numberPair,
+          );
+          numberPairsGenerated.forEach((numberPair) =>
+            numberPairs.add(numberPair),
+          );
+        }
+
+        console.log(numberPairs.size);
+
+        totalAmount +=
+          (+bet.bigForecastAmount + +bet.smallForecastAmount) *
+          (bet.epochs.length * numberPairs.size);
+      });
+
+      return totalAmount;
+    } catch (error) {
+      console.error(error);
+      throw new BadRequestException('Error in estimateBetAmount');
+    }
+  }
+
   async bet(userId: number, payload: BetDto[]): Promise<any> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -115,6 +147,8 @@ export class BetService {
         .leftJoinAndSelect('user.wallet', 'wallet')
         .where('user.id = :userId', { userId })
         .getOne();
+
+      payload = this._formatBets(payload);
 
       await this.validateBets(payload);
 
@@ -200,6 +234,22 @@ export class BetService {
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
+  }
+
+  private _formatBets(payload: BetDto[]): BetDto[] {
+    return payload.map((bet) => {
+      if (bet.numberPair.length > 4) {
+        throw new BadRequestException('Invalid number pair');
+      }
+
+      return {
+        ...bet,
+        numberPair:
+          bet.numberPair.length < 4
+            ? bet.numberPair.padStart(4, '0')
+            : bet.numberPair,
+      };
+    });
   }
   private async validateBets(payload: BetDto[]) {
     const currentEpoch = await this._getCurrentEpoch();
@@ -451,12 +501,14 @@ export class BetService {
   }
 
   private _generatePermutations(numberPair: string): Array<string> {
-    if (numberPair.length !== 4) {
+    if (numberPair.length < 4) {
       numberPair = numberPair.padStart(4, '0');
+    } else if (numberPair.length > 4) {
+      throw new BadRequestException('Invalid number pair');
     }
-    const numbers = numberPair.replace(/^0+/, '').split(''); //remove leading zeros if any
 
-    return this._permutations(numbers, 4, 24);
+    console.log(`numberPair: ${numberPair}`);
+    return this._permutations(numberPair, 4, 24);
   }
 
   //   private _generatePermutations(
@@ -493,8 +545,9 @@ export class BetService {
         results.push(res);
         if (results.length === limit) return results; // Stop when limit is reached
       } else {
+        const restLetters = letters.slice(0, i).concat(letters.slice(i + 1)); // Exclude current letter
         const rest = this._permutations(
-          letters,
+          restLetters,
           size - 1,
           limit - results.length,
         );
