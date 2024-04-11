@@ -592,8 +592,8 @@ export class DepositService {
 
           const walletTx = await queryRunner.manager
             .createQueryBuilder(WalletTx, 'walletTx')
-            .innerJoinAndSelect('walletTx.userWallet', 'userWallet')
-            .innerJoinAndSelect('userWallet.user', 'user')
+            .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+            .leftJoinAndSelect('userWallet.user', 'user')
             .where('walletTx.id = :id', { id: tx.walletTxId })
             .getOne();
 
