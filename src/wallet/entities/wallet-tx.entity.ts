@@ -17,6 +17,7 @@ import { RedeemTx } from './redeem-tx.entity';
 import { GameUsdTx } from './game-usd-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
+import { InternalTransfer } from 'src/internal-transfer/entities/internal-transfer.entity';
 
 @Entity()
 export class WalletTx {
@@ -24,7 +25,7 @@ export class WalletTx {
   id: number;
 
   @Column({
-    comment: 'DEPOSIT, PLAY, CLAIM, REDEEM, REFERRAL',
+    comment: 'DEPOSIT, PLAY, CLAIM, REDEEM, REFERRAL, INTERNAL_TRANSFER',
   })
   txType: string;
 
@@ -94,8 +95,7 @@ export class WalletTx {
 
   // This is a new field that used to keep track of the gameusd flows for each transaction type.
   // This is required for all the transaction types.
-  @OneToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.walletTx)
-  @JoinColumn()
+  @ManyToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.walletTxs)
   gameUsdTx: GameUsdTx;
 
   @OneToOne(() => ReferralTx, (referralTx) => referralTx.walletTx)
@@ -103,4 +103,18 @@ export class WalletTx {
 
   @OneToOne(() => PointTx, (pointTx) => pointTx.walletTx)
   pointTx: PointTx;
+
+  @OneToOne(
+    () => InternalTransfer,
+    (internalTransfer) => internalTransfer.senderWalletTxId,
+  )
+  @JoinColumn()
+  internalTransferSender: InternalTransfer;
+
+  @OneToOne(
+    () => InternalTransfer,
+    (internalTransfer) => internalTransfer.receiverWalletTxId,
+  )
+  @JoinColumn()
+  internalTransferReceiver: InternalTransfer;
 }

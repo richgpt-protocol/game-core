@@ -27,6 +27,7 @@ import { WalletlModule } from './wallet/wallet.module';
 import { GameModule } from './game/game.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
+import { InternalTransferModule } from './internal-transfer/internal-transfer.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -41,6 +42,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     WalletlModule,
     GameModule,
     CampaignModule,
+    InternalTransferModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
