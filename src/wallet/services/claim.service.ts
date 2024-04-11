@@ -82,6 +82,7 @@ export class ClaimService {
     }
 
     // create walletTx
+    const userWallet = await this.userWalletRepository.findOneBy({ userId });
     const walletTx = this.walletTxRepository.create({
       txType: 'CLAIM',
       txAmount: 0,
@@ -89,14 +90,13 @@ export class ClaimService {
       status: 'P',
       startingBalance: null,
       endingBalance: null,
-      userWalletId: userId,
+      userWalletId: userWallet.id,
       claimDetails: [],
       gameUsdTx: null,
     });
     await this.walletTxRepository.save(walletTx);
 
     // create gameUsdTx
-    const userWallet = await this.userWalletRepository.findOneBy({ userId });
     const gameUsdTx = this.gameUsdTxRepository.create({
       amount: 0,
       chainId: Number(process.env.OPBNB_CHAIN_ID),
@@ -257,6 +257,13 @@ export class ClaimService {
         betOrderIds: betOrders.map(betOrder => betOrder.id),
       }
       this.eventEmitter.emit('wallet.claim', eventPayload);
+
+      // check native token balance for user wallet
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        userWallet.walletAddress,
+        Number(process.env.OPBNB_CHAIN_ID),
+      );
 
       await queryRunner.commitTransaction();
 

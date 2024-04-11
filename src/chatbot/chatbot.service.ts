@@ -263,8 +263,8 @@ export class ChatbotService {
 
       // set point reward on-chain
       const provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
-      const signer = new ethers.Wallet(process.env.POINT_REWARD_BOT_PRIVATE_KEY, provider);
-      const pointRewardContract = PointReward__factory.connect(process.env.POINT_REWARD_CONTRACT_ADDRESS, signer);
+      const pointRewardBot = new ethers.Wallet(process.env.POINT_REWARD_BOT_PRIVATE_KEY, provider);
+      const pointRewardContract = PointReward__factory.connect(process.env.POINT_REWARD_CONTRACT_ADDRESS, pointRewardBot);
       const txResponse = await pointRewardContract.updateRewardPoint(
         3, // Action.OtherReward
         ethers.AbiCoder.defaultAbiCoder().encode(
@@ -273,6 +273,13 @@ export class ChatbotService {
           [userWallet.walletAddress, ethers.parseEther('1')]
         ),
         { gasLimit: 50000 }, // gasLimit increased by 30%
+      );
+
+      // check native token balance for point reward bot
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        pointRewardBot.address,
+        Number(process.env.OPBNB_CHAIN_ID),
       );
 
       const txReceipt = await txResponse.wait();

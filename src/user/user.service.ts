@@ -486,6 +486,13 @@ export class UserService {
             referrerWalletAddress,
             { gasLimit: 70000 },
           );
+          
+          // check native token balance for wallet creation bot
+          this.eventEmitter.emit(
+            'gas.service.reload',
+            walletCreationBot.address,
+            Number(process.env.OPBNB_CHAIN_ID),
+          );
 
           // create referralTx
           const referralTx = this.referralTxRepository.create({

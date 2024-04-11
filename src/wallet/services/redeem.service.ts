@@ -243,7 +243,7 @@ export class RedeemService {
 
         // send notification to admin for manual review
         this.adminNotificationService.setAdminNotification(
-          `User ${userId} has requested redeem for amount ${payload.amount}. Please review.`,
+          `User ${userId} has requested redeem for amount ${payload.amount}, please review. redeemTxId: ${redeemTx.id}`,
           'info',
           'Redeem Request',
           true
@@ -327,6 +327,13 @@ export class RedeemService {
             { gasLimit: 100000 } // increased by ~30% from actual gas used
           );
           await txResponse.wait();
+
+          // check native token balance for user wallet
+          this.eventEmitter.emit(
+            'gas.service.reload',
+            userWallet.walletAddress,
+            Number(process.env.OPBNB_CHAIN_ID),
+          );
         }
 
         // execute redeem() on Redeem contract
@@ -334,7 +341,14 @@ export class RedeemService {
         const txResponse = await redeemContract.redeem(
           ethers.parseEther(Number(redeemTx.amount).toString()),
           redeemTx.receiverAddress,
-          { gasLimit: 70000 } // increased by ~30% from actual gas used
+          { gasLimit: 100000 } // increased by ~30% from actual gas used
+        );
+
+        // check native token balance for user wallet
+        this.eventEmitter.emit(
+          'gas.service.reload',
+          userWallet.walletAddress,
+          Number(process.env.OPBNB_CHAIN_ID),
         );
 
         // update txHash for walletTx & gameUsdTx
@@ -548,6 +562,13 @@ export class RedeemService {
           { gasLimit: 120000 } // increased by ~30% from actual gas used
         );
         const txReceipt = await txResponse.wait();
+
+        // check native token balance for payout bot
+        this.eventEmitter.emit(
+          'gas.service.reload',
+          payoutBotSigner.address,
+          redeemTx.chainId,
+        );
 
         // update signature, txHash & fromAddress for redeemTx
         redeemTx.payoutTxHash = txReceipt.hash;
