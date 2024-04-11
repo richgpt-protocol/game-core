@@ -24,8 +24,19 @@ import { BetOrder } from './entities/bet-order.entity';
 import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 import { ConfigService } from 'src/config/config.service';
 
-import { Contract, JsonRpcProvider, Wallet, parseUnits } from 'ethers';
-import { Core__factory, Helper__factory } from 'src/contract';
+import {
+  Contract,
+  JsonRpcProvider,
+  MaxUint256,
+  Wallet,
+  parseUnits,
+} from 'ethers';
+import {
+  Core__factory,
+  GameUSDPool__factory,
+  GameUSD__factory,
+  Helper__factory,
+} from 'src/contract';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
@@ -384,8 +395,8 @@ export class BetService {
         bet.creditWalletTx = creditWalletTxn;
       } else {
         bet.creditWalletTx = null;
-        totalBetAmount += bet.bigForecastAmount + bet.smallForecastAmount;
-        walletBalanceUsed += bet.bigForecastAmount + bet.smallForecastAmount;
+        totalBetAmount += +bet.bigForecastAmount + +bet.smallForecastAmount;
+        walletBalanceUsed += +bet.bigForecastAmount + +bet.smallForecastAmount;
       }
     });
 
@@ -560,6 +571,52 @@ export class BetService {
     return results;
   }
 
+  private async _checkAllowanceAndApprove(
+    userSigner: Wallet,
+    allowanceNeeded: bigint,
+  ) {
+    try {
+      const coreContractAddr = this.configService.get('CORE_CONTRACT');
+      const gmaeUsdContract = GameUSD__factory.connect(
+        this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
+        userSigner,
+      );
+
+      const allowance = await gmaeUsdContract.allowance(
+        userSigner.address,
+        coreContractAddr,
+      );
+
+      if (allowanceNeeded != BigInt(0) && allowance < allowanceNeeded) {
+        const estimatedGasCost = await gmaeUsdContract
+          .connect(userSigner)
+          .approve.estimateGas(coreContractAddr, MaxUint256);
+        const tx = await gmaeUsdContract
+          .connect(userSigner)
+          .approve(coreContractAddr, MaxUint256, {
+            gasLimit:
+              estimatedGasCost + (estimatedGasCost * BigInt(30)) / BigInt(100),
+          });
+
+        await tx.wait();
+        const txStatus = await userSigner.provider.getTransactionReceipt(
+          tx.hash,
+        );
+
+        // console.log(txStatus);
+
+        if (txStatus.status === 1) {
+          console.log('approved');
+        } else {
+          throw new Error('Error approving');
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      throw new Error('Error in approve');
+    }
+  }
+
   private async _betWithCredit(
     payload: BetOrder[],
     creditUsed: number,
@@ -573,12 +630,15 @@ export class BetService {
       helperSigner,
     );
 
+    let totalBetAmount = 0;
     const bets = [];
     payload.map((bet) => {
       const betAmount =
         bet.smallForecastAmount <= 0
           ? bet.bigForecastAmount
           : bet.smallForecastAmount;
+
+      totalBetAmount += +betAmount;
 
       bets.push({
         epoch: bet.game.epoch,
@@ -594,11 +654,19 @@ export class BetService {
       credit: parseUnits(creditUsed.toString(), 18),
     };
 
-    const gasLimit =
-      await helperContract.betWithCredit.estimateGas(betWithCreditParams);
-    const tx = await helperContract.betWithCredit(betWithCreditParams, {
-      gasLimit: gasLimit + gasLimit * BigInt(0.3),
-    });
+    await this._checkAllowanceAndApprove(
+      userSigner,
+      parseUnits(totalBetAmount.toString(), 18),
+    );
+
+    const gasLimit = await helperContract
+      .connect(userSigner)
+      .betWithCredit.estimateGas(betWithCreditParams);
+    const tx = await helperContract
+      .connect(userSigner)
+      .betWithCredit(betWithCreditParams, {
+        gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
+      });
 
     return tx;
   }
@@ -609,12 +677,15 @@ export class BetService {
 
     console.log(`bet without credit`);
 
+    let totalAmount = 0;
     const bets = [];
     payload.map((bet) => {
       const betAmount =
         bet.smallForecastAmount <= 0
           ? bet.bigForecastAmount
           : bet.smallForecastAmount;
+
+      totalAmount += +betAmount;
 
       bets.push({
         epoch: +bet.game.epoch,
@@ -624,16 +695,22 @@ export class BetService {
       });
     });
 
-    const gasLimit =
-      await coreContract['bet((uint256,uint256,uint256,uint8)[])'].estimateGas(
-        bets,
-      );
+    await this._checkAllowanceAndApprove(
+      userSigner,
+      parseUnits(totalAmount.toString(), 18),
+    );
+
+    const gasLimit = await coreContract
+      .connect(userSigner)
+      ['bet((uint256,uint256,uint256,uint8)[])'].estimateGas(bets);
 
     const tx = await coreContract
       .connect(userSigner)
       ['bet((uint256,uint256,uint256,uint8)[])'](bets, {
-        gasLimit: gasLimit + gasLimit * BigInt(0.3),
+        gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
       });
+
+    await tx.wait();
 
     return tx;
   }
@@ -878,26 +955,35 @@ export class BetService {
         provider,
       );
 
-      const gameUsdContract = new Contract(
-        this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
-        [`function deposit(address user, uint256 amount) external`],
+      // const gameUsdContract = new Contract(
+      //   this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
+      //   [`function deposit(address user, uint256 amount) external`],
+      //   gameUsdWallet,
+      // );
+
+      const gameUsdPoolContract = GameUSDPool__factory.connect(
+        this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
         gameUsdWallet,
       );
 
-      const gasLimit = await gameUsdContract.deposit.estimateGas(
-        gameUsdTx.receiverAddress,
-        parseUnits(gameUsdTx.amount.toString(), 18),
-      );
+      const gasLimit = await gameUsdPoolContract
+        .connect(gameUsdWallet)
+        .supply.estimateGas(
+          gameUsdTx.receiverAddress,
+          parseUnits(gameUsdTx.amount.toString(), 18),
+        );
 
-      const onchainGameUsdTx = await gameUsdContract.deposit(
-        gameUsdTx.receiverAddress,
-        parseUnits(gameUsdTx.amount.toString(), 18), //18 decimals for gameUSD
-        {
-          gasLimit: gasLimit + gasLimit * BigInt(0.3),
-        },
-      );
+      const onchainGameUsdTx = await gameUsdPoolContract
+        .connect(gameUsdWallet)
+        .supply(
+          gameUsdTx.receiverAddress,
+          parseUnits(gameUsdTx.amount.toString(), 18), //18 decimals for gameUSD
+          {
+            gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
+          },
+        );
 
-      const receipt = onchainGameUsdTx.wait();
+      const receipt = await onchainGameUsdTx.wait();
       if (receipt && receipt.status == 1) {
         const referrelTx = new ReferralTx();
         referrelTx.rewardAmount = gameUsdTx.amount;
