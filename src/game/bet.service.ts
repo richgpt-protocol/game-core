@@ -193,7 +193,7 @@ export class BetService {
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = walletBalanceUsed;
       gameUsdTx.status = 'P';
-      gameUsdTx.walletTx = walletTx;
+      gameUsdTx.walletTxs = [walletTx];
       gameUsdTx.walletTxId = walletTx.id;
       gameUsdTx.senderAddress = userInfo.wallet.walletAddress;
       gameUsdTx.receiverAddress = this.configService.get(
@@ -824,7 +824,9 @@ export class BetService {
       payload.walletTx.endingBalance =
         payload.walletTx.startingBalance - payload.gameUsdTx.amount;
 
-      const betOrders = payload.gameUsdTx.walletTx.betOrders;
+      const betOrders = payload.gameUsdTx.walletTxs
+        .map((txn) => txn.betOrders)
+        .flat();
 
       let previousEndingCreditBalance =
         lastValidCreditWalletTx?.endingBalance || 0;
@@ -912,7 +914,7 @@ export class BetService {
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
       gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
-      gameUsdTx.walletTx = walletTx;
+      gameUsdTx.walletTxs = [walletTx];
       gameUsdTx.walletTxId = walletTx.id;
 
       await queryRunner.manager.save(gameUsdTx);
@@ -988,15 +990,15 @@ export class BetService {
         const referrelTx = new ReferralTx();
         referrelTx.rewardAmount = gameUsdTx.amount;
         referrelTx.referralType = 'BET';
-        referrelTx.walletTx = gameUsdTx.walletTx;
-        referrelTx.userId = gameUsdTx.walletTx.userWallet.userId;
-        referrelTx.referralUserId = gameUsdTx.walletTx.userWallet.userId;
+        referrelTx.walletTx = gameUsdTx.walletTxs[0];
+        referrelTx.userId = gameUsdTx.walletTxs[0].userWallet.userId;
+        referrelTx.referralUserId = gameUsdTx.walletTxs[0].userWallet.userId;
 
         gameUsdTx.status = 'S';
         gameUsdTx.txHash = onchainGameUsdTx.hash;
 
-        gameUsdTx.walletTx.status = 'S';
-        await queryRunner.manager.save(gameUsdTx.walletTx);
+        gameUsdTx.walletTxs[0].status = 'S';
+        await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
 
         //select last walletTx of referrer
         const lastValidWalletTx = await queryRunner.manager
@@ -1004,30 +1006,30 @@ export class BetService {
           .where(
             'walletTx.userWalletId = :userWalletId AND walletTx.status = :status',
             {
-              userWalletId: gameUsdTx.walletTx.userWalletId,
+              userWalletId: gameUsdTx.walletTxs[0].userWalletId,
               status: 'S',
             },
           )
           .orderBy('walletTx.id', 'DESC')
           .getOne();
 
-        gameUsdTx.walletTx.startingBalance =
+        gameUsdTx.walletTxs[0].startingBalance =
           lastValidWalletTx && lastValidWalletTx.endingBalance
             ? +lastValidWalletTx.endingBalance
             : 0;
-        gameUsdTx.walletTx.endingBalance =
+        gameUsdTx.walletTxs[0].endingBalance =
           lastValidWalletTx && lastValidWalletTx.endingBalance
-            ? +lastValidWalletTx.endingBalance + gameUsdTx.walletTx.txAmount
-            : gameUsdTx.walletTx.txAmount;
+            ? +lastValidWalletTx.endingBalance + gameUsdTx.walletTxs[0].txAmount
+            : gameUsdTx.walletTxs[0].txAmount;
 
         await queryRunner.manager.save(gameUsdTx);
-        await queryRunner.manager.save(gameUsdTx.walletTx);
+        await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
         // await this.gameUsdTxRepository.save(gameUsdTx);
         // await this.walletTxRepository.save(gameUsdTx.walletTx);
 
         const referrerWallet = await queryRunner.manager.findOne(UserWallet, {
           where: {
-            id: gameUsdTx.walletTx.userWalletId,
+            id: gameUsdTx.walletTxs[0].userWalletId,
           },
         });
         // const referrerWallet = await this.walletRepository.findOne({
@@ -1036,7 +1038,7 @@ export class BetService {
         //   },
         // });
 
-        referrerWallet.walletBalance = gameUsdTx.walletTx.endingBalance;
+        referrerWallet.walletBalance = gameUsdTx.walletTxs[0].endingBalance;
         referrerWallet.redeemableBalance =
           +referrerWallet.redeemableBalance + gameUsdTx.amount; //commision amount
 
@@ -1120,16 +1122,16 @@ export class BetService {
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
-      if (gameUsdTx.walletTx.txType == 'REFERRAL') {
+      if (gameUsdTx.walletTxs[0].txType == 'REFERRAL') {
         // await this.handleReferralGameUSDTx(gameUsdTx);
         continue;
       }
 
       if (gameUsdTx.retryCount >= 5) {
         gameUsdTx.status = 'F';
-        gameUsdTx.walletTx.status = 'F';
+        gameUsdTx.walletTxs[0].status = 'F';
 
-        const creditTxnIds = gameUsdTx.walletTx.betOrders
+        const creditTxnIds = gameUsdTx.walletTxs[0].betOrders
           .filter((betOrder) => betOrder.creditWalletTx)
           .map((betOrder) => betOrder.creditWalletTx.id);
 
@@ -1139,7 +1141,7 @@ export class BetService {
             .update(CreditWalletTx)
             .set({ status: 'F' })
             .where('id IN (:...ids)', {
-              ids: gameUsdTx.walletTx.betOrders.map(
+              ids: gameUsdTx.walletTxs[0].betOrders.map(
                 (betOrder) => betOrder.creditWalletTx.id,
               ),
             })
@@ -1147,14 +1149,14 @@ export class BetService {
         }
 
         await queryRunner.manager.save(gameUsdTx);
-        await queryRunner.manager.save(gameUsdTx.walletTx);
+        await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
 
         await queryRunner.commitTransaction();
         continue;
       }
 
-      const walletTx = gameUsdTx.walletTx;
-      const betOrders = gameUsdTx.walletTx.betOrders;
+      const walletTx = gameUsdTx.walletTxs[0];
+      const betOrders = gameUsdTx.walletTxs[0].betOrders;
       try {
         const totalCreditsUsed = betOrders.reduce((acc, bet) => {
           if (bet.creditWalletTx) {
@@ -1195,7 +1197,7 @@ export class BetService {
             await this.handleTxSuccess({
               tx,
               gameUsdTx,
-              walletTx: gameUsdTx.walletTx,
+              walletTx: gameUsdTx.walletTxs[0],
             });
           } else if (txStatus.status && txStatus.status != 1) {
             gameUsdTx.retryCount += 1;
