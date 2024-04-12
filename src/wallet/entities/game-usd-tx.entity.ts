@@ -1,4 +1,4 @@
-import { Column, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { WalletTx } from './wallet-tx.entity';
 
 @Entity()
@@ -39,6 +39,6 @@ export class GameUsdTx {
   @Column()
   walletTxId: number;
 
-  @OneToOne(() => WalletTx, (walletTx) => walletTx.gameUsdTx)
-  walletTx: WalletTx;
+  @OneToMany(() => WalletTx, (walletTx) => walletTx.gameUsdTx)
+  walletTxs: WalletTx[];
 }

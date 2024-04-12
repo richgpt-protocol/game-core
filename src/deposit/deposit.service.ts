@@ -294,7 +294,7 @@ export class DepositService {
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
       gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
-      gameUsdTx.walletTx = walletTx;
+      gameUsdTx.walletTxs = [walletTx];
       gameUsdTx.walletTxId = walletTx.id;
 
       await queryRunner.manager.save(gameUsdTx);
@@ -362,7 +362,6 @@ export class DepositService {
 
     this.isReloadCronRunning = false;
   }
-
 
   isEscrowCronRunning = false;
   /**
@@ -495,7 +494,7 @@ export class DepositService {
             'DEPOSIT_BOT_ADDRESS',
           );
           gameUsdTx.receiverAddress = userWallet.walletAddress;
-          gameUsdTx.walletTx = tx.walletTx;
+          gameUsdTx.walletTxs = [tx.walletTx];
           gameUsdTx.walletTxId = tx.walletTx.id;
           await queryRunner.manager.save(tx);
           await queryRunner.manager.save(gameUsdTx);
@@ -647,7 +646,6 @@ export class DepositService {
   }
 }
 
-
 /**
  * Flow
  * 1. Process all the relaod transactions first
@@ -656,5 +654,5 @@ export class DepositService {
  *     - In case there is no enough token balance, skips the transaction.
  *     - In case of success, transfer the gameUSD txns is added to the db.
  * 3. Process all the gameUSD transactions every 10 seconds.
- * 
+ *
  */
