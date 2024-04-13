@@ -2,7 +2,7 @@
 import {Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
-import { GetUsersDto, RegisterUserDto } from './dto/register-user.dto';
+import { GetUsersDto, RegisterUserDto, SignInDto } from './dto/register-user.dto';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { RandomUtil } from 'src/shared/utils/random.util';
@@ -252,9 +252,9 @@ export class UserService {
     }
   }
 
-  async signIn(phoneNumber: string) {
+  async signIn(payload: SignInDto) {
     // check if user exist
-    const user = await this.userRepository.findOneBy({ phoneNumber });
+    const user = await this.userRepository.findOneBy({ phoneNumber: payload.phoneNumber });
     if (!user) {
       return { error: 'user.WRONG_PHONE_NUMBER', data: null };
     }
@@ -295,6 +295,10 @@ export class UserService {
         return { error: 'otp generated within 60 seconds', data: null };
       }
     }
+
+    // set user chosen otp method
+    user.otpMethod = payload.otpMethod;
+    await this.userRepository.save(user);
 
     // pass to handleGenerateOtpEvent() to generate and send otp
     this.eventEmitter.emit('user.service.otp', { userId: user.id });

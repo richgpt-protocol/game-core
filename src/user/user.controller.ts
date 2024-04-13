@@ -127,7 +127,7 @@ export class UserController {
     @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
     try {
-      const result = await this.userService.signIn(payload.phoneNumber);
+      const result = await this.userService.signIn(payload);
       if (result.data) {
         return {
           statusCode: HttpStatus.OK,
