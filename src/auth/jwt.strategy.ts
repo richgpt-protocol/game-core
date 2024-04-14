@@ -33,7 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         }
         break;
       case UserRole.USER:
-        const user = await this.userService.findOneWithoutHiddenFields(payload.id);
+        const user = await this.userService.findOneWithoutHiddenFields(payload.sub);
         if (user.status !== 'A') {
           throw new UnauthorizedException('user is not active');
         }

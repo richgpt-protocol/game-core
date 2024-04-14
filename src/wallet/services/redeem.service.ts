@@ -147,7 +147,7 @@ export class RedeemService {
       status: 'P', // pending
       startingBalance: null,
       endingBalance: null,
-      userWalletId: userId,
+      userWalletId: userWallet.id,
       redeemTx,
       gameUsdTx: null,
     });
