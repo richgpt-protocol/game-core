@@ -116,9 +116,9 @@ clear all data and reinitiate database
 
 Refer Swagger UI(http://localhost:3000/api/docs) for more information.
 
-### Sign In
+### Sign In & OTP(select provider)
 
-/api/v1/auth/sign-in
+/api/v1/user/sign-in
 
 ### Sign Up & OTP(select provider)
 
