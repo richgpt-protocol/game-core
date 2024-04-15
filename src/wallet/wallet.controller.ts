@@ -18,6 +18,7 @@ import { RedeemService } from './services/redeem.service';
 import { RedeemDto } from 'src/wallet/dto/redeem.dto';
 import { ReviewRedeemDto } from './dto/ReviewRedeem.dto';
 import { CalculateLevelDto } from './dto/calculateLevel.dto';
+import { BetOrder } from 'src/game/entities/bet-order.entity';
 
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
@@ -280,12 +281,80 @@ export class WalletController {
     // @HandlerClass() classInfo: IHandlerClass,
     // @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const betOrders = await this.walletService.getTicket(
+    const betWalletTxs = await this.walletService.getTicket(
       req.user.userId,
     );
+
+    // final result after code below
+    // {
+    //   claimableAmount: 200, // total claimable amount
+    //   tickets: [
+    //     id: 1, // ticket id (walletTx id)
+    //     draws: [
+    //       {
+    //         id: 1, // draw id (game id)
+    //         betOrders: [
+    //           numberPair: "4896",
+    //           bigForecastAmount: 1,
+    //           smallForecastAmount: 0.5,
+    //           isClaimable: true
+    //         ],
+    //       }
+    //     ]
+    //   ]
+    // }
+
+    // naive way to get final result
+    const tickets = [];
+    for (const walletTx of betWalletTxs) {
+      const draws = [];
+      const gameIds = [];
+      walletTx.betOrders.forEach(betOrder => {
+        if (!gameIds.includes(betOrder.gameId)) gameIds.push(betOrder.gameId);
+      });
+      for (const gameId of gameIds) {
+        const betOrders = walletTx.betOrders.filter(betOrder => betOrder.gameId === gameId);
+        const draw = {
+          id: gameId,
+          betOrders
+        }
+        draws.push(draw);
+      }
+      const ticket = {
+        id: walletTx.id,
+        draws
+      }
+      tickets.push(ticket)
+    }
+
+    const data = {
+      claimableAmount: await this.claimService.getPendingClaimAmount(req.user.userId),
+      tickets: tickets.map(ticket => {
+        return {
+          id: ticket.id,
+          draws: ticket.draws.map((draw: any) => {
+            return {
+              id: draw.id,
+              betOrders: draw.betOrders.map((betOrder: BetOrder) => {
+                const isClaimable = betOrder.availableClaim === false ? false
+                  : betOrder.availableClaim === true && betOrder.isClaimed === true ? false
+                  : true;
+                return {
+                  numberPair: betOrder.numberPair,
+                  bigForecastAmount: betOrder.bigForecastAmount,
+                  smallForecastAmount: betOrder.smallForecastAmount,
+                  isClaimable
+                }
+              })
+            }
+          })
+        }
+      })
+    }
+
     return {
       statusCode: HttpStatus.OK,
-      data: betOrders,
+      data,
       message: '',
     };
   }

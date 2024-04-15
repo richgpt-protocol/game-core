@@ -49,22 +49,11 @@ export class WalletService {
         txType: 'PLAY',
         status: 'S',
       },
+      order: { id: 'DESC' },
       relations: { betOrders: true },
     })
 
-    return betWalletTxs.map(walletTx => {
-      return walletTx.betOrders.map(betOrder => {
-        const {
-          id,
-          updatedDate,
-          isMasked,
-          walletTxId,
-          creditWalletTxId,
-          ...rest
-        } = betOrder;
-        return rest;
-      })
-    });
+    return betWalletTxs;
   }
 
   async getPointHistory(userId: number, count: number) {

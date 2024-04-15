@@ -429,9 +429,30 @@ export class ClaimService {
     };
   }
 
-  // TODO
-  async getClaimStatus(walletTxId: number) {
-    //
+  async getPendingClaimAmount(userId: number): Promise<number> {
+    const res = await this.getPendingClaim(userId);
+    const betOrders: BetOrder[] = res.data;
+    let totalWinningAmount = 0;
+    for (const betOrder of betOrders) {
+      // fetch drawResult for each betOrder
+      const drawResult = await this.drawResultRepository.findOne({
+        where: {
+          gameId: betOrder.gameId,
+          numberPair: betOrder.numberPair,
+        },
+      });
+      
+      // calculate winning amount
+      // a betOrder might include both big and small forecast
+      const {
+        bigForecastWinAmount, smallForecastWinAmount
+      } = this.calculateWinningAmount(
+        betOrder,
+        drawResult,
+      );
+      totalWinningAmount += bigForecastWinAmount + smallForecastWinAmount;
+    }
+    return totalWinningAmount;
   }
 
   calculateWinningAmount(betOrder: BetOrder, drawResult: DrawResult): {
