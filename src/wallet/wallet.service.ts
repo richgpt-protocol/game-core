@@ -18,7 +18,7 @@ export class WalletService {
   async getWalletInfo(id: number) {
     const walletInfo = await this.userWalletRepository
       .createQueryBuilder('wallet')
-      .where({ user: id })
+      .where({ userId: id })
       .getOne();
     return walletInfo;
   }

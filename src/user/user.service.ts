@@ -76,7 +76,9 @@ export class UserService {
   }
 
   async findOneWithoutHiddenFields(id) {
-    return await this.userRepository.findOneBy(id);
+    return await this.userRepository.findOneBy({
+      id,
+    });
   }
 
   async findReferralCodeWithoutHiddenFields(code: string) {
