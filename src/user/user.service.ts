@@ -76,6 +76,7 @@ export class UserService {
   }
 
   async findOneWithoutHiddenFields(id) {
+    if (!id) throw new Error('UserService.findOneWithoutHiddenFields() - id is null');
     return await this.userRepository.findOneBy({
       id,
     });
