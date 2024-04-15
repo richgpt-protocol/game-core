@@ -190,17 +190,16 @@ export class UserService {
 
     // check if referralCode valid
     let referralUserId = null;
-    console.log('payload', payload)
-    // if (payload.referralCode !== null) {
-    //   const referralUser = await this.userRepository.findOne({
-    //     where: { referralCode: payload.referralCode },
-    //     relations: { wallet: true },
-    //   });
-    //   if (!referralUser) {
-    //     return { error: 'invalid referral code', data: null };
-    //   }
-    //   referralUserId = referralUser.id;
-    // }
+    if (payload.referralCode !== null) {
+      const referralUser = await this.userRepository.findOne({
+        where: { referralCode: payload.referralCode },
+        relations: { wallet: true },
+      });
+      if (!referralUser) {
+        return { error: 'invalid referral code', data: null };
+      }
+      referralUserId = referralUser.id;
+    }
 
     // check if last otp generated within 60 seconds
     if (user && user.otpGenerateTime) {
