@@ -20,6 +20,11 @@ export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({
+    unique: true,
+  })
+  uid: number;
+
   @Column()
   phoneNumber: string;
 
