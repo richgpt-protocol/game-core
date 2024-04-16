@@ -23,7 +23,7 @@ export class User {
   @Column({
     unique: true,
   })
-  uid: number;
+  uid: string;
 
   @Column()
   phoneNumber: string;
