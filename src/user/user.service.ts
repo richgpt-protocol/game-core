@@ -5,6 +5,7 @@ import { Brackets, DataSource, Repository } from 'typeorm';
 import { GetUsersDto, RegisterUserDto, SignInDto } from './dto/register-user.dto';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto'
 import { RandomUtil } from 'src/shared/utils/random.util';
 import { UserStatus } from 'src/shared/enum/status.enum';
 import { Provider } from 'src/shared/enum/provider.enum';
@@ -214,6 +215,7 @@ export class UserService {
       if (!user) {
         user = this.userRepository.create({
           ...payload, // phoneNumber, otpMethod
+          uid: '',
           referralCode: null,
           status: UserStatus.UNVERIFIED,
           isReset: false,
@@ -466,10 +468,15 @@ export class UserService {
         });
         await queryRunner.manager.save(userWallet);
 
-        // update user record
+        // update user
         user.wallet = userWallet;
         // generate user own referral code
         user.referralCode = this.generateReferralCode(user.id)
+        // create unique uid for user
+        user.uid = this.generateNumericUID()
+        user.status = UserStatus.ACTIVE;
+        user.isMobileVerified = true;
+        user.updatedBy = UtilConstant.SELF;
         await queryRunner.manager.save(user);
 
         // referral section
@@ -491,7 +498,7 @@ export class UserService {
           const txResponse = await referralContract.setReferrer(
             userWalletAddress,
             referrerWalletAddress,
-            { gasLimit: 70000 },
+            { gasLimit: 100000 },
           );
           
           // check native token balance for wallet creation bot
@@ -522,12 +529,6 @@ export class UserService {
           }
           this.eventEmitter.emit('user.service.referrer', referralPayload);
         }
-
-        // update user
-        user.status = UserStatus.ACTIVE;
-        user.isMobileVerified = true;
-        user.updatedBy = UtilConstant.SELF;
-        await queryRunner.manager.save(user);
 
         // // Temporary hide
         // await this.emailService.sendWelcomeEmail(
@@ -722,5 +723,23 @@ export class UserService {
         rewardAmount: referralTx.rewardAmount,
       }
     });
+  }
+
+  generateNumericUID(): string {
+    // Generate a random number and a timestamp
+    let randomComponent = crypto.randomBytes(4).readUInt32BE(0);  // 4 bytes to uint
+    let timeComponent = Math.floor(Date.now() / 1000);  // Current timestamp in seconds
+
+    // Combine components
+    let combined = `${timeComponent}${randomComponent}`;
+
+    // Convert to a large number and slice to ensure specific length
+    let hash = crypto.createHash('sha256').update(combined).digest('hex');
+    let bigIntHash = BigInt('0x' + hash);
+
+    // Convert to string and take the last 10 digits for the UID
+    let uid = bigIntHash.toString().slice(-10);
+
+    return uid;
   }
 }
