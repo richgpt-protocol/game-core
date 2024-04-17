@@ -15,8 +15,6 @@ import { User } from 'src/user/entities/user.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BetDto } from 'src/game/dto/Bet.dto';
 import { Game } from './entities/game.entity';
-import { RedeemDto } from '../redeem/dto/redeem.dto';
-import { DrawResultDto } from './dto/drawResult.dto';
 import { DrawResult } from './entities/draw-result.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
