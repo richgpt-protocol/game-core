@@ -37,9 +37,7 @@ export class AdminNotificationService {
           type,
           title,
           message,
-          walletTx: walletTxId
-            ? { id: walletTxId }
-            : null,
+          walletTx: walletTxId ? { id: walletTxId } : null,
         }),
       );
 

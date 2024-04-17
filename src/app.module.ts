@@ -27,6 +27,9 @@ import { WalletlModule } from './wallet/wallet.module';
 import { GameModule } from './game/game.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { DepositModule } from './deposit/deposit.module';
+import { PointModule } from './point/point.module';
 import { InternalTransferModule } from './internal-transfer/internal-transfer.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -60,6 +63,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     }),
     UserModule,
     SettingModule,
+    DepositModule,
     I18nModule.forRoot({
       fallbackLanguage: 'en',
       fallbacks: {
@@ -96,6 +100,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     }),
     ChatbotModule,
     ScheduleModule.forRoot(),
+    PointModule,
   ],
   controllers: [AppController],
   providers: [
