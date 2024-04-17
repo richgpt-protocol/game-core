@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { Game } from './entities/game.entity';
 import { BetOrder } from './entities/bet-order.entity';
 import { DrawResult } from './entities/draw-result.entity';
@@ -17,6 +18,11 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
 import { Admin } from 'src/admin/entities/admin.entity';
 import { GameGateway } from './game.gateway';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
+import { BetService } from './bet.service';
+import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
+import { ConfigModule } from 'src/config/config.module';
+import { PointService } from 'src/point/point.service';
+import { PointModule } from 'src/point/point.module';
 
 @Module({
   imports: [
@@ -32,10 +38,14 @@ import { CacheSettingService } from 'src/shared/services/cache-setting.service';
       Notification,
       UserNotification,
       Admin,
+      GameUsdTx,
     ]),
     PermissionModule,
+    ConfigModule,
+    ScheduleModule.forRoot(),
+    PointModule,
   ],
-  providers: [GameService, AdminNotificationService, GameGateway, CacheSettingService],
+  providers: [GameService, AdminNotificationService, GameGateway, CacheSettingService, BetService, PointService],
   controllers: [GameController],
   exports: [GameService],
 })

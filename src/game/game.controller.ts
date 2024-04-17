@@ -5,17 +5,29 @@ import {
   HttpStatus,
   Query,
 } from '@nestjs/common';
-import { ApiHeader, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiHeader,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Secure } from 'src/shared/decorators/secure.decorator';
 import { ResponseVo } from 'src/shared/vo/response.vo';
 import { GameService } from './game.service';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { PastResultDto } from './dto/pastResult.dto';
+import { BetDto } from './dto/Bet.dto';
+import { BetService } from './bet.service';
 
 @ApiTags('Game')
 @Controller('api/v1/game')
 export class GameController {
-  constructor(private gameService: GameService) {}
+  constructor(
+    private gameService: GameService,
+    private betService: BetService,
+  ) {}
 
   @Secure()
   @Get('get-all-bets')
@@ -144,5 +156,93 @@ export class GameController {
         message: 'get past result failed',
       };
     }
+  }
+
+  @Secure(null, UserRole.USER)
+  @Post('bet')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async bet(
+    @Request() req,
+    @Body() payload: BetDto[],
+    // @IpAddress() ipAddress,
+    // @HandlerClass() classInfo: IHandlerClass,
+    // @I18n() i18n: I18nContext,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const userId = req.user.userId;
+      // const userId = 1;
+      const data = await this.betService.bet(userId, payload);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'bet success',
+      };
+    } catch (error) {
+      console.log(error);
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        data: null,
+        message: '',
+      };
+    }
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('get-bets')
+  @ApiQuery({
+    name: 'startEpoch',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+  })
+  async get_bets(
+    @Request() req,
+    @Query('startEpoch') startEpoch: number,
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ) {
+    const data = await this.betService.getBets(
+      req.user.userId,
+      // 1,
+      startEpoch,
+      page,
+      limit,
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'get bets success',
+    };
+  }
+
+  @Post('estimate-bet-amount')
+  @ApiBody({
+    required: true,
+    type: BetDto,
+    isArray: true,
+  })
+  async estimateBetAmount(@Body() bets: BetDto[]) {
+    const data = await this.betService.estimateBetAmount(bets);
+    return {
+      statusCode: HttpStatus.OK,
+      data: {
+        value: data,
+      },
+      message: '',
+    };
   }
 }
