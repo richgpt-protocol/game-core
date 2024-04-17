@@ -61,7 +61,7 @@ export class WalletController {
     // @HandlerClass() classInfo: IHandlerClass,
     // @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const { ...userInfo } = await this.walletService.getWalletInfo(
+    const { privateKey, ...userInfo } = await this.walletService.getWalletInfo(
       req.user.userId,
     );
     return {
