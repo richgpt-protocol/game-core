@@ -108,14 +108,6 @@ export class GameController {
     @Query('endEpoch') endEpoch: number, // inclusive
   ) {}
 
-  // TODO, sum up and sort descending by winner amount
-  @Get('get-draw-leaderboard')
-  async getDrawLeaderboard() {}
-
-  // TODO, after finalize xp
-  @Get('get-xp-leaderboard')
-  async getXPLeaderboard() {}
-
   @Secure(null, UserRole.USER)
   @Get('get-past-result')
   async getPastResult(
