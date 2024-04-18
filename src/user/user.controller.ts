@@ -39,12 +39,14 @@ import { UserService } from './user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { WalletService } from 'src/wallet/wallet.service';
 
 @ApiTags('User')
 @Controller('api/v1/user')
 export class UserController {
   constructor(
     private userService: UserService,
+    private walletService: WalletService,
     private auditLogService: AuditLogService,
     // private smsService: SMSService,
     // private telegramService: TelegramService,
@@ -277,7 +279,7 @@ export class UserController {
     @HandlerClass() classInfo: IHandlerClass,
     @I18n() i18n: I18nContext,
   ) {
-    const user = await this.userService.getUserInfo(req.user.userId);
+    const user = await this.userService.getUserInfo(req.user.userId) as any;
     if (user) {
       await this.auditLogService.addAuditLog(
         classInfo,
@@ -285,6 +287,9 @@ export class UserController {
         ipAddress,
         `Get User Info Successful`,
       );
+
+      const level = this.walletService.calculateLevel(Number(user.wallet.pointBalance));
+      user.wallet.level = level;
 
       return {
         statusCode: 200,
