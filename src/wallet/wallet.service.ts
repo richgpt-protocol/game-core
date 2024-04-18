@@ -24,10 +24,17 @@ export class WalletService {
   }
 
   calculateLevel(point: number): number {
+    // minimum level 1
+    // input point 1 will result 0 in below calculation
+    // input point > 1 will result in normal
+    if (point <= 1) return 1;
+
     // exponential growth xp calculation, refer
     // https://chat.openai.com/share/f6ad93ae-048d-43bf-bca8-7804a347e6e9
     const growthFactor = 1.584893192;
-    return Math.log(point) / Math.log(growthFactor);
+    let level = Math.log(point) / Math.log(growthFactor);
+
+    return level;
   }
 
   async getWalletTx(userId: number, count: number) {
