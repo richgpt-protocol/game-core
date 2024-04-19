@@ -57,8 +57,8 @@ export class WalletService {
         status: 'S',
       },
       order: { id: 'DESC' },
-      relations: { betOrders: true },
-    })
+      relations: ['betOrders', 'betOrders.game', 'betOrders.game.drawResult'],
+    });
 
     return betWalletTxs;
   }

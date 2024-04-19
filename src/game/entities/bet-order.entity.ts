@@ -56,6 +56,16 @@ export class BetOrder {
   @Column({ default: false })
   isMasked: boolean;
 
+  @Column({
+    comment: 'S - Straight, P - permutation',
+  })
+  type: string;
+
+  @Column({
+    nullable: true,
+  })
+  motherPair: string;
+
   // Foreign Keys
 
   @Column()

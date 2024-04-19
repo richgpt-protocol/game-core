@@ -479,6 +479,8 @@ export class BetService {
           );
           betOrder.gameId = betOrder.game.id;
           betOrder.walletTxId = walletTx.id;
+          betOrder.motherPair = bet.numberPair; //user entered numberPair, not the generated one
+          betOrder.type = bet.isPermutation ? 'P' : 'S';
 
           betOrders.push(betOrder);
         });
@@ -933,7 +935,7 @@ export class BetService {
     console.log('retrying referral gameUSDTx');
     const gameUsdTx = await queryRunner.manager
       .createQueryBuilder(GameUsdTx, 'gameUsdTx')
-      .leftJoinAndSelect('gameUsdTx.walletTx', 'walletTx')
+      .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .where('gameUsdTx.id = :id', { id: _gameUsdTx })
       .getOne();
@@ -1067,7 +1069,7 @@ export class BetService {
     try {
       const referralGameUsdTxns = await this.gameUsdTxRepository
         .createQueryBuilder('gameUsdTx')
-        .innerJoin('gameUsdTx.walletTx', 'walletTx')
+        .innerJoin('gameUsdTx.walletTxs', 'walletTx')
         .where('gameUsdTx.status = :status', { status: 'P' })
         .andWhere('walletTx.txType = :txType', { txType: 'REFERRAL' })
         .andWhere('gameUsdTx.senderAddress = :senderAddress', {
@@ -1098,9 +1100,9 @@ export class BetService {
 
     const pendingGameUsdTx = await this.gameUsdTxRepository
       .createQueryBuilder('gameUsdTx')
-      .leftJoinAndSelect('gameUsdTx.walletTx', 'walletTx')
-      .leftJoinAndSelect('walletTx.betOrders', 'betOrders')
-      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
+      .leftJoinAndSelect('walletTxs.betOrders', 'betOrders')
+      .leftJoinAndSelect('walletTxs.userWallet', 'userWallet')
       .leftJoinAndSelect('betOrders.creditWalletTx', 'creditWalletTx')
       .leftJoinAndSelect('betOrders.game', 'game')
       .where(
