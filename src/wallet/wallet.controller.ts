@@ -305,45 +305,70 @@ export class WalletController {
     // }
 
     // naive way to get final result
-    const tickets = [];
-    for (const walletTx of betWalletTxs) {
-      const draws = [];
-      const gameIds = [];
-      walletTx.betOrders.forEach(betOrder => {
-        if (!gameIds.includes(betOrder.gameId)) gameIds.push(betOrder.gameId);
-      });
-      for (const gameId of gameIds) {
-        const betOrders = walletTx.betOrders.filter(betOrder => betOrder.gameId === gameId);
-        const draw = {
-          id: gameId,
-          betOrders
+    const tickets = await Promise.all(
+      betWalletTxs.map(async (walletTx) => {
+        const draws = [];
+        const gameIds = [];
+        walletTx.betOrders.forEach((betOrder) => {
+          if (!gameIds.includes(betOrder.gameId)) gameIds.push(betOrder.gameId);
+        });
+        for (const gameId of gameIds) {
+          const betOrders = walletTx.betOrders.filter(
+            (betOrder) => betOrder.gameId === gameId,
+          );
+          const gameInfo = betOrders[0].game;
+          const draw = {
+            id: gameId,
+            date: gameInfo.startDate,
+            betOrders,
+          };
+          draws.push(draw);
         }
-        draws.push(draw);
-      }
-      const ticket = {
-        id: walletTx.id,
-        draws
-      }
-      tickets.push(ticket)
-    }
+        const claimableAmountByTicket =
+          await this.claimService.getPendingClaimByWalletTxId(walletTx.id);
+        return {
+          id: walletTx.id,
+          date: walletTx.createdDate,
+          draws,
+          claimableAmountByTicket,
+        };
+      }),
+    );
 
     const data = {
-      claimableAmount: await this.claimService.getPendingClaimAmount(req.user.userId),
-      tickets: tickets.map(ticket => {
+      claimableAmount: await this.claimService.getPendingClaimAmount(
+        req.user.userId,
+      ),
+      tickets: tickets.map((ticket) => {
         return {
           id: ticket.id,
+          createdDate: ticket.date,
+          claimableAmountByTicket: ticket.claimableAmountByTicket,
           draws: ticket.draws.map((draw: any) => {
             return {
               id: draw.id,
+              date: draw.date,
               betOrders: draw.betOrders.map((betOrder: BetOrder) => {
-                const isClaimable = betOrder.availableClaim === false ? false
-                  : betOrder.availableClaim === true && betOrder.isClaimed === true ? false
+                const isClaimable =
+                  betOrder.availableClaim === false
+                    ? false
+                    : betOrder.availableClaim === true &&
+                        betOrder.isClaimed === true
+                      ? false
                   : true;
+
+                const isWin =
+                  betOrder.isClaimed === true || betOrder.availableClaim
+                    ? true
+                    : false;
                 return {
                   numberPair: betOrder.numberPair,
                   bigForecastAmount: betOrder.bigForecastAmount,
                   smallForecastAmount: betOrder.smallForecastAmount,
-                  isClaimable
+                  drawSetup: betOrder.type,
+                  motherPair: betOrder.motherPair,
+                  isClaimable,
+                  isWin,
                 }
               })
             }

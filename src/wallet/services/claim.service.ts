@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Game } from 'src/game/entities/game.entity';
-import { DataSource, Not, Repository } from 'typeorm';
+import { DataSource, In, Not, Repository } from 'typeorm';
 import { UserWallet } from '../entities/user-wallet.entity';
 import { ClaimDetail } from '../entities/claim-detail.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
@@ -395,6 +395,44 @@ export class ClaimService {
       // finalize queryRunner
       await queryRunner.release();
     }
+  }
+
+  async getPendingClaimByWalletTxId(walletTxId: number): Promise<number> {
+    const betOrders = await this.betOrderRepository.find({
+      where: {
+        walletTxId,
+        availableClaim: true,
+        isClaimed: false,
+      },
+    });
+
+    if (betOrders.length === 0) {
+      return 0;
+    }
+
+    const drawResults = await this.drawResultRepository.find({
+      where: {
+        gameId: In(betOrders.map((betOrder) => betOrder.gameId)),
+      },
+    });
+
+    let totalWinningAmount = 0;
+    for (const betOrder of betOrders) {
+      const _drawResult = drawResults.find(
+        (dr) =>
+          dr.gameId === betOrder.gameId &&
+          dr.numberPair === betOrder.numberPair,
+      );
+
+      if (!_drawResult) {
+        continue;
+      }
+
+      const { bigForecastWinAmount, smallForecastWinAmount } =
+        this.calculateWinningAmount(betOrder, _drawResult);
+      totalWinningAmount += bigForecastWinAmount + smallForecastWinAmount;
+    }
+    return totalWinningAmount;
   }
 
   async getPendingClaim(userId: number): Promise<ClaimResponse> {
