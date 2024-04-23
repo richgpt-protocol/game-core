@@ -13,7 +13,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, DataSource, MoreThanOrEqual, LessThan } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { BetDto } from 'src/game/dto/Bet.dto';
+import { BetDto, EstimateBetResponseDTO } from 'src/game/dto/Bet.dto';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
@@ -113,13 +113,12 @@ export class BetService {
     }
   }
 
-  async estimateBetAmount(payload: BetDto[]): Promise<number> {
+  async estimateBetAmount(payload: BetDto[]): Promise<EstimateBetResponseDTO> {
     try {
       let totalAmount = 0;
 
       payload = this._formatBets(payload);
-
-      payload.map((bet) => {
+      const groupedAmount = payload.map((bet, index) => {
         const numberPairs = new Set();
         numberPairs.add(bet.numberPair);
         if (bet.isPermutation) {
@@ -131,14 +130,21 @@ export class BetService {
           );
         }
 
-        console.log(numberPairs.size);
-
         totalAmount +=
           (+bet.bigForecastAmount + +bet.smallForecastAmount) *
           (bet.epochs.length * numberPairs.size);
+
+        return {
+          id: index,
+          numberPairs: bet.numberPair,
+          calculatedAmount: +bet.bigForecastAmount + +bet.smallForecastAmount,
+        };
       });
 
-      return totalAmount;
+      return {
+        groupedAmount,
+        totalAmount,
+      };
     } catch (error) {
       console.error(error);
       throw new BadRequestException('Error in estimateBetAmount');
