@@ -26,6 +26,15 @@ export class BetDto {
   isPermutation: boolean;
 }
 
+export class EstimateBetResponseDTO {
+  groupedAmount: {
+    id: number;
+    numberPairs: string;
+    calculatedAmount: number;
+  }[];
+  totalAmount: number;
+}
+
 export enum Permutations {
   pairs_24,
   pairs_12,
