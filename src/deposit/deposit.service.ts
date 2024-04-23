@@ -612,7 +612,7 @@ export class DepositService {
 
           walletTx.startingBalance = previousWalletTx?.endingBalance || 0;
           walletTx.endingBalance =
-            (previousWalletTx?.endingBalance || 0) + +tx.amount;
+            (Number(previousWalletTx?.endingBalance) || 0) + Number(tx.amount);
 
           walletTx.userWallet.walletBalance = walletTx.endingBalance;
 
