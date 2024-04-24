@@ -48,6 +48,9 @@ export class GameGateway {
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
     try {
+      // clear cache for handleLiveDrawResult() to return empty array
+      this.cacheSettingService.clear();
+
       // get draw result from last game
       const lastGame = await this.gameRepository.findOne({
         where: { isClosed: true },
@@ -68,8 +71,6 @@ export class GameGateway {
         // result emit every 2 seconds
         await this.delay(2000);
       }
-      // all draw result emitted, clear cache for handleLiveDrawResult() to return empty array
-      this.cacheSettingService.clear();
 
       // submit draw result to Core contract
       await this.gameService.updateDrawResult(drawResult, lastGame.id);
