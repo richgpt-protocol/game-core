@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -189,11 +190,7 @@ export class GameController {
       };
     } catch (error) {
       console.log(error);
-      return {
-        statusCode: HttpStatus.BAD_REQUEST,
-        data: null,
-        message: '',
-      };
+      throw new BadRequestException(error.message);
     }
   }
 
@@ -241,9 +238,7 @@ export class GameController {
     const data = await this.betService.estimateBetAmount(bets);
     return {
       statusCode: HttpStatus.OK,
-      data: {
-        value: data,
-      },
+      data,
       message: '',
     };
   }

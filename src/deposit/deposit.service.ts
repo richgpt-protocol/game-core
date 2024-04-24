@@ -604,6 +604,7 @@ export class DepositService {
             where: {
               userWalletId: walletTx.userWalletId,
               id: Not(tx.walletTxId),
+              status: 'S',
             },
             order: {
               createdDate: 'DESC',
