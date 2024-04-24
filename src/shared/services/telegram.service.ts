@@ -32,9 +32,9 @@ export class TelegramService {
     })
   }
 
-  private generateMessage(otp: any) {
-    return `Your OTP code is ${otp}. The code is valid for 3 minutes.`
-  }
+  // private generateMessage(otp: any) {
+  //   return `Your OTP code is ${otp}. The code is valid for 3 minutes.`
+  // }
 
   // To send to user mobile phone number entered for telegram
   private async onGetUsername(mobileNumber: string): Promise<string> {
@@ -64,9 +64,9 @@ export class TelegramService {
     await this.client.connect();
     const username = await this.onGetUsername(mobileNumber)
     const sent = await this.client.sendMessage(`@${username}`, { message })
+    await this.client.disconnect()
   }
-  public async disconnect() {
-    await this.client.disconnect();
-  }
-
+  // public async disconnect() {
+  //   await this.client.disconnect();
+  // }
 }
