@@ -116,13 +116,6 @@ export class GameController {
     }
   }
 
-  // TODO, sort descending by winner amount
-  @Get('get-past-draw-winner')
-  async getPastDrawWinner(
-    @Query('startEpoch') startEpoch: number,
-    @Query('endEpoch') endEpoch: number, // inclusive
-  ) {}
-
   @Secure(null, UserRole.USER)
   @Get('get-past-result')
   async getPastResult(
