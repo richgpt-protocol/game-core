@@ -35,6 +35,7 @@ const serverUrls = [
   'http://localhost:4898',
 ];
 
+const depositBotAddAddress = 'http://localhost:3002/addAddress';
 type SetReferrerEvent = {
   txHash: string;
   referralTxId: number;
@@ -529,6 +530,20 @@ export class UserService {
           }
           this.eventEmitter.emit('user.service.referrer', referralPayload);
         }
+        //Add new address to Deposit Bot
+        await axios.post(
+          depositBotAddAddress,
+          {
+            address: walletAddress,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+
+        
 
         // // Temporary hide
         // await this.emailService.sendWelcomeEmail(
