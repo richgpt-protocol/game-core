@@ -168,7 +168,7 @@ export class BetService {
       await this.validateBets(payload);
 
       const walletTx = new WalletTx();
-      walletTx.txType = 'DEPOSIT';
+      walletTx.txType = 'PLAY';
       walletTx.status = 'P';
       walletTx.userWalletId = userInfo.wallet.id;
       await queryRunner.manager.save(walletTx);
