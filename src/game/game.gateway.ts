@@ -20,7 +20,6 @@ export class GameGateway {
   constructor(
     @InjectRepository(Game)
     private gameRepository: Repository<Game>,
-    private emitter: EventEmitter2,
     private gameService: GameService,
     private cacheSettingService: CacheSettingService,
     private adminNotificationService: AdminNotificationService,
@@ -48,9 +47,6 @@ export class GameGateway {
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
     try {
-      // clear cache for handleLiveDrawResult() to return empty array
-      this.cacheSettingService.clear();
-
       // get draw result from last game
       const lastGame = await this.gameRepository.findOne({
         where: { isClosed: true },

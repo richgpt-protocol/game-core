@@ -12,6 +12,7 @@ import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import * as dotenv from 'dotenv';
 import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
+import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 dotenv.config();
 
 @Injectable()
@@ -30,6 +31,7 @@ export class GameService {
     @InjectRepository(ClaimDetail)
     private claimDetalRepository: Repository<ClaimDetail>,
     private adminNotificationService: AdminNotificationService,
+    private cacheSettingService: CacheSettingService,
   ) {}
 
   // process of closing bet for current epoch, set draw result, and announce draw result
@@ -42,6 +44,9 @@ export class GameService {
   @Cron('0 0 */1 * * *', { utcOffset: 0 }) // every hour UTC time
   async setBetClose(): Promise<void> {
     try {
+      // clear cache for handleLiveDrawResult() to return empty array
+      this.cacheSettingService.clear();
+
       // set bet close in game record for current epoch
       const game = await this.gameRepository.findOne({
         where: { isClosed: false },
