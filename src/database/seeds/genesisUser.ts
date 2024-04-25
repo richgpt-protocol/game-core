@@ -40,7 +40,7 @@ export default class CreateTest implements Seeder {
         {
           walletBalance: 0,
           creditBalance: 0,
-          walletAddress: '0xb1AD074E17AD59f2103A8832DADE917388D6C50D',
+          walletAddress: '0xAe8b9277cad0aBAA728b7a34F20570f4377E1055',
           privateKey: '',
           redeemableBalance: 0,
           pointBalance: 0,
