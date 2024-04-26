@@ -82,7 +82,10 @@ export class ClaimService {
     }
 
     // create walletTx
-    const userWallet = await this.userWalletRepository.findOneBy({ userId });
+    const userWallet = await this.userWalletRepository.findOne({
+      where: { userId },
+      relations: { pointTx: true },
+    });
     const walletTx = this.walletTxRepository.create({
       txType: 'CLAIM',
       txAmount: 0,
@@ -119,6 +122,7 @@ export class ClaimService {
     await queryRunner.startTransaction();
     try {
       let claimParams: ICore.ClaimParamsStruct[] = [];
+      let totalPointAmount = 0;
 
       // loop through the betOrders to check if available for claim
       for (const betOrder of betOrders) {
@@ -180,26 +184,14 @@ export class ClaimService {
         });
         await queryRunner.manager.save(claimDetail);
 
-        // create pointTx for each betOrder
-        const pointTx = this.pointTxRepository.create({
-          txType: 'CLAIM',
-          amount: pointAmount,
-          startingBalance: null,
-          endingBalance: null,
-          userWallet,
-          walletTx,
-        });
-        await queryRunner.manager.save(pointTx);
+        // update totalPointAmount for pointTx
+        totalPointAmount += pointAmount;
 
         // update walletTx
         // accumulate walletTx.txAmount within betOrders loop
         walletTx.txAmount = Number(walletTx.txAmount) + Number(totalWinningAmount);
         walletTx.claimDetails.push(claimDetail);
         await queryRunner.manager.save(walletTx);
-
-        // update userWallet
-        userWallet.pointTx.push(pointTx);
-        await queryRunner.manager.save(userWallet);
 
         // construct claimParams for on-chain transaction
         const epoch = Number(
@@ -228,6 +220,32 @@ export class ClaimService {
           })
         }
       }
+
+      // fetch endingBalance of last pointTx and create new pointTx
+      const latestPointTx = await this.pointTxRepository.findOne({
+        where: { walletId: userWallet.id },
+        order: { id: 'DESC' },
+      });
+      const lastEndingBalance = latestPointTx ? Number(latestPointTx.endingBalance) : 0;
+      const pointTx = this.pointTxRepository.create({
+        txType: 'CLAIM',
+        amount: totalPointAmount,
+        startingBalance: lastEndingBalance,
+        endingBalance: lastEndingBalance + totalPointAmount,
+        walletId: userWallet.id,
+        userWallet,
+        walletTxId: walletTx.id,
+        walletTx,
+      });
+      await queryRunner.manager.save(pointTx);
+
+      // update walletTx
+      walletTx.pointTx = pointTx;
+      await queryRunner.manager.save(walletTx);
+
+      // update userWallet
+      userWallet.pointTx.push(pointTx);
+      await queryRunner.manager.save(userWallet);
 
       // submit transaction on-chain at once for all claims
       const signer = new ethers.Wallet(userWallet.privateKey, this.provider);
@@ -317,24 +335,6 @@ export class ClaimService {
           const betOrder = await this.betOrderRepository.findOneBy({ id: betOrderId });
           betOrder.isClaimed = true;
           await queryRunner.manager.save(betOrder);
-  
-          // update pointTx for each betOrder
-          // fetch latest valid pointTx, use queryRunner to query instead of pointTxRepository because,
-          // pointTxRepository is not aware of the pointTx saved by queryRunner before commitTransaction()
-          const latestPointTx = await queryRunner.manager.findOne(PointTx, {
-            where: {
-              startingBalance: Not(null),
-              endingBalance: Not(null),
-            },
-          });
-          const pointTx = await this.pointTxRepository.
-            createQueryBuilder('pointTx')
-            .where('pointTx.betOrderId = :betOrderId', { betOrderId })
-            .getOne();
-          pointTx.startingBalance = latestPointTx.endingBalance;
-          pointTx.endingBalance = Number(pointTx.startingBalance) + Number(pointTx.amount);
-          totalPointAmount += pointTx.amount;
-          await queryRunner.manager.save(pointTx);
         }
 
         // update GameUsdTx
