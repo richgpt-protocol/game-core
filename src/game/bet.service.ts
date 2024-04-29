@@ -878,7 +878,7 @@ export class BetService {
 
       await queryRunner.commitTransaction();
 
-      await this.handleReferralFlow(user.id, payload.walletTx.txAmount);
+      await this.handleReferralFlow(user.id, payload.walletTx);
     } catch (error) {
       console.error(error);
       await queryRunner.rollbackTransaction();
@@ -887,7 +887,8 @@ export class BetService {
     }
   }
 
-  private async handleReferralFlow(userId: number, depositAmount: number) {
+  private async handleReferralFlow(userId: number, betWalletTx: WalletTx) {
+    const depositAmount = betWalletTx.txAmount;
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -920,7 +921,7 @@ export class BetService {
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
       gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
-      gameUsdTx.walletTxs = [walletTx];
+      gameUsdTx.walletTxs = [walletTx, betWalletTx];
       gameUsdTx.walletTxId = walletTx.id;
 
       await queryRunner.manager.save(gameUsdTx);
@@ -938,13 +939,15 @@ export class BetService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
-    console.log('retrying referral gameUSDTx');
+    console.log('Processing referral gameUSDTx');
     const gameUsdTx = await queryRunner.manager
       .createQueryBuilder(GameUsdTx, 'gameUsdTx')
       .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
-      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('walletTxs.userWallet', 'userWallet')
       .where('gameUsdTx.id = :id', { id: _gameUsdTx })
       .getOne();
+
+    console.log(gameUsdTx)
 
     if (!gameUsdTx) return;
 
@@ -970,7 +973,7 @@ export class BetService {
       // );
 
       const gameUsdPoolContract = GameUSDPool__factory.connect(
-        this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
+        this.configService.get('GAMEUSD_POOL_ADDRESS'),
         gameUsdWallet,
       );
 
@@ -1075,9 +1078,18 @@ export class BetService {
     try {
       const referralGameUsdTxns = await this.gameUsdTxRepository
         .createQueryBuilder('gameUsdTx')
-        .innerJoin('gameUsdTx.walletTxs', 'walletTx')
+        .innerJoin(
+          'gameUsdTx.walletTxs',
+          'walletTxPlay',
+          'walletTxPlay.txType = "PLAY"',
+        )
+        .innerJoin(
+          'gameUsdTx.walletTxs',
+          'walletTxReferral',
+          'walletTxReferral.txType = "REFERRAL"',
+        )
         .where('gameUsdTx.status = :status', { status: 'P' })
-        .andWhere('walletTx.txType = :txType', { txType: 'REFERRAL' })
+        // .andWhere('walletTx.txType = :txType', { txType: 'REFERRAL' })
         .andWhere('gameUsdTx.senderAddress = :senderAddress', {
           senderAddress: this.configService.get('GAMEUSD_POOL_ADDRESS'),
         })

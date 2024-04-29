@@ -261,7 +261,9 @@ export class DepositService {
     }
   }
 
-  private async handleReferralFlow(userId: number, depositAmount: number) {
+  private async handleReferralFlow(userId: number, depositWalletTx: WalletTx) {
+    const depositAmount = depositWalletTx.txAmount;
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -294,12 +296,13 @@ export class DepositService {
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
       gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
-      gameUsdTx.walletTxs = [walletTx];
+      gameUsdTx.walletTxs = [walletTx, depositWalletTx];
       gameUsdTx.walletTxId = walletTx.id;
 
       await queryRunner.manager.save(gameUsdTx);
+      await queryRunner.commitTransaction();
     } catch (error) {
-      console.error('Error in referral tx', error);
+      console.error('Error in referral tx - depositModule', error);
       await queryRunner.rollbackTransaction();
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
@@ -498,14 +501,14 @@ export class DepositService {
           gameUsdTx.walletTxId = tx.walletTx.id;
           await queryRunner.manager.save(tx);
           await queryRunner.manager.save(gameUsdTx);
+          await queryRunner.commitTransaction();
 
-          await this.handleReferralFlow(userWallet.id, tx.walletTx.txAmount);
+          await this.handleReferralFlow(userWallet.id, tx.walletTx);
         } else if (receipt && receipt.status != 1) {
           tx.retryCount += 1;
           await queryRunner.manager.save(tx);
+          await queryRunner.commitTransaction();
         }
-
-        await queryRunner.commitTransaction();
       } catch (err) {
         console.log('Error in escrow tx', err);
         await queryRunner.rollbackTransaction();
@@ -534,15 +537,26 @@ export class DepositService {
           this.configService.get('GAMEUSD_POOL_ADDRESS'),
         ]),
       },
+      relations: ['walletTxs'],
     });
 
     for (const tx of pendingGameUsdTx) {
-      console.log('Processing gameUSD tx', tx.id);
       const queryRunner = this.dataSource.createQueryRunner();
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
       try {
+        //Find walletTx with txType other than DEPOSIT AND REFERRAL. For bet flow, its "PLAY".
+        const unSupportedWalletTxns = tx.walletTxs.find(
+          (_walletTx) =>
+            _walletTx.txType != 'DEPOSIT' && _walletTx.txType != 'REFERRAL',
+        );
+
+        //do not process gameUsdTx from a different module.
+        if (unSupportedWalletTxns) continue;
+
+        console.log('Processing gameUSD tx', tx.id);
+
         if (tx.retryCount >= 5) {
           tx.status = 'F';
           await queryRunner.manager.save(tx);
@@ -597,6 +611,7 @@ export class DepositService {
             .getOne();
 
           walletTx.status = 'S';
+          walletTx.txHash = receipt.hash;
 
           // console.log('walletTx', walletTx);
 
