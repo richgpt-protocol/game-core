@@ -864,9 +864,17 @@ export class BetService {
         },
       });
 
+      const oldWalletBalance = userWallet.walletBalance;
+      const nonRedeemableWalletBalance =
+        oldWalletBalance - userWallet.redeemableBalance;
+
+      if (payload.walletTx.txAmount > nonRedeemableWalletBalance) {
+        userWallet.redeemableBalance -=
+          payload.walletTx.txAmount - nonRedeemableWalletBalance;
+      }
+
       userWallet.walletBalance = payload.walletTx.endingBalance;
       userWallet.creditBalance = previousEndingCreditBalance;
-      userWallet.redeemableBalance -= payload.walletTx.txAmount;
 
       await queryRunner.manager.save(userWallet);
 
