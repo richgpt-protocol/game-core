@@ -908,14 +908,35 @@ export class BetService {
       const walletTx = new WalletTx();
       walletTx.txType = 'REFERRAL';
       walletTx.txAmount = commisionAmount;
-      walletTx.status = 'P';
+      walletTx.status = 'S';
       walletTx.userWalletId = userInfo.referralUserId;
+
+      const lastValidWalletTx = await queryRunner.manager
+        .createQueryBuilder(WalletTx, 'walletTx')
+        .where(
+          'walletTx.userWalletId = :userWalletId AND walletTx.status = :status',
+          {
+            userWalletId: walletTx.userWalletId,
+            status: 'S',
+          },
+        )
+        .orderBy('walletTx.id', 'DESC')
+        .getOne();
+
+      walletTx.startingBalance =
+        lastValidWalletTx && lastValidWalletTx.endingBalance
+          ? +lastValidWalletTx.endingBalance
+          : 0;
+      walletTx.endingBalance =
+        lastValidWalletTx && lastValidWalletTx.endingBalance
+          ? Number(lastValidWalletTx.endingBalance) + Number(walletTx.txAmount)
+          : walletTx.txAmount;
 
       await queryRunner.manager.save(walletTx);
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = commisionAmount;
-      gameUsdTx.status = 'P';
+      gameUsdTx.status = 'S';
       gameUsdTx.retryCount = 0;
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
@@ -924,6 +945,28 @@ export class BetService {
       gameUsdTx.walletTxId = walletTx.id;
 
       await queryRunner.manager.save(gameUsdTx);
+
+      const referrelTx = new ReferralTx();
+      referrelTx.rewardAmount = gameUsdTx.amount;
+      referrelTx.referralType = 'BET';
+      referrelTx.walletTx = walletTx;
+      referrelTx.userId = userInfo.id;
+      referrelTx.status = 'S';
+      referrelTx.referralUserId = userInfo.referralUserId; //one who receives the referral amount
+
+      //Update Referrer
+      const referrerWallet = await queryRunner.manager.findOne(UserWallet, {
+        where: {
+          id: walletTx.userWalletId,
+        },
+      });
+
+      referrerWallet.walletBalance = walletTx.endingBalance;
+      referrerWallet.redeemableBalance += Number(gameUsdTx.amount); //commision amount
+
+      await queryRunner.manager.save(referrerWallet);
+      await queryRunner.manager.save(referrelTx);
+
       await queryRunner.commitTransaction();
     } catch (error) {
       console.error('Error in referral tx', error);
@@ -931,171 +974,6 @@ export class BetService {
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
-  }
-
-  private async handleReferralGameUSDTx(_gameUsdTx: number) {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    console.log('retrying referral gameUSDTx');
-    const gameUsdTx = await queryRunner.manager
-      .createQueryBuilder(GameUsdTx, 'gameUsdTx')
-      .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
-      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-      .where('gameUsdTx.id = :id', { id: _gameUsdTx })
-      .getOne();
-
-    if (!gameUsdTx) return;
-
-    try {
-      if (gameUsdTx.retryCount >= 5) {
-        gameUsdTx.status = 'F';
-        await this.gameUsdTxRepository.save(gameUsdTx);
-        // await queryRunner.manager.save(gameUsdTx);
-        return;
-      }
-
-      const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
-
-      const gameUsdWallet = new Wallet(
-        this.configService.get('DEPOSIT_BOT_PK'),
-        provider,
-      );
-
-      // const gameUsdContract = new Contract(
-      //   this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
-      //   [`function deposit(address user, uint256 amount) external`],
-      //   gameUsdWallet,
-      // );
-
-      const gameUsdPoolContract = GameUSDPool__factory.connect(
-        this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
-        gameUsdWallet,
-      );
-
-      const gasLimit = await gameUsdPoolContract
-        .connect(gameUsdWallet)
-        .supply.estimateGas(
-          gameUsdTx.receiverAddress,
-          parseUnits(gameUsdTx.amount.toString(), 18),
-        );
-
-      const onchainGameUsdTx = await gameUsdPoolContract
-        .connect(gameUsdWallet)
-        .supply(
-          gameUsdTx.receiverAddress,
-          parseUnits(gameUsdTx.amount.toString(), 18), //18 decimals for gameUSD
-          {
-            gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
-          },
-        );
-
-      const receipt = await onchainGameUsdTx.wait();
-      if (receipt && receipt.status == 1) {
-        const referrelTx = new ReferralTx();
-        referrelTx.rewardAmount = gameUsdTx.amount;
-        referrelTx.referralType = 'BET';
-        referrelTx.walletTx = gameUsdTx.walletTxs[0];
-        referrelTx.userId = gameUsdTx.walletTxs[0].userWallet.userId;
-        referrelTx.referralUserId = gameUsdTx.walletTxs[0].userWallet.userId;
-
-        gameUsdTx.status = 'S';
-        gameUsdTx.txHash = onchainGameUsdTx.hash;
-
-        gameUsdTx.walletTxs[0].status = 'S';
-        await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
-
-        //select last walletTx of referrer
-        const lastValidWalletTx = await queryRunner.manager
-          .createQueryBuilder(WalletTx, 'walletTx')
-          .where(
-            'walletTx.userWalletId = :userWalletId AND walletTx.status = :status',
-            {
-              userWalletId: gameUsdTx.walletTxs[0].userWalletId,
-              status: 'S',
-            },
-          )
-          .orderBy('walletTx.id', 'DESC')
-          .getOne();
-
-        gameUsdTx.walletTxs[0].startingBalance =
-          lastValidWalletTx && lastValidWalletTx.endingBalance
-            ? +lastValidWalletTx.endingBalance
-            : 0;
-        gameUsdTx.walletTxs[0].endingBalance =
-          lastValidWalletTx && lastValidWalletTx.endingBalance
-            ? +lastValidWalletTx.endingBalance + gameUsdTx.walletTxs[0].txAmount
-            : gameUsdTx.walletTxs[0].txAmount;
-
-        await queryRunner.manager.save(gameUsdTx);
-        await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
-        // await this.gameUsdTxRepository.save(gameUsdTx);
-        // await this.walletTxRepository.save(gameUsdTx.walletTx);
-
-        const referrerWallet = await queryRunner.manager.findOne(UserWallet, {
-          where: {
-            id: gameUsdTx.walletTxs[0].userWalletId,
-          },
-        });
-        // const referrerWallet = await this.walletRepository.findOne({
-        //   where: {
-        //     id: gameUsdTx.walletTx.userWalletId,
-        //   },
-        // });
-
-        referrerWallet.walletBalance = gameUsdTx.walletTxs[0].endingBalance;
-        referrerWallet.redeemableBalance =
-          +referrerWallet.redeemableBalance + gameUsdTx.amount; //commision amount
-
-        await queryRunner.manager.save(referrerWallet);
-        await queryRunner.manager.save(referrelTx);
-
-        await queryRunner.commitTransaction();
-      } else {
-        throw 'Game USD Tx Failed';
-      }
-    } catch (error) {
-      console.error(error);
-      gameUsdTx.retryCount += 1;
-      await this.gameUsdTxRepository.save(gameUsdTx);
-
-      await queryRunner.rollbackTransaction();
-    } finally {
-      if (!queryRunner.isReleased) await queryRunner.release();
-    }
-  }
-
-  isReferralCronRunning = false;
-  @Cron(CronExpression.EVERY_10_SECONDS)
-  async handleReferralTxns() {
-    if (this.isReferralCronRunning) return;
-    this.isReferralCronRunning = true;
-
-    try {
-      const referralGameUsdTxns = await this.gameUsdTxRepository
-        .createQueryBuilder('gameUsdTx')
-        .innerJoin('gameUsdTx.walletTxs', 'walletTx')
-        .where('gameUsdTx.status = :status', { status: 'P' })
-        .andWhere('walletTx.txType = :txType', { txType: 'REFERRAL' })
-        .andWhere('gameUsdTx.senderAddress = :senderAddress', {
-          senderAddress: this.configService.get('GAMEUSD_POOL_ADDRESS'),
-        })
-        .getMany();
-
-      for (const referralGameUsdTx of referralGameUsdTxns) {
-        if (referralGameUsdTx.retryCount >= 5) {
-          referralGameUsdTx.status = 'F';
-          await this.gameUsdTxRepository.save(referralGameUsdTx);
-          continue;
-        }
-        await this.handleReferralGameUSDTx(referralGameUsdTx.id);
-      }
-    } catch (error) {
-      this.isReferralCronRunning = false;
-    }
-
-    this.isReferralCronRunning = false;
   }
 
   isRetryCronRunning = false;
@@ -1119,6 +997,7 @@ export class BetService {
           gameUsdPoolAddress: this.configService.get('GAMEUSD_POOL_ADDRESS'),
         },
       )
+      .andWhere('walletTxs.txType = :txType', { txType: 'PLAY' })
       .getMany();
 
     const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
