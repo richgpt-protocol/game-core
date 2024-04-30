@@ -14,12 +14,11 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
-import { UserNotification } from 'src/notification/entities/user-notification.entity';
-import { Notification } from 'src/notification/entities/notification.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointReward__factory } from 'src/contract';
 import * as dotenv from 'dotenv';
+import { UserService } from 'src/user/user.service';
 dotenv.config();
 
 const client = new MongoClient('mongodb://localhost:27017'); // for number recommendation based on input
@@ -40,14 +39,11 @@ export class ChatbotService {
     private eventEmitter: EventEmitter2,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private adminNotificationService: AdminNotificationService,
-    @InjectRepository(Notification)
-    private notificationRepository: Repository<Notification>,
-    @InjectRepository(UserNotification)
-    private userNotificationRepository: Repository<UserNotification>,
     @InjectRepository(UserWallet)
     private userWalletRepository: Repository<UserWallet>,
     @InjectRepository(PointTx)
     private pointTxRepository: Repository<PointTx>,
+    private userService: UserService,
   ) {}
 
   async sendMessage(id: number, payload: SendMessageDto): Promise<string> {
@@ -209,6 +205,7 @@ export class ChatbotService {
       );
 
       replied = assistantMessageWithFunctionResponse.content;
+
     } else {
       // this message is normal message
       replied = assistantMessage.content;
@@ -302,17 +299,15 @@ export class ChatbotService {
         await this.userWalletRepository.save(userWallet);
 
         // inform user
-        const notification = this.notificationRepository.create({
-          type: 'getXpNotification',
-          title: 'XP Reward Get',
-          message: `You get 1 xp reward from daily conversation with Professor Rich.`,
-        });
-        await this.notificationRepository.save(notification);
-        const userNotification = this.userNotificationRepository.create({
-          notification,
-          user: userWallet.user,
-        });
-        await this.userNotificationRepository.save(userNotification);
+        await this.userService.setUserNotification(
+          userWallet.id,
+          {
+            type: 'getXpNotification',
+            title: 'XP Reward Get',
+            message: 'You get 1 xp reward from daily conversation with Professor Rich.',
+            walletTxId: null,
+          }
+        );
 
       } else {
         throw new Error(`tx failed, txHash: ${txReceipt.hash}`)
@@ -321,7 +316,7 @@ export class ChatbotService {
     } catch (error) {
       // inform admin
       await this.adminNotificationService.setAdminNotification(
-        `Error occured in chatbot.service.handleClaimEvent, error: ${error}, userId: ${userId}`,
+        `Error occured in chatbot.service.handlePointRewardEvent, error: ${error}, userId: ${userId}`,
         'Error',
         'Error in chatbot.service',
         true,
