@@ -341,6 +341,34 @@ export class UserController {
   }
 
   @Secure(null, UserRole.USER)
+  @Put('update-notification')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Successful Response',
+    type: ResponseVo,
+  })
+  async updateUserNotification(
+    @Request() req,
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+    @I18n() i18n: I18nContext,
+  ) {
+    const notification = await this.userService.updateUserNotification(
+      req.user.userId,
+    );
+
+    return {
+      statusCode: 200,
+      data: notification,
+      message: null,
+    };
+  }
+
+  @Secure(null, UserRole.USER)
   @Get('get-registration-form')
   @ApiHeader({
     name: 'x-custom-lang',

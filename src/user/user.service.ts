@@ -27,6 +27,9 @@ import { UserLoginDto } from 'src/auth/dto/login.dto';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
+import { NotificationDto } from './dto/notification.dto';
+import { Notification } from 'src/notification/entities/notification.entity';
+import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 
 const serverUrls = [
   // TO CHANGE
@@ -54,8 +57,14 @@ export class UserService {
     private userRepository: Repository<User>,
     @InjectRepository(UserWallet)
     private userWalletRepository: Repository<UserWallet>,
+    @InjectRepository(WalletTx)
+    private walletTxRepository: Repository<WalletTx>,
     @InjectRepository(ReferralTx)
     private referralTxRepository: Repository<ReferralTx>,
+    @InjectRepository(Notification)
+    private notificationRepository: Repository<Notification>,
+    @InjectRepository(UserNotification)
+    private userNotificationRepository: Repository<UserNotification>,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
     private adminNotificationService: AdminNotificationService,
@@ -722,6 +731,33 @@ export class UserService {
       relations: { userNotifications: true },
     });
     return user.userNotifications;
+  }
+
+  async setUserNotification(userId: number, _notification: NotificationDto) {
+    const notification = this.notificationRepository.create({
+      type: _notification.type,
+      title: _notification.title,
+      message: _notification.message,
+    })
+    if (_notification.walletTxId) {
+      notification.walletTx = await this.walletTxRepository.findOneBy({ id: _notification.walletTxId });
+    }
+    await this.notificationRepository.save(notification);
+
+    const userNotification = this.userNotificationRepository.create({
+      user: await this.userRepository.findOneBy({ id: userId }),
+      notification: notification,
+    })
+    await this.userNotificationRepository.save(userNotification);
+  }
+
+  async updateUserNotification(userId: number) {
+    await this.userNotificationRepository.createQueryBuilder()
+      .update()
+      .set({ isRead: true, readDateTime: new Date() })
+      .where("user = :userId", { userId: userId })
+      .andWhere("isRead = :isRead", { isRead: false })
+      .execute()
   }
 
   async getRefereePerformance(userId: number, count: number) {
