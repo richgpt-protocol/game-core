@@ -14,6 +14,7 @@ import { PointTx } from 'src/point/entities/point-tx.entity';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
+import { UserService } from 'src/user/user.service';
 
 type ClaimResponse = {
   error: string;
@@ -52,6 +53,7 @@ export class ClaimService {
     private dataSource: DataSource,
     private adminNotificationService: AdminNotificationService,
     private eventEmitter: EventEmitter2,
+    private userService: UserService,
   ) {}
 
   async claim(userId: number): Promise<ClaimResponse> {
@@ -394,6 +396,16 @@ export class ClaimService {
     } finally {
       // finalize queryRunner
       await queryRunner.release();
+
+      await this.userService.setUserNotification(
+        payload.userId,
+        {
+          type: 'claim',
+          title: 'Claim Processed Successfully',
+          message: 'Your claim has been successfully processed',
+          walletTxId: walletTx.id,
+        }
+      );
     }
   }
 
