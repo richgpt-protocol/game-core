@@ -282,14 +282,34 @@ export class DepositService {
       const walletTx = new WalletTx();
       walletTx.txType = 'REFERRAL';
       walletTx.txAmount = commisionAmount;
-      walletTx.status = 'P';
+      walletTx.status = 'S';
       walletTx.userWalletId = userInfo.referralUserId;
+      walletTx.userWallet = userInfo.referralUser.wallet;
+
+      const previousWalletTx = await queryRunner.manager.findOne(WalletTx, {
+        where: {
+          userWalletId: walletTx.userWalletId,
+          status: 'S',
+        },
+        order: {
+          createdDate: 'DESC',
+        },
+      });
+
+      walletTx.startingBalance = previousWalletTx?.endingBalance || 0;
+      walletTx.endingBalance =
+        (Number(previousWalletTx?.endingBalance) || 0) +
+        Number(commisionAmount);
+
+      walletTx.userWallet.walletBalance = walletTx.endingBalance;
+      walletTx.userWallet.redeemableBalance += Number(commisionAmount);
 
       await queryRunner.manager.save(walletTx);
+      await queryRunner.manager.save(walletTx.userWallet);
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = commisionAmount;
-      gameUsdTx.status = 'P';
+      gameUsdTx.status = 'S';
       gameUsdTx.retryCount = 0;
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
@@ -298,6 +318,17 @@ export class DepositService {
       gameUsdTx.walletTxId = walletTx.id;
 
       await queryRunner.manager.save(gameUsdTx);
+
+      const referralTx = new ReferralTx();
+      referralTx.rewardAmount = walletTx.txAmount;
+      referralTx.referralType = 'DEPOSIT';
+      referralTx.status = 'S';
+      referralTx.userId = userInfo.id;
+      referralTx.walletTx = walletTx;
+      referralTx.referralUserId = userInfo.referralUserId; //one who receives the referral amount
+      referralTx.referralUser = walletTx.userWallet.user;
+
+      await queryRunner.manager.save(referralTx);
     } catch (error) {
       console.error('Error in referral tx', error);
       await queryRunner.rollbackTransaction();
@@ -616,20 +647,6 @@ export class DepositService {
             (Number(previousWalletTx?.endingBalance) || 0) + Number(tx.amount);
 
           walletTx.userWallet.walletBalance = walletTx.endingBalance;
-
-          if (walletTx.txType == 'REFERRAL') {
-            const referralTx = new ReferralTx();
-            referralTx.rewardAmount = walletTx.txAmount;
-            referralTx.referralType = 'DEPOSIT';
-            referralTx.status = 'S';
-            referralTx.userId = walletTx.userWallet.user.id;
-            referralTx.walletTx = walletTx;
-            referralTx.referralUserId = walletTx.userWallet.user.id;
-            referralTx.referralUser = walletTx.userWallet.user;
-            walletTx.userWallet.redeemableBalance = tx.amount;
-
-            await queryRunner.manager.save(referralTx);
-          }
 
           await queryRunner.manager.save(walletTx.userWallet);
           await queryRunner.manager.save(walletTx);
