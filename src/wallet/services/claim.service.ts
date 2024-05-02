@@ -65,13 +65,13 @@ export class ClaimService {
     }
 
     // check if there is any pending claim
-    const lastClaimWalletTx = await this.walletTxRepository
-      .createQueryBuilder()
-      .where('txType = :txType', { txType: 'CLAIM' })
-      .andWhere('userWalletId = :userWalletId', { userWalletId: userId })
-      .orWhere('status = :status', { status: 'P' })
-      .orWhere('status = :status', { status: 'PD' })
-      .getOne();
+    const lastClaimWalletTx = await this.walletTxRepository.findOne({
+      where: {
+        txType: 'CLAIM',
+        userWalletId: userId,
+        status: Not('S'),
+      },
+    });
     if (lastClaimWalletTx) {
       return { error: 'Claim is in pending', data: null };
     }
