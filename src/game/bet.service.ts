@@ -41,6 +41,7 @@ import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointService } from 'src/point/point.service';
+import { UserService } from 'src/user/user.service';
 
 dotenv.config();
 
@@ -71,6 +72,7 @@ export class BetService {
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
     private readonly pointService: PointService,
+    private readonly userService: UserService,
   ) {}
 
   maskingIntervalInSeconds = 120; //seconds before endTime of currentEpoch after which masking will start
@@ -171,6 +173,7 @@ export class BetService {
       walletTx.txType = 'PLAY';
       walletTx.status = 'P';
       walletTx.userWalletId = userInfo.wallet.id;
+      walletTx.userWallet = userInfo.wallet;
       await queryRunner.manager.save(walletTx);
 
       const betOrders = await this.createBetOrders(payload, walletTx);
@@ -891,6 +894,15 @@ export class BetService {
       console.error(error);
       await queryRunner.rollbackTransaction();
     } finally {
+      await this.userService.setUserNotification(
+        payload.walletTx.userWallet.userId,
+        {
+          type: 'bet',
+          title: 'Buy Order Processed Successfully',
+          message: 'Your Buy has been successfully processed',
+          walletTxId: payload.walletTx.id,
+        },
+      );
       if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
@@ -970,7 +982,8 @@ export class BetService {
       });
 
       referrerWallet.walletBalance = walletTx.endingBalance;
-      referrerWallet.redeemableBalance += Number(gameUsdTx.amount); //commision amount
+      referrerWallet.redeemableBalance =
+        Number(referrerWallet.redeemableBalance) + Number(gameUsdTx.amount); //commision amount
 
       await queryRunner.manager.save(referrerWallet);
       await queryRunner.manager.save(referrelTx);
