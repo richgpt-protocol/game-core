@@ -730,7 +730,7 @@ export class UserService {
       where: { id: userId },
       relations: { userNotifications: true },
     });
-    return user.userNotifications;
+    return user.userNotifications.reverse();
   }
 
   async setUserNotification(userId: number, _notification: NotificationDto) {
