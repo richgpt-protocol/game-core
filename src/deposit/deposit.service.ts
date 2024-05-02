@@ -27,6 +27,7 @@ import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointService } from 'src/point/point.service';
+import { UserService } from 'src/user/user.service';
 
 @Injectable()
 export class DepositService {
@@ -48,6 +49,7 @@ export class DepositService {
     private adminNotificationService: AdminNotificationService,
     private dataSource: DataSource,
     private readonly pointService: PointService,
+    private readonly userService: UserService,
   ) {}
 
   private referralCommissionByRank = (rank: number) => {
@@ -652,6 +654,16 @@ export class DepositService {
           await queryRunner.manager.save(walletTx);
 
           await queryRunner.commitTransaction();
+
+          await this.userService.setUserNotification(
+            walletTx.userWallet.userId,
+            {
+              type: 'Deposit',
+              title: 'Deposit Processed Successfully',
+              message: 'Your Deposit has been successfully processed',
+              walletTxId: walletTx.id,
+            },
+          );
         }
       } catch (error) {
         console.log('Error in gameUSD tx', error);
