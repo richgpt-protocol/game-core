@@ -1,3 +1,5 @@
+import { ethers } from 'ethers';
+import { Core__factory } from '../../contract';
 import { DataSource } from 'typeorm';
 import { Seeder, SeederFactoryManager } from 'typeorm-extension';
 
@@ -19,7 +21,10 @@ export default class CreateGames implements Seeder {
     endDate.setUTCHours(startDate.getUTCHours() + 1, 0, 0, 0); // set endDate to nextHour:00:00 from current time
 
     // pre-created 31 game records
-    for (let epoch = 0; epoch < 31; epoch++) {
+    let provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
+    let core_contract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, provider);
+    let currentEpoch = Number(await core_contract.currentEpoch());
+    for (let epoch = currentEpoch; epoch < currentEpoch + 31; epoch++) {
       await dataSource
         .createQueryBuilder()
         .insert()
