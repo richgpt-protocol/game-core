@@ -312,10 +312,33 @@ export class WalletController {
         walletTx.betOrders.forEach((betOrder) => {
           if (!gameIds.includes(betOrder.gameId)) gameIds.push(betOrder.gameId);
         });
+        const { totalWinningAmount: claimableAmountByTicket, drawResults } =
+          await this.claimService.getPendingClaimByWalletTxId(walletTx.id);
         for (const gameId of gameIds) {
-          const betOrders = walletTx.betOrders.filter(
+          const betOrdersInEpoch = walletTx.betOrders.filter(
             (betOrder) => betOrder.gameId === gameId,
           );
+
+          const betOrders = betOrdersInEpoch.map((_betOrder) => {
+            const draw = drawResults.find((drawResult) => {
+              return (
+                drawResult.gameId === gameId &&
+                drawResult.numberPair === _betOrder.numberPair
+              );
+            });
+
+            return {
+              ..._betOrder,
+              isBigForecastWin:
+                draw && _betOrder.bigForecastAmount > 0 ? true : false,
+              isSmallForecastWin:
+                draw &&
+                ['1', '2', '3'].includes(draw.prizeCategory) &&
+                _betOrder.smallForecastAmount > 0
+                  ? true
+                  : false,
+            };
+          });
           const gameInfo = betOrders[0].game;
           const draw = {
             id: gameId,
@@ -324,8 +347,7 @@ export class WalletController {
           };
           draws.push(draw);
         }
-        const claimableAmountByTicket =
-          await this.claimService.getPendingClaimByWalletTxId(walletTx.id);
+
         return {
           id: walletTx.id,
           date: walletTx.createdDate,
@@ -348,28 +370,36 @@ export class WalletController {
             return {
               id: draw.id,
               date: draw.date,
-              betOrders: draw.betOrders.map((betOrder: BetOrder) => {
-                const isClaimable =
-                  betOrder.availableClaim === false
-                    ? false
-                    : betOrder.availableClaim === true &&
-                        betOrder.isClaimed === true
+              betOrders: draw.betOrders.map(
+                (
+                  betOrder: BetOrder & {
+                    isBigForecastWin: boolean;
+                    isSmallForecastWin: boolean;
+                  },
+                ) => {
+                  const isClaimable =
+                    betOrder.availableClaim === false
                       ? false
-                  : true;
+                      : betOrder.availableClaim === true &&
+                          betOrder.isClaimed === true
+                        ? false
+                        : true;
 
-                const isWin =
-                  betOrder.isClaimed === true || betOrder.availableClaim
-                    ? true
-                    : false;
-                return {
-                  numberPair: betOrder.numberPair,
-                  bigForecastAmount: betOrder.bigForecastAmount,
-                  smallForecastAmount: betOrder.smallForecastAmount,
-                  drawSetup: betOrder.type,
-                  motherPair: betOrder.motherPair,
-                  isClaimable,
-                  isWin,
-                }
+                  const isWin =
+                    betOrder.isClaimed === true || betOrder.availableClaim
+                      ? true
+                      : false;
+                  return {
+                    numberPair: betOrder.numberPair,
+                    bigForecastAmount: betOrder.bigForecastAmount,
+                    smallForecastAmount: betOrder.smallForecastAmount,
+                    drawSetup: betOrder.type,
+                    motherPair: betOrder.motherPair,
+                    isClaimable,
+                    isWin,
+                    isBigForecastWin: betOrder.isBigForecastWin,
+                    isSmallForecastWin: betOrder.isSmallForecastWin,
+                  };
               })
             }
           })
