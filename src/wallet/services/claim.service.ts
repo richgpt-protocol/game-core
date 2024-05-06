@@ -432,7 +432,10 @@ export class ClaimService {
     }
   }
 
-  async getPendingClaimByWalletTxId(walletTxId: number): Promise<number> {
+  async getPendingClaimByWalletTxId(walletTxId: number): Promise<{
+    totalWinningAmount: number;
+    drawResults: DrawResult[];
+  }> {
     const betOrders = await this.betOrderRepository.find({
       where: {
         walletTxId,
@@ -442,7 +445,10 @@ export class ClaimService {
     });
 
     if (betOrders.length === 0) {
-      return 0;
+      return {
+        totalWinningAmount: 0,
+        drawResults: [],
+      };
     }
 
     const drawResults = await this.drawResultRepository.find({
@@ -467,7 +473,7 @@ export class ClaimService {
         this.calculateWinningAmount(betOrder, _drawResult);
       totalWinningAmount += bigForecastWinAmount + smallForecastWinAmount;
     }
-    return totalWinningAmount;
+    return { totalWinningAmount, drawResults };
   }
 
   async getPendingClaim(userId: number): Promise<ClaimResponse> {
