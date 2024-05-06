@@ -126,7 +126,6 @@ export class ClaimService {
       let claimParams: ICore.ClaimParamsStruct[] = [];
       let totalPointAmount = 0;
 
-      // loop through the betOrders to check if available for claim
       for (const betOrder of betOrders) {
         // fetch drawResult for each betOrder
         const drawResult = await this.drawResultRepository.findOne({
@@ -204,22 +203,46 @@ export class ClaimService {
         const drawResultIndex = drawResult.prizeIndex
         // smart contract treat big forecast and small forecast as separate claim
         if (bigForecastWinAmount > 0) {
-          claimParams.push({
-            epoch,
-            number: numberPair,
-            amount: ethers.parseEther(betOrder.bigForecastAmount.toString()),
-            forecast: 1,
-            drawResultIndex
-          })
+          const amount = ethers.parseEther(betOrder.bigForecastAmount.toString())
+          // betOrder treat 2 bets with same numberPair same forecast as 2 bets
+          // but on-chain claim treat 2 bets with same numberPair same forecast as 1 bet(with accumulated amount)
+          // hence we need to accumulate betOrder amount for same numberPair same forecast (and same epoch)
+          const claimParamsIndex = claimParams.findIndex(claimParam =>
+            claimParam.number === numberPair && claimParam.epoch === epoch && claimParam.forecast === 1
+          )
+          if (claimParamsIndex !== -1) {
+            // there is already a claimParam for same numberPair, forecast & epoch
+            // just accumulate the amount
+            claimParams[claimParamsIndex].amount = ethers.toBigInt(claimParams[claimParamsIndex].amount) + amount;
+
+          } else {
+            claimParams.push({
+              epoch,
+              number: numberPair,
+              amount,
+              forecast: 1,
+              drawResultIndex
+            })
+          }
         }
         if (smallForecastWinAmount > 0) {
-          claimParams.push({
-            epoch,
-            number: numberPair,
-            amount: ethers.parseEther(betOrder.smallForecastAmount.toString()),
-            forecast: 0,
-            drawResultIndex
-          })
+          const amount = ethers.parseEther(betOrder.smallForecastAmount.toString())
+          // refer above
+          const claimParamsIndex = claimParams.findIndex(claimParam =>
+            claimParam.number === numberPair && claimParam.epoch === epoch && claimParam.forecast === 0
+          )
+          if (claimParamsIndex !== -1) {
+            claimParams[claimParamsIndex].amount = ethers.toBigInt(claimParams[claimParamsIndex].amount) + amount;
+
+          } else {
+            claimParams.push({
+              epoch,
+              number: numberPair,
+              amount: ethers.parseEther(betOrder.smallForecastAmount.toString()),
+              forecast: 0,
+              drawResultIndex
+            })
+          }
         }
       }
 
