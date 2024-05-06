@@ -39,7 +39,10 @@ export class WalletService {
 
   async getWalletTx(userId: number, count: number) {
     const walletTxs = await this.walletTxRepository.find({
-      where: { userWalletId: userId },
+      where: {
+        userWalletId: userId,
+        status: 'S',
+      },
       order: { createdDate: 'DESC' },
     })
 
