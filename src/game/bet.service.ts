@@ -260,12 +260,14 @@ export class BetService {
       return acc;
     }, {});
 
-    const betHistory = await this.betRepository.find({
-      where: {
-        numberPair: In(numberPairs),
-        game: In(Object.keys(allGamesArr)),
-      },
-    });
+    const betHistory = await this.betRepository
+      .createQueryBuilder('bet')
+      .leftJoinAndSelect('bet.game', 'game')
+      .where('bet.numberPair IN (:...numberPairs)', { numberPairs })
+      .andWhere('bet.game IN (:...gameIds)', {
+        gameIds: allGamesArr.map((game) => game.id),
+      })
+      .getMany();
 
     for (const bet of payload) {
       bet.epochs.forEach((epoch) => {
@@ -301,18 +303,34 @@ export class BetService {
         }
 
         const betHistoryForThisBet = betHistory.filter(
-          (betHistory) =>
-            betHistory.numberPair === bet.numberPair &&
-            +betHistory.game.epoch === epoch,
+          (_betHistory) =>
+            _betHistory.numberPair === bet.numberPair &&
+            _betHistory.game.epoch === epoch.toString(),
         );
 
-        const totalAmountForThisBet = betHistoryForThisBet.reduce(
-          (acc, bet) => acc + bet.bigForecastAmount + bet.smallForecastAmount,
+        const totalPastBetAmountsForThisBet = betHistoryForThisBet.reduce(
+          (acc, bet) =>
+            acc +
+            Number(bet.bigForecastAmount) +
+            Number(bet.smallForecastAmount),
+          0,
+        );
+
+        const drawsForThisNumberPair = payload.filter(
+          (_bet) =>
+            _bet.numberPair === bet.numberPair && _bet.epochs.includes(epoch),
+        );
+
+        const totalAmountForThisNumberPair = drawsForThisNumberPair.reduce(
+          (acc, bet) =>
+            acc +
+            Number(bet.bigForecastAmount) +
+            Number(bet.smallForecastAmount),
           0,
         );
 
         if (
-          totalAmountForThisBet + totalAmount >
+          totalPastBetAmountsForThisBet + totalAmountForThisNumberPair >
           allGamesObj[epoch].maxBetAmount
         ) {
           throw new BadRequestException('Bet amount exceeds max allowed');
@@ -616,19 +634,27 @@ export class BetService {
     let totalBetAmount = 0;
     const bets = [];
     payload.map((bet) => {
-      const betAmount =
-        bet.smallForecastAmount <= 0
-          ? bet.bigForecastAmount
-          : bet.smallForecastAmount;
+      if (bet.smallForecastAmount > 0) {
+        bets.push({
+          epoch: +bet.game.epoch,
+          number: +bet.numberPair,
+          amount: parseUnits(bet.smallForecastAmount.toString(), 18),
+          forecast: 0,
+        });
 
-      totalBetAmount += +betAmount;
+        totalBetAmount += +bet.smallForecastAmount;
+      }
 
-      bets.push({
-        epoch: bet.game.epoch,
-        number: bet.numberPair,
-        amount: parseUnits(betAmount.toString(), 18),
-        forecast: bet.smallForecastAmount <= 0 ? 1 : 0,
-      });
+      if (bet.bigForecastAmount > 0) {
+        bets.push({
+          epoch: +bet.game.epoch,
+          number: +bet.numberPair,
+          amount: parseUnits(bet.bigForecastAmount.toString(), 18),
+          forecast: 1,
+        });
+
+        totalBetAmount += +bet.bigForecastAmount;
+      }
     });
 
     const betWithCreditParams = {
@@ -663,19 +689,27 @@ export class BetService {
     let totalAmount = 0;
     const bets = [];
     payload.map((bet) => {
-      const betAmount =
-        bet.smallForecastAmount <= 0
-          ? bet.bigForecastAmount
-          : bet.smallForecastAmount;
+      if (bet.smallForecastAmount > 0) {
+        bets.push({
+          epoch: +bet.game.epoch,
+          number: +bet.numberPair,
+          amount: parseUnits(bet.smallForecastAmount.toString(), 18),
+          forecast: 0,
+        });
 
-      totalAmount += +betAmount;
+        totalAmount += +bet.smallForecastAmount;
+      }
 
-      bets.push({
-        epoch: +bet.game.epoch,
-        number: +bet.numberPair,
-        amount: parseUnits(betAmount.toString(), 18),
-        forecast: bet.smallForecastAmount <= 0 ? 1 : 0,
-      });
+      if (bet.bigForecastAmount > 0) {
+        bets.push({
+          epoch: +bet.game.epoch,
+          number: +bet.numberPair,
+          amount: parseUnits(bet.bigForecastAmount.toString(), 18),
+          forecast: 1,
+        });
+
+        totalAmount += +bet.bigForecastAmount;
+      }
     });
 
     await this._checkAllowanceAndApprove(
