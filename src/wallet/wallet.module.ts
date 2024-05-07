@@ -23,8 +23,8 @@ import { PermissionModule } from 'src/permission/permission.module';
 import { WalletService } from './wallet.service';
 import { User } from 'src/user/entities/user.entity';
 import { SharedModule } from 'src/shared/shared.module';
-import { UserService } from 'src/user/user.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
@@ -50,8 +50,9 @@ import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
     ]),
     PermissionModule,
     SharedModule,
+    UserModule,
   ],
-  providers: [WalletService, ClaimService, RedeemService, UserService],
+  providers: [WalletService, ClaimService, RedeemService],
   controllers: [WalletController],
   exports: [],
 })

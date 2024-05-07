@@ -29,6 +29,7 @@ import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointService } from 'src/point/point.service';
 import { PointModule } from 'src/point/point.module';
 import { UserService } from 'src/user/user.service';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
@@ -56,13 +57,14 @@ import { UserService } from 'src/user/user.service';
     PointModule,
     SharedModule,
     // SseModule,
+    UserModule,
   ],
   providers: [
     DepositService,
     WalletService,
     AdminNotificationService /* HttpService */,
     PointService,
-    UserService,
+    // UserService,
   ],
   controllers: [DepositController],
   exports: [],

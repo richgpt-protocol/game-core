@@ -23,9 +23,9 @@ import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { ConfigModule } from 'src/config/config.module';
 import { PointService } from 'src/point/point.service';
 import { PointModule } from 'src/point/point.module';
-import { UserService } from 'src/user/user.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { SharedModule } from 'src/shared/shared.module';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
@@ -49,6 +49,7 @@ import { SharedModule } from 'src/shared/shared.module';
     ScheduleModule.forRoot(),
     PointModule,
     SharedModule,
+    UserModule,
   ],
   providers: [
     GameService,
@@ -57,7 +58,6 @@ import { SharedModule } from 'src/shared/shared.module';
     CacheSettingService,
     BetService,
     PointService,
-    UserService,
   ],
   controllers: [GameController],
   exports: [GameService],
