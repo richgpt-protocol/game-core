@@ -286,12 +286,14 @@ export class BetService {
       return acc;
     }, {});
 
-    const betHistory = await this.betRepository.find({
-      where: {
-        numberPair: In(numberPairs),
-        game: In(Object.keys(allGamesArr)),
-      },
-    });
+    const betHistory = await this.betRepository
+      .createQueryBuilder('bet')
+      .leftJoinAndSelect('bet.game', 'game')
+      .where('bet.numberPair IN (:...numberPairs)', { numberPairs })
+      .andWhere('bet.game IN (:...gameIds)', {
+        gameIds: allGamesArr.map((game) => game.id),
+      })
+      .getMany();
 
     for (const bet of payload) {
       bet.epochs.forEach((epoch) => {
@@ -327,18 +329,34 @@ export class BetService {
         }
 
         const betHistoryForThisBet = betHistory.filter(
-          (betHistory) =>
-            betHistory.numberPair === bet.numberPair &&
-            +betHistory.game.epoch === epoch,
+          (_betHistory) =>
+            _betHistory.numberPair === bet.numberPair &&
+            _betHistory.game.epoch === epoch.toString(),
         );
 
-        const totalAmountForThisBet = betHistoryForThisBet.reduce(
-          (acc, bet) => acc + bet.bigForecastAmount + bet.smallForecastAmount,
+        const totalPastBetAmountsForThisBet = betHistoryForThisBet.reduce(
+          (acc, bet) =>
+            acc +
+            Number(bet.bigForecastAmount) +
+            Number(bet.smallForecastAmount),
+          0,
+        );
+
+        const drawsForThisNumberPair = payload.filter(
+          (_bet) =>
+            _bet.numberPair === bet.numberPair && _bet.epochs.includes(epoch),
+        );
+
+        const totalAmountForThisNumberPair = drawsForThisNumberPair.reduce(
+          (acc, bet) =>
+            acc +
+            Number(bet.bigForecastAmount) +
+            Number(bet.smallForecastAmount),
           0,
         );
 
         if (
-          totalAmountForThisBet + totalAmount >
+          totalPastBetAmountsForThisBet + totalAmountForThisNumberPair >
           allGamesObj[epoch].maxBetAmount
         ) {
           throw new BadRequestException('Bet amount exceeds max allowed');
