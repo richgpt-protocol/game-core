@@ -67,7 +67,11 @@ export class PointService {
       .where('userWallet.userId = :userId', { userId })
       .andWhere('walletTx.status = :status', { status: 'S' })
       .andWhere('betOrder.createdDate >= :date', {
-        date: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
+        date: new Date(
+          currentDate.getUTCFullYear(),
+          currentDate.getUTCMonth(),
+          1,
+        ),
       })
       .getMany();
 
