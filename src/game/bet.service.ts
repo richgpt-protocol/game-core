@@ -189,12 +189,6 @@ export class BetService {
       walletTx.txAmount = walletBalanceUsed;
       walletTx.betOrders = betOrders;
       await queryRunner.manager.save(walletTx);
-
-      const xpPoints = await this.pointService.getBetPoints(
-        userInfo.id,
-        walletBalanceUsed,
-      );
-
       await queryRunner.manager.save(betOrders);
 
       const gameUsdTx = new GameUsdTx();
@@ -208,26 +202,6 @@ export class BetService {
       );
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.retryCount = 0;
-
-      const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
-        where: {
-          walletId: userInfo.wallet.id,
-        },
-        order: {
-          id: 'DESC',
-        },
-      });
-      const pointTx = new PointTx();
-      pointTx.amount = xpPoints;
-      pointTx.txType = 'DEPOSIT';
-      pointTx.walletId = userInfo.wallet.id;
-      pointTx.userWallet = userInfo.wallet;
-      pointTx.walletTx = walletTx;
-      pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
-      pointTx.endingBalance = pointTx.startingBalance + pointTx.amount;
-      // pointTx.campaignId = ; //TODO
-
-      await queryRunner.manager.save(pointTx);
 
       await queryRunner.manager.save(gameUsdTx);
 
@@ -858,7 +832,6 @@ export class BetService {
         }
       }
 
-      await queryRunner.manager.save(payload.walletTx);
       await queryRunner.manager.save(payload.gameUsdTx);
 
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
@@ -879,13 +852,41 @@ export class BetService {
       userWallet.walletBalance = payload.walletTx.endingBalance;
       userWallet.creditBalance = previousEndingCreditBalance;
 
-      await queryRunner.manager.save(userWallet);
-
       const user = await queryRunner.manager.findOne(User, {
         where: {
           id: userWallet.userId,
         },
       });
+
+      //Update Points
+      const xpPoints = await this.pointService.getBetPoints(
+        user.id,
+        payload.gameUsdTx.amount,
+      );
+      const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
+        where: {
+          walletId: userWallet.id,
+        },
+        order: {
+          id: 'DESC',
+        },
+      });
+      const pointTx = new PointTx();
+      pointTx.amount = xpPoints;
+      pointTx.txType = 'BET';
+      pointTx.walletId = userWallet.id;
+      pointTx.userWallet = userWallet;
+      pointTx.walletTx = payload.walletTx;
+      pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
+      pointTx.endingBalance =
+        Number(pointTx.startingBalance) + Number(pointTx.amount);
+      // pointTx.campaignId = ; //TODO
+
+      userWallet.pointBalance = pointTx.endingBalance;
+
+      await queryRunner.manager.save(payload.walletTx);
+      await queryRunner.manager.save(userWallet);
+      await queryRunner.manager.save(pointTx);
 
       await queryRunner.commitTransaction();
 

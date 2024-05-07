@@ -22,7 +22,7 @@ export class PointService {
   getDepositPoints(depositAmount: number): { xp: number; bonusPerc: number } {
     switch (depositAmount) {
       case 5:
-        return { xp: 2.5, bonusPerc: 0 };
+        return { xp: 5, bonusPerc: 0 };
       case 10:
         return { xp: 11, bonusPerc: 10 };
       case 20:
@@ -32,7 +32,8 @@ export class PointService {
       case 100:
         return { xp: 200, bonusPerc: 100 };
       default:
-        throw new Error('Invalid deposit amount');
+        return { xp: 0, bonusPerc: 0 };
+      // throw new Error('Invalid deposit amount');
     }
   }
 
@@ -55,7 +56,7 @@ export class PointService {
   }
 
   async getBetPoints(userId: number, betAmount: number): Promise<number> {
-    const baseBetPointsPerUSD = 1;
+    const baseBetPointsPerUSD = 2;
     let betPoints = betAmount * baseBetPointsPerUSD;
 
     const currentDate = new Date();
@@ -66,11 +67,7 @@ export class PointService {
       .where('userWallet.userId = :userId', { userId })
       .andWhere('walletTx.status = :status', { status: 'S' })
       .andWhere('betOrder.createdDate >= :date', {
-        date: new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth() + 1,
-          1,
-        ),
+        date: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
       })
       .getMany();
 
@@ -80,9 +77,19 @@ export class PointService {
     );
 
     if (totalBetAmount >= 100) {
-      betPoints += 100;
+      const noOfHundreds = Math.floor(totalBetAmount / 100);
+
+      // Add 100 points for every 100 USD bet.
+      // For example, if the user bet 200 USD, he will get 200 points.
+      // if the user bet 199 USD, he will get 100 points.
+      betPoints += noOfHundreds * 100;
     } else if (totalBetAmount >= 10) {
-      betPoints += 10;
+      const noOfTens = Math.floor(totalBetAmount / 10);
+
+      // Add 10 points for every 10 USD bet.
+      // For example, if the user bet 50 USD, he will get 50 points.
+      // if the user bet 11 USD, he will get 10 points.
+      betPoints += noOfTens * 10;
     }
 
     return betPoints;

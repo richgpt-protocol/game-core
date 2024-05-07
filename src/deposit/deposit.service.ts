@@ -128,26 +128,6 @@ export class DepositService {
       reloadTx.userWallet = userWallet;
       reloadTx.userWalletId = userWallet.id;
 
-      const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
-        where: {
-          walletId: userWallet.id,
-        },
-        order: {
-          createdDate: 'DESC',
-        },
-      });
-
-      const pointInfo = this.pointService.getDepositPoints(payload.amount);
-      const pointTx = new PointTx();
-      pointTx.amount =
-        pointInfo.xp + (payload.amount * pointInfo.bonusPerc) / 100;
-      pointTx.txType = 'DEPOSIT';
-      pointTx.walletId = userWallet.id;
-      pointTx.userWallet = userWallet;
-      pointTx.walletTx = walletTx;
-      pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
-      pointTx.endingBalance = pointTx.startingBalance + +pointTx.amount;
-
       await queryRunner.manager.save(reloadTx);
 
       await queryRunner.manager.save(depositTx);
@@ -649,6 +629,32 @@ export class DepositService {
             (Number(previousWalletTx?.endingBalance) || 0) + Number(tx.amount);
 
           walletTx.userWallet.walletBalance = walletTx.endingBalance;
+
+          const pointInfo = this.pointService.getDepositPoints(
+            Number(walletTx.txAmount),
+          );
+
+          const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
+            where: {
+              walletId: walletTx.userWallet.id,
+            },
+            order: {
+              createdDate: 'DESC',
+            },
+          });
+          const pointTx = new PointTx();
+          pointTx.amount =
+            pointInfo.xp + (walletTx.txAmount * pointInfo.bonusPerc) / 100;
+          pointTx.txType = 'DEPOSIT';
+          pointTx.walletId = walletTx.userWallet.id;
+          pointTx.userWallet = walletTx.userWallet;
+          pointTx.walletTx = walletTx;
+          pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
+          pointTx.endingBalance =
+            Number(pointTx.startingBalance) + Number(pointTx.amount);
+          walletTx.userWallet.pointBalance = pointTx.endingBalance;
+
+          await queryRunner.manager.save(pointTx);
 
           await queryRunner.manager.save(walletTx.userWallet);
           await queryRunner.manager.save(walletTx);
