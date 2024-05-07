@@ -17,8 +17,9 @@ import { Setting } from 'src/setting/entities/setting.entity';
 import { ReviewRedeemDto } from '../dto/ReviewRedeem.dto';
 import { User } from 'src/user/entities/user.entity';
 import { Cron } from '@nestjs/schedule';
-import * as dotenv from 'dotenv';
 import { WalletService } from '../wallet.service';
+import { UserService } from 'src/user/user.service';
+import * as dotenv from 'dotenv';
 dotenv.config();
 
 type RedeemResponse = {
@@ -61,6 +62,7 @@ export class RedeemService {
     private adminNotificationService: AdminNotificationService,
     private walletService: WalletService,
     private eventEmitter: EventEmitter2,
+    private userService: UserService,
   ) {}
 
   // how redeem & payout work
@@ -267,6 +269,16 @@ export class RedeemService {
     } finally {
       // finalize queryRunner
       await queryRunner.release();
+
+      await this.userService.setUserNotification(
+        userId,
+        {
+          type: 'redeem',
+          title: 'Redeem Processed Successfully',
+          message: `Your redeem of ${payload.amount} has been successfully processed and pending for review.`,
+          walletTxId: walletTx.id,
+        }
+      );
     }
 
     return { error: null, data: redeemTx };
@@ -369,6 +381,17 @@ export class RedeemService {
         }
         this.eventEmitter.emit('wallet.handleRedeem', eventPayload);
 
+        // inform user for approved redeem request (not through queryRunner)
+        await this.userService.setUserNotification(
+          walletTx.userWalletId,
+          {
+            type: 'review redeem',
+            title: 'Redeem Request Approved',
+            message: `Your redeem request for amount ${walletTx.txAmount} has been approved. Please wait for the payout process.`,
+            walletTxId: walletTx.id,
+          }
+        );
+
       } else { // !payload.canApprove
         // update redeemTx
         redeemTx.payoutCanProceed = false;
@@ -378,17 +401,16 @@ export class RedeemService {
         walletTx.status = 'F';
         await queryRunner.manager.save(walletTx);
 
-        // inform user for rejected redeem request
-        const notification = this.notificationRepository.create({
-          type: 'redeemRejectError',
-          title: 'Redeem Request Rejected',
-          message: `Your redeem request for amount ${walletTx.txAmount} has been rejected. Please contact admin for more information.`,
-        });
-        const userNotification = this.userNotificationRepository.create({
-          notification,
-          user: walletTx.userWallet.user,
-        });
-        await queryRunner.manager.save([notification, userNotification]);
+        // inform user for rejected redeem request (not through queryRunner)
+        await this.userService.setUserNotification(
+          walletTx.userWalletId,
+          {
+            type: 'review redeem',
+            title: 'Redeem Request Rejected',
+            message: `Your redeem request for amount ${walletTx.txAmount} has been rejected. Please contact admin for more information.`,
+            walletTxId: walletTx.id,
+          }
+        );
       }
 
       await queryRunner.commitTransaction();
@@ -534,7 +556,9 @@ export class RedeemService {
     });
 
     for (const redeemTx of redeemTxs) {
-      const walletTx = await this.walletTxRepository.findOneBy({ id: redeemTx.walletTx.id });
+      const walletTx = await this.walletTxRepository.findOne({
+        where: { id: redeemTx.walletTx.id },
+      });
 
       // start queryRunner
       const queryRunner = this.dataSource.createQueryRunner();
@@ -585,19 +609,16 @@ export class RedeemService {
           walletTx.status = 'S';
           await queryRunner.manager.save(walletTx);
 
-          // send notification to user for successful payout
-          const notification = this.notificationRepository.create({
-            type: 'info',
-            title: 'Payout Successful',
-            message: `Your payout request for amount ${walletTx.txAmount} has been processed successfully.`,
-            walletTx: walletTx,
-          });
-          await queryRunner.manager.save(notification);
-          const userNotification = this.userNotificationRepository.create({
-            notification,
-            user: await this.userRepository.findOneBy({ id: walletTx.userWalletId }),
-          });
-          await queryRunner.manager.save(userNotification);
+          // send notification to user for successful payout (not through queryRunner)
+          await this.userService.setUserNotification(
+            walletTx.userWalletId,
+            {
+              type: 'payout',
+              title: 'Payout Successfully',
+              message: `Your payout for amount ${Number(redeemTx.amount)} has been processed successfully.`,
+              walletTxId: walletTx.id,
+            }
+          );
 
         } else { // txReceipt.status === 0, on-chain transaction failed
           // update redeemTx
