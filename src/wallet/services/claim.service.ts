@@ -269,6 +269,7 @@ export class ClaimService {
       await queryRunner.manager.save(walletTx);
 
       // update userWallet
+      userWallet.pointBalance = Number(userWallet.pointBalance) + totalPointAmount;
       userWallet.pointTx.push(pointTx);
       await queryRunner.manager.save(userWallet);
 
