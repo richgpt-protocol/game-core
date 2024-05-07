@@ -205,7 +205,7 @@ export class RedeemService {
       if (Number(usdt_balance) < payload.amount) {
         // send notification to admin for reload payout pool
         this.adminNotificationService.setAdminNotification(
-          `Payout contract has insufficient USDT to payout for amount ${payload.amount}. Please reload payout pool.`,
+          `Payout contract has insufficient USDT to payout for amount $${payload.amount}. Please reload payout pool.`,
           'error',
           'Payout Pool Reload',
           true
@@ -245,7 +245,7 @@ export class RedeemService {
 
         // send notification to admin for manual review
         this.adminNotificationService.setAdminNotification(
-          `User ${userId} has requested redeem for amount ${payload.amount}, please review. redeemTxId: ${redeemTx.id}`,
+          `User ${userId} has requested redeem for amount $${payload.amount}, please review. redeemTxId: ${redeemTx.id}`,
           'info',
           'Redeem Request',
           true
@@ -275,7 +275,7 @@ export class RedeemService {
         {
           type: 'redeem',
           title: 'Redeem Processed Successfully',
-          message: `Your redeem of ${payload.amount} has been successfully processed and pending for review.`,
+          message: `Your redeem of $${payload.amount} has been successfully processed and pending for review.`,
           walletTxId: walletTx.id,
         }
       );
@@ -387,7 +387,7 @@ export class RedeemService {
           {
             type: 'review redeem',
             title: 'Redeem Request Approved',
-            message: `Your redeem request for amount ${walletTx.txAmount} has been approved. Please wait for the payout process.`,
+            message: `Your redeem request for amount $${walletTx.txAmount} has been approved. Please wait for the payout process.`,
             walletTxId: walletTx.id,
           }
         );
@@ -407,7 +407,7 @@ export class RedeemService {
           {
             type: 'review redeem',
             title: 'Redeem Request Rejected',
-            message: `Your redeem request for amount ${walletTx.txAmount} has been rejected. Please contact admin for more information.`,
+            message: `Your redeem request for amount $${walletTx.txAmount} has been rejected. Please contact admin for more information.`,
             walletTxId: walletTx.id,
           }
         );
