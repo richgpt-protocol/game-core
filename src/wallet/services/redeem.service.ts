@@ -236,7 +236,7 @@ export class RedeemService {
           payoutCanProceed: true,
           payoutNote: 'This request redeem proceed automatically(criteria met)',
         };
-        await this.reviewRedeem(adminId, payload);
+        this.reviewRedeem(adminId, payload);
 
       } else {
         // requested amount > $100 or last payout < 24 hours
@@ -269,6 +269,11 @@ export class RedeemService {
     } finally {
       // finalize queryRunner
       await queryRunner.release();
+
+      // update userWallet
+      userWallet.walletBalance -= walletTx.txAmount;
+      userWallet.redeemableBalance -= walletTx.txAmount;
+      await this.userWalletRepository.save(userWallet);
 
       await this.userService.setUserNotification(
         userId,
@@ -381,6 +386,9 @@ export class RedeemService {
         }
         this.eventEmitter.emit('wallet.handleRedeem', eventPayload);
 
+        // need to commit transaction before setUserNotification() to avoid deadlock(QueryFailedError)
+        await queryRunner.commitTransaction();
+
         // inform user for approved redeem request (not through queryRunner)
         await this.userService.setUserNotification(
           walletTx.userWalletId,
@@ -411,9 +419,9 @@ export class RedeemService {
             walletTxId: walletTx.id,
           }
         );
-      }
 
-      await queryRunner.commitTransaction();
+        await queryRunner.commitTransaction();
+      }
 
     } catch (err) {
       // rollback queryRunner
@@ -488,12 +496,6 @@ export class RedeemService {
         // update wallet_tx
         walletTx.status = 'S';
         await queryRunner.manager.save(walletTx);
-
-        // update userWallet
-        const userWallet = walletTx.userWallet;
-        userWallet.walletBalance -= walletTx.txAmount;
-        userWallet.redeemableBalance -= walletTx.txAmount;
-        await queryRunner.manager.save(userWallet);
         
         await queryRunner.commitTransaction();
 
