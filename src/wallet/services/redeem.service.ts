@@ -395,7 +395,7 @@ export class RedeemService {
           {
             type: 'review redeem',
             title: 'Redeem Request Approved',
-            message: `Your redeem request for amount $${walletTx.txAmount} has been approved. Please wait for the payout process.`,
+            message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been approved. Please wait for the payout process.`,
             walletTxId: walletTx.id,
           }
         );
@@ -415,7 +415,7 @@ export class RedeemService {
           {
             type: 'review redeem',
             title: 'Redeem Request Rejected',
-            message: `Your redeem request for amount $${walletTx.txAmount} has been rejected. Please contact admin for more information.`,
+            message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
             walletTxId: walletTx.id,
           }
         );
@@ -617,7 +617,7 @@ export class RedeemService {
             {
               type: 'payout',
               title: 'Payout Successfully',
-              message: `Your payout for amount ${Number(redeemTx.amount)} has been processed successfully.`,
+              message: `Your payout for amount $${Number(redeemTx.amount)} has been processed successfully.`,
               walletTxId: walletTx.id,
             }
           );
