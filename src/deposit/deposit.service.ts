@@ -19,7 +19,7 @@ import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { DepositDTO } from './dto/deposit.dto';
-import { Provider, ethers, parseUnits } from 'ethers';
+import { JsonRpcProvider, Provider, ethers, parseUnits } from 'ethers';
 import { Cron } from '@nestjs/schedule';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { User } from 'src/user/entities/user.entity';
@@ -28,6 +28,7 @@ import { AdminNotificationService } from 'src/shared/services/admin-notification
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointService } from 'src/point/point.service';
 import { UserService } from 'src/user/user.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class DepositService {
@@ -50,6 +51,7 @@ export class DepositService {
     private dataSource: DataSource,
     private readonly pointService: PointService,
     private readonly userService: UserService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   private referralCommissionByRank = (rank: number) => {
@@ -102,8 +104,8 @@ export class DepositService {
       walletTx.status = 'P';
       walletTx.userWallet = userWallet;
       walletTx.userWalletId = userWallet.id;
-
       const walletTxResult = await queryRunner.manager.save(walletTx);
+
       const depositTx = new DepositTx();
       depositTx.currency = payload.tokenAddress;
       depositTx.senderAddress = payload.depositerAddress;
@@ -116,19 +118,20 @@ export class DepositService {
       depositTx.retryCount = 0;
       depositTx.status = 'P';
 
-      const nativeBalance = await this.getNativeBalance(
-        payload.walletAddress,
-        payload.chainId,
-      );
-      const minimumNativeBalance = this.configService.get(
-        `MINIMUM_NATIVE_BALANCE_${payload.chainId}`,
-      );
+      // const nativeBalance = await this.getNativeBalance(
+      //   payload.walletAddress,
+      //   payload.chainId,
+      // );
+      // const minimumNativeBalance = this.configService.get(
+      //   `MINIMUM_NATIVE_BALANCE_${payload.chainId}`,
+      // );
 
-      const reloadTx = await this.reloadWallet(payload, +minimumNativeBalance);
-      reloadTx.userWallet = userWallet;
-      reloadTx.userWalletId = userWallet.id;
+      await this.reloadWallet(payload.walletAddress);
+      // const reloadTx = await this.reloadWallet(payload, +minimumNativeBalance);
+      // reloadTx.userWallet = userWallet;
+      // reloadTx.userWalletId = userWallet.id;
 
-      await queryRunner.manager.save(reloadTx);
+      // await queryRunner.manager.save(reloadTx);
 
       await queryRunner.manager.save(depositTx);
       queryRunner.commitTransaction();
@@ -158,40 +161,12 @@ export class DepositService {
     }
   }
 
-  private async reloadWallet(
-    payload: DepositDTO,
-    reloadAmount: number,
-  ): Promise<ReloadTx> {
-    const currencyLabel = this.currencyByChainId(payload.chainId);
-    const reloadTx = new ReloadTx();
-    reloadTx.chainId = payload.chainId;
-    reloadTx.status = 'P';
-    reloadTx.amount = reloadAmount;
-    reloadTx.txHash = null;
-    reloadTx.currency = currencyLabel;
-    reloadTx.retryCount = 0;
-    reloadTx.amountInUSD =
-      reloadAmount *
-      (await this.getPriceInUSD(
-        currencyLabel === 'BNB' ? 'binancecoin' : 'ethereum',
-      ));
-
-    // try {
-    //   const tx = await this.transferNative(
-    //     payload.walletAddress,
-    //     reloadAmount,
-    //     payload.chainId,
-    //   );
-
-    //   this.eventEmitter.emit('reload', {
-    //     reloadTx,
-    //     tx,
-    //   });
-    // } catch (error) {
-    //   console.log(`Error Native transfer tx ${reloadTx.id}`, error);
-    // }
-
-    return reloadTx;
+  private async reloadWallet(walletAddress: string) {
+    await this.eventEmitter.emit(
+      'gas.service.reload',
+      walletAddress,
+      Number(process.env.OPBNB_CHAIN_ID),
+    );
   }
 
   private async getPriceInUSD(currency: string): Promise<number> {
@@ -240,6 +215,54 @@ export class DepositService {
       return tx;
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   *
+   * @returns Whether the user has enough balance
+   */
+  private async checkNativeBalance(
+    userWallet: UserWallet,
+    chainId: number,
+  ): Promise<boolean> {
+    try {
+      const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+
+      const nativeBalance = await provider.getBalance(userWallet.walletAddress);
+
+      const minimumNativeBalance = this.configService.get(
+        `MINIMUM_NATIVE_BALANCE_${chainId}`,
+      );
+
+      if (nativeBalance < parseUnits(minimumNativeBalance, 18)) {
+        const pendingReloadTx = await this.reloadTxRepository.findOne({
+          where: {
+            userWalletId: userWallet.id,
+            chainId,
+            status: 'P',
+          },
+        });
+
+        if (!pendingReloadTx) {
+          console.log(
+            'Deposit: Emitting gas.service.reload event for userWallet:',
+            userWallet.walletAddress,
+          );
+          this.eventEmitter.emit(
+            'gas.service.reload',
+            userWallet.walletAddress,
+            chainId,
+          );
+        }
+
+        return false;
+      } else {
+        return true;
+      }
+    } catch (error) {
+      console.error('Error in checkNativeBalance', error);
+      return false;
     }
   }
 
@@ -321,60 +344,60 @@ export class DepositService {
 
   // Runs every 10 second.
   // Sends the native tokens to the user wallet
-  isReloadCronRunning = false;
-  @Cron('*/10 * * * * *')
-  async handleReloadTx() {
-    if (this.isReloadCronRunning) return;
+  // isReloadCronRunning = false;
+  // @Cron('*/10 * * * * *')
+  // async handleReloadTx() {
+  //   if (this.isReloadCronRunning) return;
 
-    this.isReloadCronRunning = true;
-    const pendingReloadTx = await this.reloadTxRepository
-      .createQueryBuilder('reloadTx')
-      .innerJoinAndSelect('reloadTx.userWallet', 'userWallet')
-      .where('reloadTx.status IN (:...statuses)', { statuses: ['P', 'F'] })
-      .andWhere('reloadTx.retryCount <= :retryCount', { retryCount: 5 })
-      .getMany();
+  //   this.isReloadCronRunning = true;
+  //   const pendingReloadTx = await this.reloadTxRepository
+  //     .createQueryBuilder('reloadTx')
+  //     .innerJoinAndSelect('reloadTx.userWallet', 'userWallet')
+  //     .where('reloadTx.status IN (:...statuses)', { statuses: ['P', 'F'] })
+  //     .andWhere('reloadTx.retryCount <= :retryCount', { retryCount: 5 })
+  //     .getMany();
 
-    for (const tx of pendingReloadTx) {
-      console.log('Processing reload tx', tx);
+  //   for (const tx of pendingReloadTx) {
+  //     console.log('Processing reload tx', tx);
 
-      try {
-        if (tx.retryCount >= 5) {
-          tx.status = 'F';
-          await this.reloadTxRepository.save(tx);
+  //     try {
+  //       if (tx.retryCount >= 5) {
+  //         tx.status = 'F';
+  //         await this.reloadTxRepository.save(tx);
 
-          await this.adminNotificationService.setAdminNotification(
-            `Reload transaction after 5 times for reload.tx.entity: ${tx.id}`,
-            'RELOAD_FAILED_5_TIMES',
-            'Native token transfer failed',
-            false,
-          );
+  //         await this.adminNotificationService.setAdminNotification(
+  //           `Reload transaction after 5 times for reload.tx.entity: ${tx.id}`,
+  //           'RELOAD_FAILED_5_TIMES',
+  //           'Native token transfer failed',
+  //           false,
+  //         );
 
-          continue;
-        }
+  //         continue;
+  //       }
 
-        //send transaction
-        const onchainTx = await this.transferNative(
-          tx.userWallet.walletAddress,
-          tx.amount,
-          tx.chainId,
-        );
-        const receipt = await onchainTx.wait(1);
+  //       //send transaction
+  //       const onchainTx = await this.transferNative(
+  //         tx.userWallet.walletAddress,
+  //         tx.amount,
+  //         tx.chainId,
+  //       );
+  //       const receipt = await onchainTx.wait(1);
 
-        if (receipt.status == 1) {
-          tx.status = 'S';
-          tx.txHash = onchainTx.hash;
-          await this.reloadTxRepository.save(tx);
-        } else {
-          tx.retryCount += 1;
-          await this.reloadTxRepository.save(tx);
-        }
-      } catch (error) {
-        console.log('Error in reload tx', error);
-      }
-    }
+  //       if (receipt.status == 1) {
+  //         tx.status = 'S';
+  //         tx.txHash = onchainTx.hash;
+  //         await this.reloadTxRepository.save(tx);
+  //       } else {
+  //         tx.retryCount += 1;
+  //         await this.reloadTxRepository.save(tx);
+  //       }
+  //     } catch (error) {
+  //       console.log('Error in reload tx', error);
+  //     }
+  //   }
 
-    this.isReloadCronRunning = false;
-  }
+  //   this.isReloadCronRunning = false;
+  // }
 
   isEscrowCronRunning = false;
   /**
@@ -389,6 +412,7 @@ export class DepositService {
     const pendingDepositTxns = await this.depositRepository
       .createQueryBuilder('depositTx')
       .innerJoinAndSelect('depositTx.walletTx', 'walletTx')
+      .innerJoinAndSelect('walletTx.userWallet', 'userWallet')
       .where('depositTx.status = :status', { status: 'P' })
       .getMany();
 
@@ -412,6 +436,15 @@ export class DepositService {
           );
           continue;
         }
+
+        // Returns false if the user doesn't have enough balance and reload is pending
+        const hasNativeBalance = await this.checkNativeBalance(
+          tx.walletTx.userWallet,
+          tx.chainId,
+        );
+        console.log('hasNativeBalance', hasNativeBalance);
+        // If its false, that means a reload might be pending. So process this in next iteration.
+        if (!hasNativeBalance) continue;
 
         const userWallet = await queryRunner.manager.findOne(UserWallet, {
           where: {
@@ -459,30 +492,18 @@ export class DepositService {
 
             receipt = await onchainEscrowTx.wait(1);
             onchainEscrowTxHash = onchainEscrowTx.hash;
+
+            this.eventEmitter.emit(
+              'gas.service.reload',
+              userWallet.walletAddress,
+              tx.chainId,
+            );
           } else {
             console.log('skipping escrow tx', tx.id);
           }
         } catch (error) {
-          //user doesn't have enough native balance, but has enough token balance.
-          //trigger the failed reload tx
-
           //so incase of error, only need to set the deposit tx's status and retry
           console.log('Error in escrow tx, retrying reload txns', error);
-
-          const reloadTx = await queryRunner.manager.findOne(ReloadTx, {
-            where: {
-              status: 'F',
-              retryCount: MoreThanOrEqual(5),
-              userWalletId: userWallet.id,
-            },
-          });
-
-          if (reloadTx) {
-            reloadTx.retryCount = 0;
-            reloadTx.status = 'P';
-
-            await queryRunner.manager.save(ReloadTx, reloadTx);
-          }
         }
 
         console.log(
@@ -593,6 +614,12 @@ export class DepositService {
           {
             gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
           },
+        );
+
+        this.eventEmitter.emit(
+          'gas.service.reload',
+          await gameUsdWallet.getAddress(),
+          tx.chainId,
         );
 
         const receipt = await onchainGameUsdTx.wait();
