@@ -32,15 +32,15 @@ export default class CreateBots implements Seeder {
           createdBy: 'system',
           status: AdminStatus.ACTIVE,
         },
-        {
-          username: 'payoutBot',
-          name: 'Payout Bot',
-          emailAddress: '',
-          password: await bcrypt.hash('payoutBot888*', 10),
-          adminType: AdminType.BOT,
-          createdBy: 'system',
-          status: AdminStatus.ACTIVE,
-        },
+        // {
+        //   username: 'payoutBot',
+        //   name: 'Payout Bot',
+        //   emailAddress: '',
+        //   password: await bcrypt.hash('payoutBot888*', 10),
+        //   adminType: AdminType.BOT,
+        //   createdBy: 'system',
+        //   status: AdminStatus.ACTIVE,
+        // },
       ])
       .execute();
 
