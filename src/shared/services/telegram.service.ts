@@ -64,7 +64,9 @@ export class TelegramService {
     await this.client.connect();
     const username = await this.onGetUsername(mobileNumber)
     const sent = await this.client.sendMessage(`@${username}`, { message })
-    await this.client.disconnect()
+    // temporarily comment out disconnect for now because it create a lot of TIMEOUT error
+    // until we found a fix
+    // await this.client.disconnect()
   }
   // public async disconnect() {
   //   await this.client.disconnect();
