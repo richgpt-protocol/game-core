@@ -244,6 +244,10 @@ export class ClaimService {
             })
           }
         }
+
+        // update betOrder
+        betOrder.isClaimed = true;
+        await queryRunner.manager.save(betOrder);
       }
 
       // fetch endingBalance of last pointTx and create new pointTx
@@ -355,13 +359,6 @@ export class ClaimService {
 
       if (txReceipt.status === 1) {
         let totalPointAmount = 0;
-
-        for (const betOrderId of payload.betOrderIds) {
-          // update betOrder
-          const betOrder = await this.betOrderRepository.findOneBy({ id: betOrderId });
-          betOrder.isClaimed = true;
-          await queryRunner.manager.save(betOrder);
-        }
 
         // update GameUsdTx
         const gameUsdTx = await this.gameUsdTxRepository.findOneBy({ id: payload.gameUsdTxId });
