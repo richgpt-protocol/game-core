@@ -13,6 +13,7 @@ import { AdminNotificationService } from 'src/shared/services/admin-notification
 import * as dotenv from 'dotenv';
 import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 dotenv.config();
 
 @Injectable()
@@ -28,6 +29,8 @@ export class GameService {
     private betOrderRepository: Repository<BetOrder>,
     @InjectRepository(WalletTx)
     private walletTxRepository: Repository<WalletTx>,
+    @InjectRepository(UserWallet)
+    private userWalletRepository: Repository<UserWallet>,
     @InjectRepository(ClaimDetail)
     private claimDetalRepository: Repository<ClaimDetail>,
     private adminNotificationService: AdminNotificationService,
@@ -295,25 +298,41 @@ export class GameService {
   async getLeaderboard(count: number) {
     // TODO: use better sql query
 
+    // only betOrder that had claimed will be counted
     const claimDetails = await this.claimDetalRepository.find({
       relations: {
         walletTx: {
-          userWallet: true
+          userWallet: true,
         },
         betOrder: true,
       }
     })
 
+    const maskValue = (value: string) => {
+      const mask = value.slice(0, 3) + '****' + value.slice(value.length - 3)
+      return mask
+    }
+
     const allObj: { [key: string]: number } = {}
     for (const claimDetail of claimDetails) {
-      const walletAddress = claimDetail.walletTx.userWallet.walletAddress
+      const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
       if (!allObj.hasOwnProperty(walletAddress)) allObj[walletAddress] = 0
       allObj[walletAddress] += Number(claimDetail.claimAmount)
     }
-    const allSortedArray = Object.entries(allObj).sort((a, b) => b[1] - a[1])
-    const total = allSortedArray.length > count
-      ? allSortedArray.slice(0, count)
-      : allSortedArray
+    let total = []
+    for (const walletAddress in allObj) {
+      const userWallet = await this.userWalletRepository.findOne({
+        where: { walletAddress },
+        relations: { user: true }
+      });
+      const winnerAccount = userWallet.user.uid;
+      total.push({
+        winnerAccount: maskValue(winnerAccount),
+        walletAddress: maskValue(walletAddress),
+        amount: allObj[walletAddress],
+      })
+    }
+    total = total.sort((a, b) => b.amount - a.amount).slice(0, count)
 
     const currentDate = new Date()
 
@@ -325,10 +344,20 @@ export class GameService {
         dailyObj[walletAddress] += Number(claimDetail.claimAmount)
       }
     }
-    const dailySortedArray = Object.entries(dailyObj).sort((a, b) => b[1] - a[1])
-    const daily = dailySortedArray.length > count
-      ? dailySortedArray.slice(0, count)
-      : dailySortedArray
+    let daily = []
+    for (const walletAddress in dailyObj) {
+      const userWallet = await this.userWalletRepository.findOne({
+        where: { walletAddress },
+        relations: { user: true }
+      });
+      const winnerAccount = userWallet.user.uid;
+      daily.push({
+        winnerAccount: maskValue(winnerAccount),
+        walletAddress: maskValue(walletAddress),
+        amount: dailyObj[walletAddress],
+      })
+    }
+    daily = daily.sort((a, b) => b.amount - a.amount).slice(0, count)
 
     const weeklyObj: { [key: string]: number } = {}
     for (const claimDetail of claimDetails) {
@@ -338,10 +367,20 @@ export class GameService {
         weeklyObj[walletAddress] += Number(claimDetail.claimAmount)
       }
     }
-    const weeklySortedArray = Object.entries(weeklyObj).sort((a, b) => b[1] - a[1])
-    const weekly = weeklySortedArray.length > count
-      ? weeklySortedArray.slice(0, count)
-      : weeklySortedArray
+    let weekly = []
+    for (const walletAddress in weeklyObj) {
+      const userWallet = await this.userWalletRepository.findOne({
+        where: { walletAddress },
+        relations: { user: true }
+      });
+      const winnerAccount = userWallet.user.uid;
+      weekly.push({
+        winnerAccount: maskValue(winnerAccount),
+        walletAddress: maskValue(walletAddress),
+        amount: weeklyObj[walletAddress],
+      })
+    }
+    weekly = weekly.sort((a, b) => b.amount - a.amount).slice(0, count)
 
     const monthlyObj: { [key: string]: number } = {}
     for (const claimDetail of claimDetails) {
@@ -351,10 +390,20 @@ export class GameService {
         monthlyObj[walletAddress] += Number(claimDetail.claimAmount)
       }
     }
-    const monthlySortedArray = Object.entries(monthlyObj).sort((a, b) => b[1] - a[1])
-    const monthly = monthlySortedArray.length > count
-      ? monthlySortedArray.slice(0, count)
-      : monthlySortedArray
+    let monthly = []
+    for (const walletAddress in monthlyObj) {
+      const userWallet = await this.userWalletRepository.findOne({
+        where: { walletAddress },
+        relations: { user: true }
+      });
+      const winnerAccount = userWallet.user.uid;
+      monthly.push({
+        winnerAccount: maskValue(winnerAccount),
+        walletAddress: maskValue(walletAddress),
+        amount: monthlyObj[walletAddress],
+      })
+    }
+    monthly = monthly.sort((a, b) => b.amount - a.amount).slice(0, count)
 
     return {
       total,
