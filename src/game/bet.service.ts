@@ -611,7 +611,7 @@ export class BetService {
         this.eventEmitter.emit(
           'gas.service.reload',
           await userSigner.getAddress(),
-          tx.chainId,
+          Number(tx.chainId),
         );
 
         await tx.wait();
@@ -695,7 +695,7 @@ export class BetService {
     this.eventEmitter.emit(
       'gas.service.reload',
       await helperSigner.getAddress(),
-      tx.chainId,
+      Number(tx.chainId),
     );
 
     return tx;
@@ -751,7 +751,7 @@ export class BetService {
     this.eventEmitter.emit(
       'gas.service.reload',
       await userSigner.getAddress(),
-      tx.chainId,
+      Number(tx.chainId),
     );
 
     await tx.wait();
