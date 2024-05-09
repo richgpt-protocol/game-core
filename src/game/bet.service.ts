@@ -42,6 +42,7 @@ import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointService } from 'src/point/point.service';
 import { UserService } from 'src/user/user.service';
+import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 
 dotenv.config();
 
@@ -68,6 +69,8 @@ export class BetService {
     private gameUsdTxRepository: Repository<GameUsdTx>,
     @InjectRepository(WalletTx)
     private walletTxRepository: Repository<WalletTx>,
+    @InjectRepository(ReloadTx)
+    private reloadTxRepository: Repository<ReloadTx>,
     private configService: ConfigService,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
@@ -206,6 +209,12 @@ export class BetService {
       await queryRunner.manager.save(gameUsdTx);
 
       await queryRunner.commitTransaction();
+
+      await this.eventEmitter.emit(
+        'gas.service.reload',
+        userInfo.wallet.walletAddress,
+        Number(process.env.OPBNB_CHAIN_ID),
+      );
 
       await this.eventEmitter.emit('bet.submitTx', {
         betsPayload: betOrders,
@@ -599,6 +608,12 @@ export class BetService {
               estimatedGasCost + (estimatedGasCost * BigInt(30)) / BigInt(100),
           });
 
+        this.eventEmitter.emit(
+          'gas.service.reload',
+          await userSigner.getAddress(),
+          Number(tx.chainId),
+        );
+
         await tx.wait();
         const txStatus = await userSigner.provider.getTransactionReceipt(
           tx.hash,
@@ -677,6 +692,12 @@ export class BetService {
         gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
       });
 
+    this.eventEmitter.emit(
+      'gas.service.reload',
+      await helperSigner.getAddress(),
+      Number(tx.chainId),
+    );
+
     return tx;
   }
 
@@ -727,6 +748,12 @@ export class BetService {
         gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
       });
 
+    this.eventEmitter.emit(
+      'gas.service.reload',
+      await userSigner.getAddress(),
+      Number(tx.chainId),
+    );
+
     await tx.wait();
 
     return tx;
@@ -750,6 +777,20 @@ export class BetService {
     try {
       let tx = null;
       const userSigner = new Wallet(userWallet.privateKey, provider);
+
+      // Returns false if the user doesn't have enough balance and reload is pending
+      const hasBalance = await this.checkNativeBalance(
+        payload.walletTx.userWallet,
+        payload.gameUsdTx.chainId,
+      );
+      // If its false, that means a reload might be pending.
+      // So, process it in the handleRetryTxns() cron.
+      if (!hasBalance) {
+        // set retry count to 1 so that It will be picked up by the handleRetryTxns() cron
+        payload.gameUsdTx.retryCount = 1;
+        await this.gameUsdTxRepository.save(payload.gameUsdTx);
+        return;
+      }
 
       try {
         if (payload.creditBalanceUsed > 0) {
@@ -1032,6 +1073,49 @@ export class BetService {
     }
   }
 
+  /**
+   *
+   * @returns Whether the user has enough balance
+   */
+  private async checkNativeBalance(
+    userWallet: UserWallet,
+    chainId: number,
+  ): Promise<boolean> {
+    const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+
+    const nativeBalance = await provider.getBalance(userWallet.walletAddress);
+
+    const minimumNativeBalance = this.configService.get(
+      `MINIMUM_NATIVE_BALANCE_${chainId}`,
+    );
+
+    if (nativeBalance < parseUnits(minimumNativeBalance, 18)) {
+      const pendingReloadTx = await this.reloadTxRepository.findOne({
+        where: {
+          userWalletId: userWallet.id,
+          chainId,
+          status: 'P',
+        },
+      });
+
+      if (!pendingReloadTx) {
+        console.log(
+          'Bet: Emitting gas.service.reload event for userWallet:',
+          userWallet.walletAddress,
+        );
+        await this.eventEmitter.emit(
+          'gas.service.reload',
+          userWallet.walletAddress,
+          chainId,
+        );
+      }
+
+      return false;
+    } else {
+      return true;
+    }
+  }
+
   isRetryCronRunning = false;
   @Cron(CronExpression.EVERY_10_SECONDS)
   async handleRetryTxns() {
@@ -1098,6 +1182,15 @@ export class BetService {
 
       const walletTx = gameUsdTx.walletTxs[0];
       const betOrders = gameUsdTx.walletTxs[0].betOrders;
+
+      // Returns false if the user doesn't have enough balance and reload is pending
+      const hasBalance = await this.checkNativeBalance(
+        walletTx.userWallet,
+        gameUsdTx.chainId,
+      );
+      // If its false, that means a reload might be pending. So process it in next iteration.
+      if (!hasBalance) continue;
+
       try {
         const totalCreditsUsed = betOrders.reduce((acc, bet) => {
           if (bet.creditWalletTx) {
