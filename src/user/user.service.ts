@@ -760,6 +760,10 @@ export class UserService {
       .execute()
   }
 
+  async updateOtpMethod(userId: number, otpMethod: string) {
+    await this.userRepository.update(userId, { otpMethod });
+  }
+
   async getRefereePerformance(userId: number, count: number) {
     const referralTxs = await this.referralTxRepository.find({
       where: { referralUserId: userId },
