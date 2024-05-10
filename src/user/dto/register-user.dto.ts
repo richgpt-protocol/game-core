@@ -48,11 +48,6 @@ export class SignInDto {
 }
 export class VerifyOtpDto {
   @ApiProperty()
-  @IsNumber()
-  @IsNotEmpty()
-  userId: number;
-
-  @ApiProperty()
   @IsString()
   @IsNotEmpty()
   otp: string;
@@ -63,21 +58,16 @@ export class UpdateUserDto {
   @IsOptional()
   phoneNumber: string;
 
-  // @ApiProperty()
-  // @IsString()
-  // @IsNotEmpty()
-  // name: string;
-
   @ApiProperty()
   @IsString()
   @IsOptional()
   @IsEmail()
   backupEmailAddress: string;
 
-  // @ApiProperty()
-  // @IsString()
-  // @IsOptional()
-  // nric: string;
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  otpMethod: 'WHATSAPP' | 'TELEGRAM' | 'SMS';
 }
 
 export class GetUsersDto extends PaginationDto {
