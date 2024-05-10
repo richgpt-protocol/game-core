@@ -186,6 +186,9 @@ export class UserController {
       };
     }
 
+    // update otp method into database
+    await this.userService.updateOtpMethod(userId, payload.otpMethod);
+
     // save payload into cache to use in verifyOtp()
     // the cache is valid for 60 seconds(60000 milliseconds), which is same expired time as the otp
     await this.cacheManager.set(`${userId} phoneNumber`, phoneNumber, 60000);
@@ -217,13 +220,6 @@ export class UserController {
   ) {
     try {
       const userId = req.user.userId;
-      if (userId != payload.userId) {
-        return {
-          statusCode: HttpStatus.BAD_REQUEST,
-          data: {},
-          message: 'Invalid userId',
-        };
-      }
 
       const user = await this.userService.getUserInfo(userId);
       const res = await this.userService.verifyOtp({
@@ -241,7 +237,7 @@ export class UserController {
       // fetch payload from cache & update user profile
       const phoneNumber = await this.cacheManager.get(`${userId} phoneNumber`);
       const backupEmailAddress = await this.cacheManager.get(`${userId} backupEmailAddress`);
-      await this.userService.update(req.user.userId, {
+      await this.userService.update(userId, {
         phoneNumber: phoneNumber ?? user.phoneNumber,
         emailAddress: backupEmailAddress ?? user.emailAddress,
       });
