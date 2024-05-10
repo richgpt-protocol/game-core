@@ -341,7 +341,7 @@ export class WalletController {
           });
           const gameInfo = betOrders[0].game;
           const draw = {
-            id: gameId,
+            id: gameInfo.epoch,
             date: gameInfo.startDate,
             betOrders,
           };
