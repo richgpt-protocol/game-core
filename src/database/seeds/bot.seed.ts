@@ -54,15 +54,15 @@ export default class CreateBots implements Seeder {
       ))[0].id],
     });
 
-    // payout bot
-    await this.assignPermission(dataSource, {
-      userId: bots.generatedMaps[1].id,
-      userRole: UserRole.ADMIN,
-      role: AdminType.BOT,
-      permissions : [(await dataSource.query(
-        `SELECT id FROM permission WHERE code = 'payout'`
-      ))[0].id],
-    });
+    // // payout bot
+    // await this.assignPermission(dataSource, {
+    //   userId: bots.generatedMaps[1].id,
+    //   userRole: UserRole.ADMIN,
+    //   role: AdminType.BOT,
+    //   permissions : [(await dataSource.query(
+    //     `SELECT id FROM permission WHERE code = 'payout'`
+    //   ))[0].id],
+    // });
   }
 
   private async findAll(
