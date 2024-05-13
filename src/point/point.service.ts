@@ -24,13 +24,13 @@ export class PointService {
       case 5:
         return { xp: 5, bonusPerc: 0 };
       case 10:
-        return { xp: 11, bonusPerc: 10 };
+        return { xp: 10, bonusPerc: 10 };
       case 20:
-        return { xp: 25, bonusPerc: 25 };
+        return { xp: 20, bonusPerc: 25 };
       case 50:
-        return { xp: 75, bonusPerc: 50 };
+        return { xp: 50, bonusPerc: 50 };
       case 100:
-        return { xp: 200, bonusPerc: 100 };
+        return { xp: 100, bonusPerc: 100 };
       default:
         return { xp: 0, bonusPerc: 0 };
       // throw new Error('Invalid deposit amount');
