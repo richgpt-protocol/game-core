@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { HttpService } from '@nestjs/axios';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { ethers } from 'ethers';
 import { AdminNotificationService } from './admin-notification.service';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
@@ -19,40 +19,48 @@ export class GasService {
     private readonly userWalletRepository: Repository<UserWallet>,
     private readonly adminNotificationService: AdminNotificationService,
     private readonly httpService: HttpService,
+    private dataSource: DataSource,
   ) {}
 
   @OnEvent('gas.service.reload', { async: true })
   async handleGasReloadEvent(userAddress: string, chainId: number): Promise<void> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
       const provider_rpc_url = chainId === Number(process.env.OPBNB_CHAIN_ID)
         ? process.env.OPBNB_PROVIDER_RPC_URL
         : process.env.BNB_PROVIDER_RPC_URL;
       const provider = new ethers.JsonRpcProvider(provider_rpc_url);
       const balance = await provider.getBalance(userAddress);
-      if (balance < ethers.parseEther('0.001')) {
 
+      if (balance < ethers.parseEther('0.001')) {
         let amount = '';
         let reloadTx: ReloadTx = null;
         if (!this._isAdmin(userAddress)) {
           amount = '0.001'
 
           // find userWallet through userAddress
-          const userWallet = await this.userWalletRepository.findOneBy({ walletAddress: userAddress });
+          const userWallet = await queryRunner.manager.findOne(UserWallet, {
+            where: {
+              walletAddress: userAddress,
+            },
+          });
 
           // create reload tx
-          reloadTx = await this.reloadTxRepository.save(
-            this.reloadTxRepository.create({
-              amount: Number(amount),
-              status: 'P',
-              chainId,
-              currency: 'BNB',
-              amountInUSD: 0,
-              txHash: null,
-              retryCount: 0,
-              userWalletId: userWallet.id,
-            })
-          );
+          reloadTx = new ReloadTx();
+          reloadTx.amount = Number(amount);
+          reloadTx.status = 'P';
+          reloadTx.chainId = chainId;
+          reloadTx.currency = 'BNB';
+          reloadTx.amountInUSD = 0;
+          reloadTx.txHash = null;
+          reloadTx.retryCount = 0;
+          reloadTx.userWallet = userWallet;
+          reloadTx.userWalletId = userWallet.id;
 
+          reloadTx = await queryRunner.manager.save(reloadTx);
         } else {
           // reload 0.01 BNB for admin wallet
           amount = '0.01'
@@ -70,13 +78,11 @@ export class GasService {
         const txReceipt = await txResponse.wait();
         if (reloadTx) {
           reloadTx.txHash = txReceipt.hash;
-          await this.reloadTxRepository.save(reloadTx);
         }
 
         if (txReceipt.status === 0) {
           if (reloadTx) {
             reloadTx.status = 'F';
-            await this.reloadTxRepository.save(reloadTx);
           }
 
           // native token transfer failed, inform admin
@@ -86,17 +92,19 @@ export class GasService {
             'On-chain Transaction Failed in GasService.handleGasReloadEvent',
             true,
           );
-
         } else {
           // update reloadTx for non-admin wallet
           if (reloadTx) {
             reloadTx.status = 'S';
             reloadTx.amountInUSD = await this._getAmountInUSD(amount);
-            await this.reloadTxRepository.save(reloadTx);
           }
         }
-      }
 
+        if (reloadTx) {
+          await queryRunner.manager.save(reloadTx);
+          await queryRunner.commitTransaction();
+        }
+      }
     } catch (error) {
       console.error('Error in GasService.handleGasReloadEvent', error);
       // inform admin
@@ -106,6 +114,11 @@ export class GasService {
         'Error in GasService.handleGasReloadEvent',
         true,
       );
+      await queryRunner.rollbackTransaction();
+    } finally {
+      if (!queryRunner.isReleased) {
+        await queryRunner.release();
+      }
     }
   }
 
