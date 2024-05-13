@@ -68,7 +68,7 @@ export class ChatbotService {
         '\n' +
         "If and only if I ask for number, provide me a 4-Digits number between 0000 and 9999. Don't tell me it is random." +
         'If I ask why this number, tell me any reason besides random.' +
-        'If I ask how to deposit, guide me to the homepage and press the deposit logo', +
+        'If I ask how to deposit, guide me to the homepage and press the deposit logo.' +
         '\n' +
         `Today is ${new Date(Date.now()).toString()}.`;
       const message = await this.messageRepository.save(
