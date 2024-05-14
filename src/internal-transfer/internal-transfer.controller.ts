@@ -18,7 +18,7 @@ import { ApiBody, ApiTags } from '@nestjs/swagger';
 export class InternalTransferController {
   constructor(private internalTransferService: InternalTransferService) {}
 
-  //   @Secure(null, UserRole.USER)
+  @Secure(null, UserRole.USER)
   @ApiBody({
     type: TransferGameUSDDto,
     required: true,
@@ -28,8 +28,8 @@ export class InternalTransferController {
     @Request() req,
     @Body() payload: TransferGameUSDDto,
   ): Promise<ResponseVo<any>> {
-    // const userId = req.user.id;
-    const userId = 1;
+    const userId = req.user.id;
+    // const userId = 1;
     try {
       await this.internalTransferService.transferGameUSD(userId, payload);
       return {
