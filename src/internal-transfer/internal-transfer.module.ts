@@ -11,6 +11,14 @@ import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { PermissionModule } from 'src/permission/permission.module';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { User } from 'src/user/entities/user.entity';
+import { WalletlModule } from 'src/wallet/wallet.module';
+import { WalletService } from 'src/wallet/wallet.service';
+import { UserModule } from 'src/user/user.module';
+import { AdminModule } from 'src/admin/admin.module';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
+import { Notification } from 'src/notification/entities/notification.entity';
+import { UserNotification } from 'src/notification/entities/user-notification.entity';
+import { Admin } from 'src/admin/entities/admin.entity';
 
 @Module({
   imports: [
@@ -20,12 +28,17 @@ import { User } from 'src/user/entities/user.entity';
       GameUsdTx,
       WalletTx,
       PointTx,
+      Notification,
+      UserNotification,
+      Admin,
       User,
     ]),
     PermissionModule,
     ConfigModule,
+    UserModule,
+    // WalletlModule,
   ],
-  providers: [InternalTransferService],
+  providers: [InternalTransferService, WalletService, AdminNotificationService],
   controllers: [InternalTransferController],
   exports: [],
 })

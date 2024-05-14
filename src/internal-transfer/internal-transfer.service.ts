@@ -12,6 +12,9 @@ import { GameUSD__factory } from 'src/contract';
 import { JsonRpcProvider, Wallet, parseUnits } from 'ethers';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { User } from 'src/user/entities/user.entity';
+import { WalletService } from 'src/wallet/wallet.service';
+import { UserService } from 'src/user/user.service';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 @Injectable()
 export class InternalTransferService {
@@ -26,7 +29,9 @@ export class InternalTransferService {
     private gameUsdTxRepository: Repository<GameUsdTx>,
     @InjectRepository(PointTx)
     private pointTxRepository: Repository<PointTx>,
-    // private walletService: WalletService,
+    private walletService: WalletService,
+    private userService: UserService,
+    private adminNotificationService: AdminNotificationService,
     private configService: ConfigService,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
@@ -95,7 +100,7 @@ export class InternalTransferService {
       gameUsdTx.amount = payload.amount;
       gameUsdTx.status = 'P';
       gameUsdTx.walletTxs = [senderWalletTx, receiverWalletTx];
-      // gameUsdTx.walletTxId = 0; //TODO
+      gameUsdTx.walletTxId = senderWalletTx.id;
       gameUsdTx.senderAddress = senderWallet.walletAddress;
       gameUsdTx.receiverAddress = receiverWallet.walletAddress;
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
@@ -199,6 +204,7 @@ export class InternalTransferService {
           senderWalletTx.status = 'S';
           receiverWalletTx.status = 'S';
           gameUsdTx.status = 'S';
+          gameUsdTx.txHash = tx.hash;
 
           senderWalletTx.txHash = tx.hash;
           receiverWalletTx.txHash = tx.hash;
@@ -231,7 +237,31 @@ export class InternalTransferService {
           receiverUserWallet.walletBalance =
             Number(receiverUserWallet.walletBalance) +
             Number(senderWalletTx.txAmount);
+
+          await this.userService.setUserNotification(senderUserWallet.userId, {
+            type: 'Transfer',
+            title: 'Transfer Processed Successfully',
+            message: 'Your Transfer has been successfully processed',
+            walletTxId: senderWalletTx.id,
+          });
+
+          await this.userService.setUserNotification(
+            receiverUserWallet.userId,
+            {
+              type: 'Transfer',
+              title: 'Received GameUSD Transfer',
+              message: 'You have received GameUSD',
+              walletTxId: receiverWalletTx.id,
+            },
+          );
         } else {
+          await this.adminNotificationService.setAdminNotification(
+            `Error processing transfer for gameUsdTx : ${payload.gameUsdTx.id}.`,
+            'TRANSFER_TRANSACTION_FAILED',
+            'Transfer Failed',
+            false,
+          );
+
           throw new Error('Transaction failed');
         }
       } catch (error) {
@@ -274,19 +304,20 @@ export class InternalTransferService {
       where: {
         userWallet,
       },
-      select: ['endingBalance'],
+      order: {
+        id: 'DESC',
+      },
     });
 
     return points ? points.endingBalance : 0;
   }
 
   private async validateLevel(userWallet: UserWallet) {
-    //TODO uncomment after merge
-    // const points = await this.getTotalPoints(userWallet);
-    // const level = this.walletService.calculateLevel(points);
-    // if (level < 10) {
-    // throw new BadRequestException('Insufficient level');
-    // }
+    const points = await this.getTotalPoints(userWallet);
+    const level = this.walletService.calculateLevel(points);
+    if (level < 10) {
+      throw new BadRequestException('Insufficient level');
+    }
   }
 
   private async getPendingAmount(senderWallet: UserWallet): Promise<number> {
