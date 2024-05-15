@@ -118,7 +118,7 @@ export class BetService {
     }
   }
 
-  async getRecentBets(count: number = 10) {
+  async getRecentBets(count: number = 50) {
     try {
       const betsDb = await this.betRepository
         .createQueryBuilder('bet')
@@ -127,6 +127,8 @@ export class BetService {
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
         .orderBy('bet.id', 'DESC')
+        .where('game.epoch = :epoch', { epoch: await this._getCurrentEpoch() })
+        .andWhere('walletTx.status = :status', { status: 'S' })
         .limit(count)
         .getMany();
 
