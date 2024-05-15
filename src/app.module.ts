@@ -23,7 +23,7 @@ import { SharedModule } from './shared/shared.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ReferralModule } from './referral/referral.module';
 import { NotificationModule } from './notification/notification.module';
-import { WalletlModule } from './wallet/wallet.module';
+import { WalletModule } from './wallet/wallet.module';
 import { GameModule } from './game/game.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
@@ -41,7 +41,7 @@ import { InternalTransferModule } from './internal-transfer/internal-transfer.mo
     AuditLogModule,
     ReferralModule,
     NotificationModule,
-    WalletlModule,
+    WalletModule,
     GameModule,
     CampaignModule,
     InternalTransferModule,
