@@ -257,7 +257,7 @@ export class UserService {
       }
 
       // pass to handleGenerateOtpEvent() to generate otp and send to user
-      this.eventEmitter.emit('user.service.otp', { userId: user.id });
+      this.eventEmitter.emit('user.service.otp', { userId: user.id, phoneNumber: user.phoneNumber });
 
       // return user record
       return { error: null, data: user };
@@ -316,7 +316,7 @@ export class UserService {
     await this.userRepository.save(user);
 
     // pass to handleGenerateOtpEvent() to generate and send otp
-    this.eventEmitter.emit('user.service.otp', { userId: user.id });
+    this.eventEmitter.emit('user.service.otp', { userId: user.id, phoneNumber: user.phoneNumber });
 
     return { error: null, data: user };
   }
@@ -330,13 +330,26 @@ export class UserService {
 
     try {
       // generate otp, update user record & send otp to user
-      const code = RandomUtil.generateRandomNumber(6);
+      // const code = RandomUtil.generateRandomNumber(6);
+      let code = ''
+      if (process.env.APP_ENV === 'dev' && payload.phoneNumber === '+6587654321') {
+        // temporarily for testing purpose
+        code = '123456';
+      } else {
+        code = RandomUtil.generateRandomNumber(6);
+      }
       await this.update(user.id, {
         verificationCode: code,
         otpGenerateTime: new Date(),
       });
       const phoneNumber = payload.phoneNumber ?? user.phoneNumber;
-      await this.smsService.sendUserRegistrationOTP(phoneNumber, user.otpMethod, code);
+      // await this.smsService.sendUserRegistrationOTP(phoneNumber, user.otpMethod, code);
+      if (process.env.APP_ENV === 'dev' && payload.phoneNumber === '+6587654321') {
+        // temporarily for testing purpose
+        // do nothing
+      } else {
+        await this.smsService.sendUserRegistrationOTP(phoneNumber, user.otpMethod, code);
+      }
 
     } catch (err) {
       // inform admin for failed transaction
@@ -414,6 +427,7 @@ export class UserService {
       .addSelect('row.verificationCode')
       .addSelect('row.referralUser')
       .addSelect('row.wallet')
+      .addSelect('row.loginAttempt')
       .where({
         phoneNumber: payload.phoneNumber,
       })
