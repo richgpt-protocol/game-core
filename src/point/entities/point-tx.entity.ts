@@ -87,4 +87,9 @@ export class PointTx {
 
   @ManyToOne(() => Campaign, (campaign) => campaign.pointTx)
   campaign: Campaign;
+
+  @Column({
+    nullable: true,
+  })
+  isLevelUp: boolean;
 }
