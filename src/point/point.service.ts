@@ -4,7 +4,12 @@ import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { User } from 'src/user/entities/user.entity';
-import { In, Repository } from 'typeorm';
+import { DataSource, Repository, IsNull } from 'typeorm';
+import { Cron } from '@nestjs/schedule';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
+import { PointTx } from './entities/point-tx.entity';
+import { WalletService } from 'src/wallet/wallet.service';
+import { UserService } from 'src/user/user.service';
 
 @Injectable()
 export class PointService {
@@ -17,6 +22,12 @@ export class PointService {
     private drawResultRepository: Repository<DrawResult>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(PointTx)
+    private pointTxRepository: Repository<PointTx>,
+    private dataSource: DataSource,
+    private adminNotificationService: AdminNotificationService,
+    private walletService: WalletService,
+    private userService: UserService,
   ) {}
 
   getDepositPoints(depositAmount: number): { xp: number; bonusPerc: number } {
@@ -193,5 +204,57 @@ export class PointService {
     }
 
     return totalXp;
+  }
+
+  @Cron('* * * * * *', { utcOffset: 0 }) // every hour UTC time
+  async checkLevelUp(): Promise<void> {
+    // start queryRunner
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+
+      const pointTxs = await this.pointTxRepository.find({
+        where: {
+          isLevelUp: IsNull(),
+        }
+      })
+
+      for (const pointTx of pointTxs) {
+        let isLevelUp = false;
+        const levelBefore = Math.floor(this.walletService.calculateLevel(Number(pointTx.startingBalance)));
+        const levelAfter = Math.floor(this.walletService.calculateLevel(Number(pointTx.endingBalance)));
+        if (levelAfter > levelBefore) {
+          await this.userService.setUserNotification(
+            pointTx.walletId,
+            {
+              type: 'point',
+              title: 'Congratulations on Level Up',
+              message: `You have level up from ${levelBefore} to level ${levelAfter}.`,
+              walletTxId: pointTx.walletTxId,
+            }
+          )
+
+          isLevelUp = true;
+        }
+
+        pointTx.isLevelUp = isLevelUp;
+        await this.pointTxRepository.save(pointTx)
+      }
+
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+
+      // inform admin for rollback transaction
+      await this.adminNotificationService.setAdminNotification(
+        `Transaction in point.service.checkLevelUp had been rollback, error: ${err}`,
+        'rollbackTxError',
+        'Transaction Rollbacked',
+        true,
+      );
+
+    } finally {
+      await queryRunner.release();
+    }
   }
 }
