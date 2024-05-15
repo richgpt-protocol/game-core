@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ScheduleModule } from '@nestjs/schedule';
 import { Game } from './entities/game.entity';
 import { BetOrder } from './entities/bet-order.entity';
 import { DrawResult } from './entities/draw-result.entity';
@@ -48,7 +47,6 @@ import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
     ]),
     PermissionModule,
     ConfigModule,
-    ScheduleModule.forRoot(),
     PointModule,
     SharedModule,
     UserModule,
