@@ -118,6 +118,43 @@ export class BetService {
     }
   }
 
+  async getRecentBets(count: number = 10) {
+    try {
+      const betsDb = await this.betRepository
+        .createQueryBuilder('bet')
+        .leftJoinAndSelect('bet.game', 'game')
+        .leftJoinAndSelect('bet.walletTx', 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .orderBy('bet.id', 'DESC')
+        .limit(count)
+        .getMany();
+
+      if (betsDb.length === 0) return [];
+
+      const bets = betsDb.map((bet) => {
+        const phone = bet.walletTx.userWallet.user.phoneNumber;
+        const maskedPhone =
+          phone.slice(0, 3) + '****' + phone.slice(phone.length - 3);
+        return {
+          user: maskedPhone,
+          amount:
+            Number(bet.bigForecastAmount) + Number(bet.smallForecastAmount),
+          txHash: bet.walletTx.txHash,
+          url:
+            this.configService.get('EXPLORER_BASE_URL') +
+            '/tx/' +
+            bet.walletTx.txHash,
+        };
+      });
+
+      return bets;
+    } catch (error) {
+      console.error(error);
+      throw new BadRequestException('Error getting recent bets');
+    }
+  }
+
   async estimateBetAmount(payload: BetDto[]): Promise<EstimateBetResponseDTO> {
     try {
       let totalAmount = 0;
