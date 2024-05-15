@@ -20,7 +20,6 @@ import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { BetService } from './bet.service';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { ConfigModule } from 'src/config/config.module';
-import { PointService } from 'src/point/point.service';
 import { PointModule } from 'src/point/point.module';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { SharedModule } from 'src/shared/shared.module';
@@ -57,7 +56,6 @@ import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
     GameGateway,
     CacheSettingService,
     BetService,
-    PointService,
   ],
   controllers: [GameController],
   exports: [GameService],
