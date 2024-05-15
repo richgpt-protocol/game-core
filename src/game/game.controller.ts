@@ -188,6 +188,27 @@ export class GameController {
   }
 
   @Secure(null, UserRole.USER)
+  @Get('recent-bets')
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async getRecentBets(@Query('count') count: number) {
+    try {
+      const data = await this.betService.getRecentBets(count);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'get recent bets success',
+      };
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Secure(null, UserRole.USER)
   @Get('get-bets')
   @ApiQuery({
     name: 'startEpoch',
