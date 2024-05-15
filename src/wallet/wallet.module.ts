@@ -54,6 +54,6 @@ import { UserModule } from 'src/user/user.module';
   ],
   providers: [WalletService, ClaimService, RedeemService],
   controllers: [WalletController],
-  exports: [],
+  exports: [WalletService],
 })
-export class WalletlModule {}
+export class WalletModule {}
