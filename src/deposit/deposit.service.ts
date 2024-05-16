@@ -307,7 +307,8 @@ export class DepositService {
         Number(commisionAmount);
 
       walletTx.userWallet.walletBalance = walletTx.endingBalance;
-      walletTx.userWallet.redeemableBalance += Number(commisionAmount);
+      walletTx.userWallet.redeemableBalance =
+        Number(walletTx.userWallet.redeemableBalance) + Number(commisionAmount);
 
       await queryRunner.manager.save(walletTx);
       await queryRunner.manager.save(walletTx.userWallet);
