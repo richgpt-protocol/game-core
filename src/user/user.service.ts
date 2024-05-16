@@ -780,7 +780,16 @@ export class UserService {
 
   async getRefereePerformance(userId: number, count: number) {
     const referralTxs = await this.referralTxRepository.find({
-      where: { referralUserId: userId },
+      where: [
+        {
+          referralUserId: userId,
+          referralType: 'DEPOSIT',
+        },
+        {
+          referralUserId: userId,
+          referralType: 'BET',
+        },
+      ],
       relations: { user: true },
       order: { createdDate: 'DESC' },
       take: count,
@@ -788,7 +797,7 @@ export class UserService {
 
     return referralTxs.map(referralTx => {
       return {
-        phoneNumber: referralTx.user.phoneNumber,
+        uid: referralTx.user.uid,
         rewardAmount: referralTx.rewardAmount,
       }
     });
