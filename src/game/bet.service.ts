@@ -10,7 +10,14 @@ import { ChatCompletionMessageParam } from 'openai/resources';
 import * as dotenv from 'dotenv';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository, DataSource, MoreThanOrEqual, LessThan } from 'typeorm';
+import {
+  In,
+  Repository,
+  DataSource,
+  MoreThanOrEqual,
+  LessThan,
+  QueryRunner,
+} from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BetDto, EstimateBetResponseDTO } from 'src/game/dto/Bet.dto';
@@ -741,61 +748,70 @@ export class BetService {
   }
 
   private async _betWithoutCredit(payload: BetOrder[], userSigner, provider) {
-    const coreContractAddr = this.configService.get('CORE_CONTRACT');
-    const coreContract = Core__factory.connect(coreContractAddr, provider);
+    try {
+      const coreContractAddr = this.configService.get('CORE_CONTRACT');
+      const coreContract = Core__factory.connect(coreContractAddr, provider);
 
-    console.log(`bet without credit`);
+      console.log(`bet without credit`);
 
-    let totalAmount = 0;
-    const bets = [];
-    payload.map((bet) => {
-      if (bet.smallForecastAmount > 0) {
-        bets.push({
-          epoch: +bet.game.epoch,
-          number: +bet.numberPair,
-          amount: parseUnits(bet.smallForecastAmount.toString(), 18),
-          forecast: 0,
-        });
+      let totalAmount = 0;
+      const bets = [];
+      payload.map((bet) => {
+        if (bet.smallForecastAmount > 0) {
+          bets.push({
+            epoch: +bet.game.epoch,
+            number: +bet.numberPair,
+            amount: parseUnits(bet.smallForecastAmount.toString(), 18),
+            forecast: 0,
+          });
 
-        totalAmount += +bet.smallForecastAmount;
-      }
+          totalAmount += +bet.smallForecastAmount;
+        }
 
-      if (bet.bigForecastAmount > 0) {
-        bets.push({
-          epoch: +bet.game.epoch,
-          number: +bet.numberPair,
-          amount: parseUnits(bet.bigForecastAmount.toString(), 18),
-          forecast: 1,
-        });
+        if (bet.bigForecastAmount > 0) {
+          bets.push({
+            epoch: +bet.game.epoch,
+            number: +bet.numberPair,
+            amount: parseUnits(bet.bigForecastAmount.toString(), 18),
+            forecast: 1,
+          });
 
-        totalAmount += +bet.bigForecastAmount;
-      }
-    });
-
-    await this._checkAllowanceAndApprove(
-      userSigner,
-      parseUnits(totalAmount.toString(), 18),
-    );
-
-    const gasLimit = await coreContract
-      .connect(userSigner)
-      ['bet((uint256,uint256,uint256,uint8)[])'].estimateGas(bets);
-
-    const tx = await coreContract
-      .connect(userSigner)
-      ['bet((uint256,uint256,uint256,uint8)[])'](bets, {
-        gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
+          totalAmount += +bet.bigForecastAmount;
+        }
       });
 
-    this.eventEmitter.emit(
-      'gas.service.reload',
-      await userSigner.getAddress(),
-      Number(tx.chainId),
-    );
+      // console.log(`approve`);
+      await this._checkAllowanceAndApprove(
+        userSigner,
+        parseUnits(totalAmount.toString(), 18),
+      );
 
-    await tx.wait();
+      // console.log(`Approve done`);
+      const gasLimit = await coreContract
+        .connect(userSigner)
+        ['bet((uint256,uint256,uint256,uint8)[])'].estimateGas(bets);
 
-    return tx;
+      const tx = await coreContract
+        .connect(userSigner)
+        ['bet((uint256,uint256,uint256,uint8)[])'](bets, {
+          gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
+        });
+
+      // console.log(`bet tx sent - waiting for confirmation`);
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        await userSigner.getAddress(),
+        Number(tx.chainId),
+      );
+
+      await tx.wait();
+      // console.log(`bet tx confirmed`);
+
+      return tx;
+    } catch (error) {
+      console.error(error);
+      throw new Error('Error in betWithoutCredit');
+    }
   }
 
   @OnEvent('bet.submitTx', { async: true })
@@ -1022,7 +1038,7 @@ export class BetService {
     }
   }
 
-  private async handleReferralFlow(userId: number, depositAmount: number) {
+  private async handleReferralFlow(userId: number, betAmount: number) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1038,7 +1054,7 @@ export class BetService {
       if (!userInfo || userInfo.referralUserId == null) return;
 
       const commisionAmount =
-        depositAmount * this.referralCommissionByRank(userInfo.referralRank);
+        betAmount * this.referralCommissionByRank(userInfo.referralRank);
 
       const walletTx = new WalletTx();
       walletTx.txType = 'REFERRAL';
@@ -1100,6 +1116,14 @@ export class BetService {
       referrerWallet.redeemableBalance =
         Number(referrerWallet.redeemableBalance) + Number(gameUsdTx.amount); //commision amount
 
+      await this.updateReferrerXpPoints(
+        queryRunner,
+        userId,
+        betAmount,
+        referrerWallet,
+        walletTx,
+      );
+
       await queryRunner.manager.save(referrerWallet);
       await queryRunner.manager.save(referrelTx);
 
@@ -1110,6 +1134,43 @@ export class BetService {
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
+  }
+
+  async updateReferrerXpPoints(
+    queryRunner: QueryRunner,
+    user: number,
+    betAmount: number,
+    referrerWallet: UserWallet,
+    walletTx: WalletTx,
+  ) {
+    const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
+      where: {
+        walletId: referrerWallet.id,
+      },
+      order: {
+        createdDate: 'DESC',
+      },
+    });
+
+    const referrerXPAmount = await this.pointService.getBetPointsReferrer(
+      user,
+      betAmount,
+    );
+    referrerWallet.pointBalance =
+      Number(referrerWallet.pointBalance) + referrerXPAmount;
+
+    const pointTx = new PointTx();
+    pointTx.amount = referrerXPAmount;
+    pointTx.txType = 'REFERRAL';
+    pointTx.walletId = referrerWallet.id;
+    pointTx.userWallet = referrerWallet;
+    pointTx.walletTx = walletTx;
+    pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
+    pointTx.endingBalance =
+      Number(pointTx.startingBalance) + Number(pointTx.amount);
+    referrerWallet.pointBalance = pointTx.endingBalance;
+
+    await queryRunner.manager.save(pointTx);
   }
 
   /**
@@ -1182,111 +1243,123 @@ export class BetService {
     const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
 
     for (const gameUsdTx of pendingGameUsdTx) {
-      const queryRunner = this.dataSource.createQueryRunner();
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
+      try {
+        console.log(`retrying gameUsdTx: ${gameUsdTx.id}`);
+        const queryRunner = this.dataSource.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
 
-      if (gameUsdTx.walletTxs[0].txType == 'REFERRAL') {
-        // await this.handleReferralGameUSDTx(gameUsdTx);
-        continue;
-      }
-
-      if (gameUsdTx.retryCount >= 5) {
-        gameUsdTx.status = 'F';
-        gameUsdTx.walletTxs[0].status = 'F';
-
-        const creditTxnIds = gameUsdTx.walletTxs[0].betOrders
-          .filter((betOrder) => betOrder.creditWalletTx)
-          .map((betOrder) => betOrder.creditWalletTx.id);
-
-        if (creditTxnIds.length > 0) {
-          await queryRunner.manager
-            .createQueryBuilder()
-            .update(CreditWalletTx)
-            .set({ status: 'F' })
-            .where('id IN (:...ids)', {
-              ids: gameUsdTx.walletTxs[0].betOrders.map(
-                (betOrder) => betOrder.creditWalletTx.id,
-              ),
-            })
-            .execute();
+        if (gameUsdTx.walletTxs[0].txType == 'REFERRAL') {
+          // await this.handleReferralGameUSDTx(gameUsdTx);
+          continue;
         }
 
-        await queryRunner.manager.save(gameUsdTx);
-        await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
+        if (gameUsdTx.retryCount >= 5) {
+          gameUsdTx.status = 'F';
+          gameUsdTx.walletTxs[0].status = 'F';
 
-        await queryRunner.commitTransaction();
-        continue;
-      }
+          const creditTxnIds = gameUsdTx.walletTxs[0].betOrders
+            .filter((betOrder) => betOrder.creditWalletTx)
+            .map((betOrder) => betOrder.creditWalletTx.id);
 
-      const walletTx = gameUsdTx.walletTxs[0];
-      const betOrders = gameUsdTx.walletTxs[0].betOrders;
-
-      // Returns false if the user doesn't have enough balance and reload is pending
-      const hasBalance = await this.checkNativeBalance(
-        walletTx.userWallet,
-        gameUsdTx.chainId,
-      );
-      // If its false, that means a reload might be pending. So process it in next iteration.
-      if (!hasBalance) continue;
-
-      try {
-        const totalCreditsUsed = betOrders.reduce((acc, bet) => {
-          if (bet.creditWalletTx) {
-            acc += bet.creditWalletTx.amount;
+          if (creditTxnIds.length > 0) {
+            await queryRunner.manager
+              .createQueryBuilder()
+              .update(CreditWalletTx)
+              .set({ status: 'F' })
+              .where('id IN (:...ids)', {
+                ids: creditTxnIds,
+              })
+              .execute();
           }
-          return acc;
-        }, 0);
 
-        let tx = null;
-        const userSigner = new Wallet(walletTx.userWallet.privateKey, provider);
+          await queryRunner.manager.save(gameUsdTx);
+          await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
+
+          await queryRunner.commitTransaction();
+          continue;
+        }
+
+        const walletTx = gameUsdTx.walletTxs[0];
+        const betOrders = gameUsdTx.walletTxs[0].betOrders;
+
+        // Returns false if the user doesn't have enough balance and reload is pending
+        const hasBalance = await this.checkNativeBalance(
+          walletTx.userWallet,
+          gameUsdTx.chainId,
+        );
+        // If its false, that means a reload might be pending. So process it in next iteration.
+        if (!hasBalance) continue;
 
         try {
-          if (totalCreditsUsed > 0) {
-            tx = await this._betWithCredit(
-              betOrders,
-              totalCreditsUsed,
-              userSigner,
-              provider,
-            );
-          } else {
-            tx = await this._betWithoutCredit(betOrders, userSigner, provider);
-            // tx = {
-            //   hash: '0x123',
-            // };
-          }
-        } catch (error) {
-          console.error(error);
-          gameUsdTx.retryCount += 1;
-          await queryRunner.manager.save(gameUsdTx);
-        }
+          const totalCreditsUsed = betOrders.reduce((acc, bet) => {
+            if (bet.creditWalletTx) {
+              acc += bet.creditWalletTx.amount;
+            }
+            return acc;
+          }, 0);
 
-        if (tx) {
-          const txStatus = await provider.getTransactionReceipt(tx);
-          if (txStatus.status && txStatus.status === 1) {
-            // gameUsdTx.status = 'S';
-            // await queryRunner.manager.save(gameUsdTx);
+          let tx = null;
+          const userSigner = new Wallet(
+            walletTx.userWallet.privateKey,
+            provider,
+          );
 
-            await this.handleTxSuccess({
-              tx,
-              gameUsdTx,
-              walletTx: gameUsdTx.walletTxs[0],
-            });
-          } else if (txStatus.status && txStatus.status != 1) {
+          try {
+            if (totalCreditsUsed > 0) {
+              tx = await this._betWithCredit(
+                betOrders,
+                totalCreditsUsed,
+                userSigner,
+                provider,
+              );
+            } else {
+              tx = await this._betWithoutCredit(
+                betOrders,
+                userSigner,
+                provider,
+              );
+              console.log(`tx: ${tx}`);
+              // tx = {
+              //   hash: '0x123',
+              // };
+            }
+          } catch (error) {
+            console.error(error);
             gameUsdTx.retryCount += 1;
             await queryRunner.manager.save(gameUsdTx);
-            // await queryRunner.commitTransaction();
           }
-        }
 
-        await queryRunner.commitTransaction();
+          if (tx) {
+            const txStatus = await provider.getTransactionReceipt(tx);
+            if (txStatus.status && txStatus.status === 1) {
+              // gameUsdTx.status = 'S';
+              // await queryRunner.manager.save(gameUsdTx);
+
+              await this.handleTxSuccess({
+                tx,
+                gameUsdTx,
+                walletTx: gameUsdTx.walletTxs[0],
+              });
+            } else if (txStatus.status && txStatus.status != 1) {
+              gameUsdTx.retryCount += 1;
+              await queryRunner.manager.save(gameUsdTx);
+              // await queryRunner.commitTransaction();
+            }
+          }
+
+          await queryRunner.commitTransaction();
+        } catch (error) {
+          console.error(error);
+          await queryRunner.rollbackTransaction();
+        } finally {
+          if (!queryRunner.isReleased) await queryRunner.release();
+          this.isRetryCronRunning = false;
+          //TODO add admin notification
+        }
       } catch (error) {
+        console.error(`error in retrying gameUsdTx: ${gameUsdTx.id}`);
         console.error(error);
-        await queryRunner.rollbackTransaction();
-      } finally {
-        if (!queryRunner.isReleased) await queryRunner.release();
-        this.isRetryCronRunning = false;
-        //TODO add admin notification
       }
     }
 
