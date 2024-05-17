@@ -135,11 +135,10 @@ export class BetService {
       if (betsDb.length === 0) return [];
 
       const bets = betsDb.map((bet) => {
-        const phone = bet.walletTx.userWallet.user.phoneNumber;
-        const maskedPhone =
-          phone.slice(0, 3) + '****' + phone.slice(phone.length - 3);
+        const uid = bet.walletTx.userWallet.user.uid;
+        const maskedUID = uid.slice(0, 3) + '****' + uid.slice(uid.length - 3);
         return {
-          user: maskedPhone,
+          user: maskedUID,
           amount:
             Number(bet.bigForecastAmount) + Number(bet.smallForecastAmount),
           txHash: bet.walletTx.txHash,
