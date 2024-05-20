@@ -11,10 +11,11 @@ import { ConfigService } from 'src/config/config.service';
 import { GameUSD__factory } from 'src/contract';
 import { JsonRpcProvider, Wallet, parseUnits } from 'ethers';
 import { PointTx } from 'src/point/entities/point-tx.entity';
-import { User } from 'src/user/entities/user.entity';
 import { WalletService } from 'src/wallet/wallet.service';
 import { UserService } from 'src/user/user.service';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
+import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class InternalTransferService {
@@ -29,6 +30,8 @@ export class InternalTransferService {
     private gameUsdTxRepository: Repository<GameUsdTx>,
     @InjectRepository(PointTx)
     private pointTxRepository: Repository<PointTx>,
+    @InjectRepository(ReloadTx)
+    private reloadTxRepository: Repository<ReloadTx>,
     private walletService: WalletService,
     private userService: UserService,
     private adminNotificationService: AdminNotificationService,
@@ -141,11 +144,106 @@ export class InternalTransferService {
     receiverWalletTx: WalletTx;
     gameUsdTx: GameUsdTx;
   }) {
+    const { senderWalletTx, gameUsdTx } = payload;
+
+    const hasNativeBalance = await this.checkNativeBalance(
+      senderWalletTx.userWallet,
+      gameUsdTx.chainId,
+    );
+
+    if (!hasNativeBalance) {
+      //increase retry count so that it will be picked up by retry cron
+      gameUsdTx.retryCount += 1;
+      await this.gameUsdTxRepository.save(gameUsdTx);
+
+      return;
+    }
+
+    await this.processTransfer(payload);
+  }
+
+  isRetryCronRunning = false;
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async handleRetryCron() {
+    if (this.isRetryCronRunning) {
+      return;
+    }
+
+    this.isRetryCronRunning = true;
+
+    try {
+      const pendingGameUsdTxns = await this.gameUsdTxRepository
+        .createQueryBuilder('gameUsdTx')
+        .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .where('gameUsdTx.status = :status', { status: 'P' })
+        .andWhere('gameUsdTx.retryCount > 0')
+        .andWhere('walletTx.txType = :txType', { txType: 'INTERNAL_TRANSFER' })
+        .getMany();
+
+      for (const gameUsdTx of pendingGameUsdTxns) {
+        try {
+          if (gameUsdTx.retryCount >= 5) {
+            gameUsdTx.status = 'F';
+            await this.gameUsdTxRepository.save(gameUsdTx);
+
+            this.adminNotificationService.setAdminNotification(
+              `Error in retry cron for internal transfer when processing gameUsdTx : ${gameUsdTx.id}`,
+              'INTERNAL_TRANSFER_RETRY_CRON_FAILED',
+              'Internal Transfer Retry Cron Failed',
+              false,
+            );
+
+            continue;
+          }
+          //Invoking the processTransfer method directly instead of emitting event.
+          //This is done to avoid triggering the transfer process multiple times, as the events won't wait for the previous call to complete(async).
+          await this.processTransfer({
+            senderWalletTx: gameUsdTx.walletTxs.find(
+              (tx) => tx.userWallet.walletAddress == gameUsdTx.senderAddress,
+            ),
+            receiverWalletTx: gameUsdTx.walletTxs.find(
+              (tx) => tx.userWallet.walletAddress == gameUsdTx.receiverAddress,
+            ),
+            gameUsdTx,
+          });
+        } catch (error) {
+          //Internal catch. Catches error in processing individual gameUsdTx.
+          console.error('InAppTransferError Error in retry cron', error);
+
+          gameUsdTx.retryCount += 1;
+          await this.gameUsdTxRepository.save(gameUsdTx);
+        }
+      }
+
+      this.isRetryCronRunning = false;
+    } catch (error) {
+      console.error('InAppTransferError: Error in retry cron', error);
+      this.isRetryCronRunning = false;
+    }
+
+    this.isRetryCronRunning = false;
+  }
+
+  private async processTransfer(payload: {
+    senderWalletTx: WalletTx;
+    receiverWalletTx: WalletTx;
+    gameUsdTx: GameUsdTx;
+  }) {
+    const { senderWalletTx, receiverWalletTx, gameUsdTx } = payload;
+
+    const hasNativeBalance = await this.checkNativeBalance(
+      senderWalletTx.userWallet,
+      gameUsdTx.chainId,
+    );
+
+    if (!hasNativeBalance) {
+      return;
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
-
-    const { senderWalletTx, receiverWalletTx, gameUsdTx } = payload;
 
     try {
       const lastValidWalletTxSender = await this.getLastValidWalletTx(
@@ -284,6 +382,50 @@ export class InternalTransferService {
       await queryRunner.rollbackTransaction();
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  private async checkNativeBalance(
+    userWallet: UserWallet,
+    chainId: number,
+  ): Promise<boolean> {
+    try {
+      const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+
+      const nativeBalance = await provider.getBalance(userWallet.walletAddress);
+
+      const minimumNativeBalance = this.configService.get(
+        `MINIMUM_NATIVE_BALANCE_${chainId}`,
+      );
+
+      if (nativeBalance < parseUnits(minimumNativeBalance, 18)) {
+        const pendingReloadTx = await this.reloadTxRepository.findOne({
+          where: {
+            userWalletId: userWallet.id,
+            chainId,
+            status: 'P',
+          },
+        });
+
+        if (!pendingReloadTx) {
+          console.log(
+            'Deposit: Emitting gas.service.reload event for userWallet:',
+            userWallet.walletAddress,
+          );
+          this.eventEmitter.emit(
+            'gas.service.reload',
+            userWallet.walletAddress,
+            chainId,
+          );
+        }
+
+        return false;
+      } else {
+        return true;
+      }
+    } catch (error) {
+      console.error('Error in checkNativeBalance', error);
+      return false;
     }
   }
 
