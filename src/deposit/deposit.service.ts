@@ -229,7 +229,7 @@ export class DepositService {
     chainId: number,
   ): Promise<boolean> {
     try {
-      const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+      const provider = new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL'));
 
       const nativeBalance = await provider.getBalance(userWallet.walletAddress);
 
@@ -324,7 +324,7 @@ export class DepositService {
       gameUsdTx.status = 'S';
       gameUsdTx.retryCount = 0;
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
-      gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
+      gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS');
       gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
       gameUsdTx.walletTxs = [walletTx];
       gameUsdTx.walletTxId = walletTx.id;
@@ -618,7 +618,7 @@ export class DepositService {
         status: 'P',
         senderAddress: In([
           this.configService.get('DEPOSIT_BOT_ADDRESS'),
-          this.configService.get('GAMEUSD_POOL_ADDRESS'),
+          this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
         ]),
       },
     });
@@ -648,8 +648,8 @@ export class DepositService {
 
         const provider = this.getProvider(tx.chainId);
         const gameUsdWallet = new ethers.Wallet(
-          this.configService.get('DEPOSIT_BOT_PK'),
-          provider,
+          await MPC.retrievePrivateKey(this.configService.get('DEPOSIT_BOT_ADDRESS')),
+          provider
         );
 
         const gameUsdContract = new ethers.Contract(
