@@ -66,8 +66,77 @@ export class PointService {
     }
   }
 
+  async getBetPointsReferrer(
+    userId: number,
+    betAmount: number,
+  ): Promise<number> {
+    const baseBetPointsPerUSD = 1;
+    const pointPer10s = 10;
+    const pointPer100s = 100;
+    const pointPer1000s = 1000;
+    const pointPer10000s = 10000;
+
+    let betPoints = betAmount * baseBetPointsPerUSD;
+
+    const currentDate = new Date();
+    const pastBets = await this.betOrderRepository
+      .createQueryBuilder('betOrder')
+      .innerJoin('betOrder.walletTx', 'walletTx')
+      .innerJoin('walletTx.userWallet', 'userWallet')
+      .where('userWallet.userId = :userId', { userId })
+      .andWhere('walletTx.status = :status', { status: 'S' })
+      .andWhere('betOrder.createdDate >= :date', {
+        date: new Date(
+          currentDate.getUTCFullYear(),
+          currentDate.getUTCMonth(),
+          1,
+        ),
+      })
+      .getMany();
+
+    const totalBetAmount = pastBets.reduce(
+      (acc, bet) => acc + +bet.bigForecastAmount + +bet.smallForecastAmount,
+      0,
+    );
+
+    if (totalBetAmount >= 10000) {
+      const noOfTenThousands = Math.floor(totalBetAmount / 10000);
+
+      // Add 10000 points for every 10000 USD bet.
+      // For example, if the user bet 20000 USD, he will get 20000 points.
+      // if the user bet 19999 USD, he will get 10000 points.
+      betPoints += noOfTenThousands * pointPer10000s;
+    } else if (totalBetAmount >= 1000) {
+      const noOfThousands = Math.floor(totalBetAmount / 1000);
+
+      // Add 1000 points for every 1000 USD bet.
+      // For example, if the user bet 2000 USD, he will get 2000 points.
+      // if the user bet 1999 USD, he will get 1000 points.
+      betPoints += noOfThousands * pointPer1000s;
+    } else if (totalBetAmount >= 100) {
+      const noOfHundreds = Math.floor(totalBetAmount / 100);
+
+      // Add 100 points for every 100 USD bet.
+      // For example, if the user bet 200 USD, he will get 200 points.
+      // if the user bet 199 USD, he will get 100 points.
+      betPoints += noOfHundreds * pointPer100s;
+    } else if (totalBetAmount >= 10) {
+      const noOfTens = Math.floor(totalBetAmount / 10);
+
+      // Add 10 points for every 10 USD bet.
+      // For example, if the user bet 50 USD, he will get 50 points.
+      // if the user bet 11 USD, he will get 10 points.
+      betPoints += noOfTens * pointPer10s;
+    }
+
+    return betPoints;
+  }
+
   async getBetPoints(userId: number, betAmount: number): Promise<number> {
     const baseBetPointsPerUSD = 2;
+    const pointPer10s = 10;
+    const pointPer100s = 100;
+
     let betPoints = betAmount * baseBetPointsPerUSD;
 
     const currentDate = new Date();
@@ -97,14 +166,14 @@ export class PointService {
       // Add 100 points for every 100 USD bet.
       // For example, if the user bet 200 USD, he will get 200 points.
       // if the user bet 199 USD, he will get 100 points.
-      betPoints += noOfHundreds * 100;
+      betPoints += noOfHundreds * pointPer100s;
     } else if (totalBetAmount >= 10) {
       const noOfTens = Math.floor(totalBetAmount / 10);
 
       // Add 10 points for every 10 USD bet.
       // For example, if the user bet 50 USD, he will get 50 points.
       // if the user bet 11 USD, he will get 10 points.
-      betPoints += noOfTens * 10;
+      betPoints += noOfTens * pointPer10s;
     }
 
     return betPoints;
@@ -157,7 +226,8 @@ export class PointService {
       case 100:
         return 50;
       default:
-        throw new Error('Invalid deposit amount');
+        return 0;
+      // throw new Error('Invalid deposit amount');
     }
   }
 

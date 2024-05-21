@@ -9,6 +9,7 @@ import {
   MoreThanOrEqual,
   Not,
   Or,
+  QueryRunner,
   Repository,
 } from 'typeorm';
 // import { CreateDeopsitRequestDto, SupplyDto } from './dto/deposit.dto';
@@ -266,7 +267,11 @@ export class DepositService {
     }
   }
 
-  private async handleReferralFlow(userId: number, depositAmount: number) {
+  private async handleReferralFlow(
+    userId: number,
+    depositAmount: number,
+    gameUsdTxId: number,
+  ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -335,12 +340,54 @@ export class DepositService {
       referralTx.referralUser = walletTx.userWallet.user;
 
       await queryRunner.manager.save(referralTx);
+
+      await this.handleReferralDepositXp(depositAmount, walletTx, queryRunner);
     } catch (error) {
       console.error('Error in referral tx', error);
+      this.adminNotificationService.setAdminNotification(
+        `Error processing referral tx for gameUsdTx: ${gameUsdTxId}`,
+        'REFERRAL_TX_ERROR',
+        'Referral Tx Error',
+        false,
+      );
       await queryRunner.rollbackTransaction();
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
+  }
+
+  private async handleReferralDepositXp(
+    depositAmount: number,
+    walletTx: WalletTx,
+    queryRunner: QueryRunner,
+  ) {
+    // console.log('referral walletTx', walletTx)
+    const referrerXp = this.pointService.getReferralDepositXp(
+      Number(depositAmount),
+    );
+
+    const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
+      where: {
+        walletId: walletTx.userWallet.id,
+      },
+      order: {
+        createdDate: 'DESC',
+      },
+    });
+    const pointTx = new PointTx();
+    pointTx.amount = referrerXp;
+    pointTx.txType = 'REFERRAL';
+    pointTx.walletId = walletTx.userWallet.id;
+    pointTx.userWallet = walletTx.userWallet;
+    pointTx.walletTx = walletTx;
+    pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
+    pointTx.endingBalance =
+      Number(pointTx.startingBalance) + Number(pointTx.amount);
+
+    walletTx.userWallet.pointBalance = pointTx.endingBalance;
+
+    await queryRunner.manager.save(pointTx);
+    await queryRunner.manager.save(walletTx.userWallet);
   }
 
   // Runs every 10 second.
@@ -534,7 +581,7 @@ export class DepositService {
           await queryRunner.manager.save(tx);
           await queryRunner.manager.save(gameUsdTx);
 
-          await this.handleReferralFlow(userWallet.id, tx.walletTx.txAmount);
+          // await this.handleReferralFlow(userWallet.id, tx.walletTx.txAmount);
         } else if (receipt && receipt.status != 1) {
           tx.retryCount += 1;
           await queryRunner.manager.save(tx);
@@ -557,8 +604,9 @@ export class DepositService {
   isGameUSDCronRunning = false;
   @Cron('*/10 * * * * *')
   async handleGameUsdTx() {
+    // console.log('Running gameUSD tx cron - returning if already running');
     if (this.isGameUSDCronRunning) return;
-
+    // console.log('Running gameUSD tx cron');
     this.isGameUSDCronRunning = true;
 
     const pendingGameUsdTx = await this.gameUsdTxRepository.find({
@@ -570,6 +618,8 @@ export class DepositService {
         ]),
       },
     });
+
+    // console.log('pendingGameUsdTx', pendingGameUsdTx.length);
 
     for (const tx of pendingGameUsdTx) {
       console.log('Processing gameUSD tx', tx.id);
@@ -697,6 +747,12 @@ export class DepositService {
               message: 'Your Deposit has been successfully processed',
               walletTxId: walletTx.id,
             },
+          );
+
+          await this.handleReferralFlow(
+            walletTx.userWallet.id,
+            walletTx.txAmount,
+            tx.id,
           );
         }
       } catch (error) {
