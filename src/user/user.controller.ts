@@ -575,4 +575,40 @@ export class UserController {
       };
     }
   }
+
+  @Get('get-referrer')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Successful Response',
+    type: ResponseVo,
+  })
+  async getReferrer(
+    // @Request() req,
+    // @IpAddress() ipAddress,
+    // @HandlerClass() classInfo: IHandlerClass,
+    @I18n() i18n: I18nContext,
+    @Query('code') code: string,
+  ) {
+    try {
+      console.log('code', code)
+      if (!code) throw new Error();
+      const referrer = await this.userService.getReferrer(code);
+      return {
+        statusCode: 200,
+        data: referrer,
+        message: null,
+      };
+
+    } catch (error) {
+      return {
+        statusCode: 400,
+        data: null,
+        message: await i18n.translate('Referrer not exist.'),
+      };
+    }
+  }
 }
