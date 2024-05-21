@@ -185,7 +185,7 @@ export class UserService {
     });
 
     {
-      const {id, privateKey, updatedDate, userId, ...wallet} = result.wallet;
+      const {id, updatedDate, userId, ...wallet} = result.wallet;
       result.wallet = wallet as UserWallet;
     }
 
@@ -476,16 +476,13 @@ export class UserService {
       try {
 
         // generate on-chain wallet
-        // const walletAddress = await MPC.createWallet()
-        const hdNodeWallet = ethers.Wallet.createRandom(); // temporarily
-        const walletAddress = hdNodeWallet.address;
+        const walletAddress = await MPC.createWallet()
 
         // create userWallet record
         const userWallet = this.userWalletRepository.create({
           walletBalance: 0,
           creditBalance: 0,
           walletAddress,
-          privateKey: hdNodeWallet.privateKey, // temporarily
           redeemableBalance: 0,
           pointBalance: 0,
           userId: user.id,
@@ -511,10 +508,10 @@ export class UserService {
 
           // record user's referrer on-chain
           const provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
-          // const walletCreationBot = new ethers.Wallet(await MPC.retrievePrivateKey(process.env.WALLET_CREATION_BOT_ADDRESS));
           const walletCreationBot = new ethers.Wallet(
-            process.env.WALLET_CREATION_BOT_PRIVATE_KEY, provider
-          ); // temporarily
+            await MPC.retrievePrivateKey(process.env.WALLET_CREATION_BOT_ADDRESS),
+            provider
+          );
           const referralContract = Referral__factory.connect(
             process.env.REFERRAL_CONTRACT_ADDRESS,
             walletCreationBot,
@@ -801,6 +798,25 @@ export class UserService {
         rewardAmount: referralTx.rewardAmount,
       }
     });
+  }
+
+  async getReferrer(code: string) {
+    const {
+      id,
+      phoneNumber,
+      otpGenerateTime,
+      otpMethod,
+      emailAddress,
+      isEmailVerified,
+      emailVerificationCode,
+      emailOtpGenerateTime,
+      createdDate,
+      updatedDate,
+      updatedBy,
+      referralUserId,
+      ...referrer
+    } = await this.userRepository.findOneBy({ referralCode: code });
+    return referrer
   }
 
   generateNumericUID(): string {
