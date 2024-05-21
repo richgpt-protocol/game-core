@@ -16,6 +16,7 @@ import { AdminNotificationService } from 'src/shared/services/admin-notification
 import { Notification } from 'src/notification/entities/notification.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { Admin } from 'src/admin/entities/admin.entity';
+import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { Admin } from 'src/admin/entities/admin.entity';
       UserNotification,
       Admin,
       User,
+      ReloadTx,
     ]),
     PermissionModule,
     ConfigModule,
