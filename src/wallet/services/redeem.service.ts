@@ -19,6 +19,7 @@ import { User } from 'src/user/entities/user.entity';
 import { Cron } from '@nestjs/schedule';
 import { WalletService } from '../wallet.service';
 import { UserService } from 'src/user/user.service';
+import { MPC } from 'src/shared/mpc';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -333,7 +334,10 @@ export class RedeemService {
 
         // check if userWallet did max approval on redeem contract
         const userWallet = walletTx.userWallet;
-        const signer = new ethers.Wallet(userWallet.privateKey, this.provider) // TEMP: userWallet.privateKey
+        const signer = new ethers.Wallet(
+          await MPC.retrievePrivateKey(userWallet.walletAddress),
+          this.provider
+        );
         const redeemTxCount = await this.redeemTxRepository.count();
         if (redeemTxCount === 1) {
           // first redeem request, approve max amount to redeem contract
@@ -576,11 +580,14 @@ export class RedeemService {
           ? process.env.BNB_PROVIDER_RPC_URL
           : process.env.OPBNB_PROVIDER_RPC_URL;
         const chain_provider = new ethers.JsonRpcProvider(chain_provider_url)
-        const payoutBotSigner = new ethers.Wallet(process.env.PAYOUT_BOT_PRIVATE_KEY, chain_provider); // TEMP: fetch private key from env
+        const payoutBot = new ethers.Wallet(
+          await MPC.retrievePrivateKey(process.env.PAYOUT_BOT_ADDRESS),
+          chain_provider
+        );
         const payoutPoolContractAddress = redeemTx.chainId === 56
           ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
           : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
-        const payoutPoolContract = Payout__factory.connect(payoutPoolContractAddress, payoutBotSigner);
+        const payoutPoolContract = Payout__factory.connect(payoutPoolContractAddress, payoutBot);
         const txResponse = await payoutPoolContract.payout(
           ethers.parseEther(amountAfterFees.toString()),
           destinationAddress,
@@ -592,13 +599,13 @@ export class RedeemService {
         // check native token balance for payout bot
         this.eventEmitter.emit(
           'gas.service.reload',
-          payoutBotSigner.address,
+          payoutBot.address,
           redeemTx.chainId,
         );
 
         // update signature, txHash & fromAddress for redeemTx
         redeemTx.payoutTxHash = txReceipt.hash;
-        redeemTx.fromAddress = payoutBotSigner.address;
+        redeemTx.fromAddress = payoutBot.address;
         await queryRunner.manager.save(redeemTx);
 
         if (txReceipt.status === 1) { // on-chain transaction success

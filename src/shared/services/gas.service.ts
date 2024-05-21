@@ -8,6 +8,7 @@ import { AdminNotificationService } from './admin-notification.service';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { catchError, firstValueFrom } from 'rxjs';
+import { MPC } from '../mpc';
 
 @Injectable()
 export class GasService {
@@ -69,7 +70,10 @@ export class GasService {
         }
 
         // reload native token through wallet creation bot
-        const supplyAccount = new ethers.Wallet(process.env.SUPPLY_ACCOUNT_PK, provider); // temporarily
+        const supplyAccount = new ethers.Wallet(
+          await MPC.retrievePrivateKey(process.env.SUPPLY_ACCOUNT_ADDRESS),
+          provider
+        );
         const txResponse = await supplyAccount.sendTransaction({
           to: userAddress,
           value: ethers.parseEther(amount)

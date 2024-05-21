@@ -16,6 +16,7 @@ import { UserService } from 'src/user/user.service';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { MPC } from 'src/shared/mpc';
 
 @Injectable()
 export class InternalTransferService {
@@ -268,8 +269,8 @@ export class InternalTransferService {
       const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
 
       const userSigner = new Wallet(
-        senderWalletTx.userWallet.privateKey,
-        provider,
+        await MPC.retrievePrivateKey(senderWalletTx.userWallet.walletAddress),
+        provider
       );
 
       const gameUSDContract = GameUSD__factory.connect(

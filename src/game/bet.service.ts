@@ -50,6 +50,7 @@ import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointService } from 'src/point/point.service';
 import { UserService } from 'src/user/user.service';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
+import { MPC } from 'src/shared/mpc';
 
 dotenv.config();
 
@@ -830,7 +831,10 @@ export class BetService {
 
     try {
       let tx = null;
-      const userSigner = new Wallet(userWallet.privateKey, provider);
+      const userSigner = new Wallet(
+        await MPC.retrievePrivateKey(userWallet.walletAddress),
+        provider
+      );
 
       // Returns false if the user doesn't have enough balance and reload is pending
       const hasBalance = await this.checkNativeBalance(
@@ -1298,11 +1302,11 @@ export class BetService {
             return acc;
           }, 0);
 
-          let tx = null;
-          const userSigner = new Wallet(
-            walletTx.userWallet.privateKey,
-            provider,
-          );
+        let tx = null;
+        const userSigner = new Wallet(
+          await MPC.retrievePrivateKey(walletTx.userWallet.walletAddress),
+          provider
+        );
 
           try {
             if (totalCreditsUsed > 0) {

@@ -15,6 +15,7 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
 import { UserService } from 'src/user/user.service';
+import { MPC } from 'src/shared/mpc';
 
 type ClaimResponse = {
   error: string;
@@ -278,7 +279,10 @@ export class ClaimService {
       await queryRunner.manager.save(userWallet);
 
       // submit transaction on-chain at once for all claims
-      const signer = new ethers.Wallet(userWallet.privateKey, this.provider);
+      const signer = new ethers.Wallet(
+        await MPC.retrievePrivateKey(userWallet.walletAddress),
+        this.provider
+      );
       const coreContract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, signer);
       // calculate estimate gas used by on-chain transaction
       const estimatedGas = await coreContract.claim.estimateGas(

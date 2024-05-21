@@ -10,10 +10,11 @@ import { Core__factory, Helper__factory } from 'src/contract';
 import { IHelper, ICore } from 'src/contract/Helper';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
-import * as dotenv from 'dotenv';
 import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
+import { MPC } from 'src/shared/mpc';
+import * as dotenv from 'dotenv';
 dotenv.config();
 
 @Injectable()
@@ -86,8 +87,10 @@ export class GameService {
       });
       if (betOrders.length === 0) return; // no masked betOrder to submit
 
-      // temporarily, private key will fetch shares from mpc server via address and combine
-      const helperBot = new ethers.Wallet(process.env.HELPER_BOT_PRIVATE_KEY, this.provider);
+      const helperBot = new ethers.Wallet(
+        await MPC.retrievePrivateKey(process.env.HELPER_BOT_ADDRESS),
+        this.provider
+      );
       const helperContract = Helper__factory.connect(process.env.HELPER_CONTRACT_ADDRESS, helperBot);
       // construct params for Helper.betLastMinutes()
       // [key: string] is userWalletAddress, one user might have multiple bets
@@ -173,7 +176,10 @@ export class GameService {
   async updateDrawResult(payload: DrawResult[], gameId: number): Promise<void> {
     try {
       // submit draw result to Core contract
-      const setDrawResultBot = new ethers.Wallet(process.env.RESULT_BOT_PRIVATE_KEY, this.provider); // temporarily
+      const setDrawResultBot = new ethers.Wallet(
+        await MPC.retrievePrivateKey(process.env.RESULT_BOT_ADDRESS),
+        this.provider
+      );
       const coreContract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, setDrawResultBot);
       const numberPairs = payload.map((result) => result.numberPair);
       const txResponse = await coreContract.setDrawResults(

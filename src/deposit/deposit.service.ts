@@ -30,6 +30,7 @@ import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointService } from 'src/point/point.service';
 import { UserService } from 'src/user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { MPC } from 'src/shared/mpc';
 
 @Injectable()
 export class DepositService {
@@ -200,7 +201,7 @@ export class DepositService {
   ) {
     try {
       const supplyWallet = new ethers.Wallet(
-        this.configService.get('SUPPLY_ACCOUNT_PK'),
+        await MPC.retrievePrivateKey(this.configService.get('SUPPLY_ACCOUNT_ADDRESS')),
         this.getProvider(chainId),
       );
       const gasLimit = await supplyWallet.provider.estimateGas({
@@ -501,7 +502,10 @@ export class DepositService {
         });
 
         const provider = this.getProvider(tx.chainId);
-        const userSigner = new ethers.Wallet(userWallet.privateKey, provider);
+        const userSigner = new ethers.Wallet(
+          await MPC.retrievePrivateKey(userWallet.walletAddress),
+          provider
+        );
         const tokenContract = new ethers.Contract(
           tx.currency,
           [

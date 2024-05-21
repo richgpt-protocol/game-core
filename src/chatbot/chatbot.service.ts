@@ -17,8 +17,9 @@ import { AdminNotificationService } from 'src/shared/services/admin-notification
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointReward__factory } from 'src/contract';
-import * as dotenv from 'dotenv';
 import { UserService } from 'src/user/user.service';
+import { MPC } from 'src/shared/mpc';
+import * as dotenv from 'dotenv';
 dotenv.config();
 
 const client = new MongoClient('mongodb://localhost:27017'); // for number recommendation based on input
@@ -261,7 +262,10 @@ export class ChatbotService {
 
       // set point reward on-chain
       const provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
-      const pointRewardBot = new ethers.Wallet(process.env.POINT_REWARD_BOT_PRIVATE_KEY, provider);
+      const pointRewardBot = new ethers.Wallet(
+        await MPC.retrievePrivateKey(process.env.POINT_REWARD_BOT_ADDRESS),
+        provider
+      );
       const pointRewardContract = PointReward__factory.connect(process.env.POINT_REWARD_CONTRACT_ADDRESS, pointRewardBot);
       const txResponse = await pointRewardContract.updateRewardPoint(
         3, // Action.OtherReward
