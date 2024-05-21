@@ -1,10 +1,5 @@
 # APP
 APP_ENV=
-
-# dev, production, beta
-PROJECT_ENV=
-APP_URL=
-APP_FRONTEND_URL=
 APP_NAME=
 
 # JWT AUTH
