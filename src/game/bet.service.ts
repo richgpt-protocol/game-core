@@ -786,6 +786,7 @@ export class BetService {
         parseUnits(totalAmount.toString(), 18),
       );
 
+      // console.log(bets)
       // console.log(`Approve done`);
       const gasLimit = await coreContract
         .connect(userSigner)
@@ -891,6 +892,8 @@ export class BetService {
       }
     } catch (error) {
       console.error(error);
+      payload.gameUsdTx.retryCount += 1;
+      await this.gameUsdTxRepository.save(payload.gameUsdTx);
       //TODO add admin notification
     }
   }
@@ -1023,7 +1026,11 @@ export class BetService {
 
       await queryRunner.commitTransaction();
 
-      await this.handleReferralFlow(user.id, payload.walletTx.txAmount);
+      await this.handleReferralFlow(
+        user.id,
+        payload.walletTx.txAmount,
+        payload.gameUsdTx.txHash,
+      );
     } catch (error) {
       console.error(error);
       await queryRunner.rollbackTransaction();
@@ -1041,7 +1048,11 @@ export class BetService {
     }
   }
 
-  private async handleReferralFlow(userId: number, betAmount: number) {
+  private async handleReferralFlow(
+    userId: number,
+    betAmount: number,
+    betTxHash: string,
+  ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1064,6 +1075,7 @@ export class BetService {
       walletTx.txAmount = commisionAmount;
       walletTx.status = 'S';
       walletTx.userWalletId = userInfo.referralUserId;
+      walletTx.txHash = betTxHash;
 
       const lastValidWalletTx = await queryRunner.manager
         .createQueryBuilder(WalletTx, 'walletTx')
@@ -1097,6 +1109,7 @@ export class BetService {
       gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
       gameUsdTx.walletTxs = [walletTx];
       gameUsdTx.walletTxId = walletTx.id;
+      gameUsdTx.txHash = betTxHash;
 
       await queryRunner.manager.save(gameUsdTx);
 
@@ -1322,7 +1335,8 @@ export class BetService {
                 userSigner,
                 provider,
               );
-              console.log(`tx: ${tx}`);
+              console.log('Bettx: ')
+              console.log(tx);
               // tx = {
               //   hash: '0x123',
               // };
@@ -1334,7 +1348,7 @@ export class BetService {
           }
 
           if (tx) {
-            const txStatus = await provider.getTransactionReceipt(tx);
+            const txStatus = await provider.getTransactionReceipt(tx.hash);
             if (txStatus.status && txStatus.status === 1) {
               // gameUsdTx.status = 'S';
               // await queryRunner.manager.save(gameUsdTx);
