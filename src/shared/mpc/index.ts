@@ -4,7 +4,7 @@ import axios from 'axios';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const serverUrls = [ // TO CHANGE
+const serverUrls = [
   process.env.MPC_SERVER_URL_1,
   process.env.MPC_SERVER_URL_2,
   process.env.MPC_SERVER_URL_3,
