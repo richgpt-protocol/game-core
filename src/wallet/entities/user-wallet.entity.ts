@@ -38,10 +38,6 @@ export class UserWallet {
   })
   walletAddress: string;
 
-  // temporarily, will replaced by mpc
-  @Column()
-  privateKey: string;
-
   @Column({
     type: 'decimal',
     precision: 30,
