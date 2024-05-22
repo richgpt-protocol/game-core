@@ -1,0 +1,60 @@
+version: '3'
+
+services:
+  main:
+    container_name: main
+    image: richgpt/game-core:latest
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    networks:
+      - webnet
+    depends_on:
+      - mysql
+      - mongodb
+    volumes:
+      - ./.env:/app/.env
+  mysql:
+    image: mysql:latest
+    restart: always
+    container_name: mysql
+    networks:
+      - webnet
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    networks:
+      - webnet
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+  webserver:
+    image: nginx:alpine
+    container_name: webserver
+    ports:
+      - "80:80"
+    volumes:
+      - ./:/var/www
+      - ./nginx:/etc/nginx/conf.d
+    depends_on:
+      - main
+    networks:
+      - webnet
+networks:
+  webnet:
+    driver: bridge
+volumes:
+  mysql_data:
+  mongo_data:
