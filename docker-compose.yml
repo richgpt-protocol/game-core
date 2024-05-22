@@ -3,7 +3,7 @@ version: '3'
 services:
   main:
     container_name: main
-    image: richgpt/game-core:latest
+    image: ccsiew/game-core:latest
     restart: always
     ports:
       - "8080:8080"
