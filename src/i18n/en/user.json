@@ -19,7 +19,7 @@
     "ACCOUNT_INACTIVE": "This account is inactive.",
     "ACCOUNT_SUSPEND": "This account is suspended. Please email to contact system administrator via {0.supportEmail}",
     "ACCOUNT_TERMINATED": "This account is terminated.",
-    "ACCOUNT_UNVERIFIED": "This account is unverified. Please check out the email inbox to activate your account.",
+    "ACCOUNT_UNVERIFIED": "This account is unverified. Please sign up again to activate your account.",
     "EXCEED_LOGIN_ATTEMPT": "Login Attempt is exceeded than 3 times. Please send email to System Administrator to take actions.",
     "PROFILE_UPDATE_SUCCESSFUL": "Your profile information is updated successful.",
     "PROFILE_UPDATE_FAILED": "Your profile information is failed to update.",

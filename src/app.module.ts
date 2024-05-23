@@ -23,11 +23,15 @@ import { SharedModule } from './shared/shared.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ReferralModule } from './referral/referral.module';
 import { NotificationModule } from './notification/notification.module';
-import { WalletlModule } from './wallet/wallet.module';
+import { WalletModule } from './wallet/wallet.module';
 import { GameModule } from './game/game.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { BackOfficeModule } from './back-office/back-office.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { DepositModule } from './deposit/deposit.module';
+import { PointModule } from './point/point.module';
+import { InternalTransferModule } from './internal-transfer/internal-transfer.module';
 
 @Module({
   imports: [
@@ -38,9 +42,10 @@ import { BackOfficeModule } from './back-office/back-office.module';
     AuditLogModule,
     ReferralModule,
     NotificationModule,
-    WalletlModule,
+    WalletModule,
     GameModule,
     CampaignModule,
+    InternalTransferModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -58,6 +63,7 @@ import { BackOfficeModule } from './back-office/back-office.module';
     }),
     UserModule,
     SettingModule,
+    DepositModule,
     I18nModule.forRoot({
       fallbackLanguage: 'en',
       fallbacks: {
@@ -94,6 +100,8 @@ import { BackOfficeModule } from './back-office/back-office.module';
     }),
     ChatbotModule,
     BackOfficeModule,
+    ScheduleModule.forRoot(),
+    PointModule,
   ],
   controllers: [AppController],
   providers: [

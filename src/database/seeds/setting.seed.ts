@@ -16,6 +16,7 @@ export default class CreateSettings implements Seeder {
       .insert()
       .into('setting')
       .values([
+        // default settings
         {
           key: SettingEnum.SUPPORT_CONTACT_NUMBER,
           value: '013-2066680',
@@ -47,6 +48,26 @@ export default class CreateSettings implements Seeder {
         {
           key: SettingEnum.MESSAGE_SERVICE_SID,
           value: process.env.MESSAGE_SERVICE_SID,
+        },
+
+        // lite screening locked period
+        {
+          key: SettingEnum.LITE_SCREENING_LOCKED_PERIOD,
+          value: 90,
+        },
+
+        // withdrawal fees
+        {
+          key: SettingEnum.WITHDRAWAL_FEES_BNB,
+          value: 0.22,
+        },
+        {
+          key: SettingEnum.WITHDRAWAL_FEES_OPBNB,
+          value: 0.2,
+        },
+        {
+          key: SettingEnum.WITHDRAWAL_FEES_OPBNB_TESTNET,
+          value: 0.02,
         },
       ])
       .execute();

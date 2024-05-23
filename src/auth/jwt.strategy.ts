@@ -27,15 +27,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     switch (payload.role) {
       case UserRole.ADMIN:
-        const admin = await this.adminService.findOne(payload.username);
+        const admin = await this.adminService.findById(payload.sub);
         if (!admin) {
           throw new UnauthorizedException();
         }
         break;
       case UserRole.USER:
-        const user = await this.userService.findByEmail(payload.username);
-        if (!user) {
-          throw new UnauthorizedException();
+        const user = await this.userService.findOneWithoutHiddenFields(payload.sub);
+        if (user.status !== 'A') {
+          throw new UnauthorizedException('user is not active');
+        }
+        if (user.isMobileVerified === false) {
+          throw new UnauthorizedException('phone number not verified');
         }
         break;
       default:

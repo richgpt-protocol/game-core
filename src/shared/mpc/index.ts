@@ -1,7 +1,7 @@
 import { split, combine } from 'shamirs-secret-sharing-ts';
 import { ethers } from 'ethers';
 import axios from 'axios';
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv';
 dotenv.config();
 
 const serverUrls = [ // TO CHANGE

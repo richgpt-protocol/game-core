@@ -151,22 +151,22 @@ export class AuthController {
         ipAddress,
       });
       throw new UnauthorizedException(message);
+
     } else {
       await this.auditLogService.userInsert({
         module: classInfo.class,
         actions: classInfo.method,
         userId: user.id,
-        content: `Login Successful with ${user.emailAddress} `,
+        content: `Login Successful with ${user.phoneNumber} `,
         ipAddress,
       });
 
       const response = {
         id: user.id,
-        emailAddress: user.emailAddress,
         status: user.status,
         phoneNumber: user.phoneNumber,
-        name: user.firstName,
-        isReset: user.isReset,
+        referralCode: user.referralCode,
+        isMobileVerified: user.isMobileVerified,
       };
 
       const result = await this.authService.createToken(
@@ -425,38 +425,38 @@ export class AuthController {
     }
   }
 
-  @Post('user-forgot-password')
-  @ApiResponse({
-    status: 201,
-    description: 'Successful Updated',
-    type: ResponseVo,
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad Request',
-    type: ErrorResponseVo,
-  })
-  async userForgotPassword(@Body() payload: UserResetPasswordDto) {
-    const userInfo = await this.userService.findByEmail(payload.emailAddress);
-    if (!userInfo) {
-      throw new BadRequestException('Invalid User.');
-    }
+  // @Post('user-forgot-password')
+  // @ApiResponse({
+  //   status: 201,
+  //   description: 'Successful Updated',
+  //   type: ResponseVo,
+  // })
+  // @ApiResponse({
+  //   status: 400,
+  //   description: 'Bad Request',
+  //   type: ErrorResponseVo,
+  // })
+  // async userForgotPassword(@Body() payload: UserResetPasswordDto) {
+  //   const userInfo = await this.userService.findByEmail(payload.emailAddress);
+  //   if (!userInfo) {
+  //     throw new BadRequestException('Invalid User.');
+  //   }
 
-    const result = await this.authService.resetPassword(
-      UserRole.USER,
-      userInfo.id,
-    );
+  //   const result = await this.authService.resetPassword(
+  //     UserRole.USER,
+  //     userInfo.id,
+  //   );
 
-    if (result) {
-      return {
-        success: true,
-        data: {},
-      };
-    } else {
-      return {
-        success: false,
-        data: {},
-      };
-    }
-  }
+  //   if (result) {
+  //     return {
+  //       success: true,
+  //       data: {},
+  //     };
+  //   } else {
+  //     return {
+  //       success: false,
+  //       data: {},
+  //     };
+  //   }
+  // }
 }

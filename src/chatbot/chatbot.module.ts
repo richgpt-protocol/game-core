@@ -2,25 +2,34 @@ import { Module } from '@nestjs/common';
 import { ChatbotService } from './chatbot.service';
 import { ChatbotController } from './chatbot.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
-// import { chatbot } from './entities/chatbot.entity';
-import { AuditLogModule } from 'src/audit-log/audit-log.module';
+import { CacheModule } from '@nestjs/cache-manager';
 import { PermissionModule } from 'src/permission/permission.module';
-import { SharedModule } from 'src/shared/shared.module';
-import { AdminModule } from 'src/admin/admin.module';
-import { SseModule } from 'src/admin/sse/sse.module';
 import { ChatLog } from './entities/chatLog.entity';
 import { Message } from './entities/message.entity';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
+import { UserNotification } from 'src/notification/entities/user-notification.entity';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
+import { PointTx } from 'src/point/entities/point-tx.entity';
+import { Notification } from 'src/notification/entities/notification.entity';
+import { Admin } from 'src/admin/entities/admin.entity';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ChatLog, Message]),
-    // AuditLogModule,
+    TypeOrmModule.forFeature([
+      ChatLog,
+      Message,
+      Notification,
+      UserNotification,
+      UserWallet,
+      PointTx,
+      Admin,
+    ]),
     PermissionModule,
-    // SharedModule,
-    // AdminModule,
-    // SseModule,
+    UserModule,
+    CacheModule.register()
   ],
-  providers: [ChatbotService],
+  providers: [ChatbotService, AdminNotificationService],
   controllers: [ChatbotController],
   exports: [],
 })

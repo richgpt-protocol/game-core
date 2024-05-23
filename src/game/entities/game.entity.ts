@@ -31,6 +31,11 @@ export class Game {
   })
   drawTxHash: string;
 
+  @Column({
+    nullable: true,
+  })
+  drawTxStatus: 'S' | 'P' | 'F';
+
   @Column()
   startDate: Date;
 

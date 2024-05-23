@@ -175,7 +175,7 @@ const _abi = [
       },
     ],
     outputs: [],
-    stateMutability: "view",
+    stateMutability: "nonpayable",
   },
   {
     type: "function",
@@ -255,6 +255,31 @@ const _abi = [
         type: "address",
         indexed: false,
         internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RewardPointUpdated",
+    inputs: [
+      {
+        name: "user",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "xp",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "action",
+        type: "uint8",
+        indexed: false,
+        internalType: "enum IPointReward.Action",
       },
     ],
     anonymous: false,

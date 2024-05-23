@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  IsNumber,
 } from 'class-validator';
 import { PaginationDto } from 'src/shared/dto/pagination.dto';
 import { UserStatus } from 'src/shared/enum/status.enum';
@@ -26,7 +27,24 @@ export class RegisterUserDto {
   @ApiProperty()
   @IsString()
   @IsOptional()
-  referralCode?: string;
+  referralCode: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  otpMethod: 'WHATSAPP' | 'TELEGRAM' | 'SMS';
+}
+export class SignInDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(15)
+  phoneNumber: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  otpMethod: 'WHATSAPP' | 'TELEGRAM' | 'SMS';
 }
 export class VerifyOtpDto {
   @ApiProperty()
@@ -37,13 +55,8 @@ export class VerifyOtpDto {
 export class UpdateUserDto {
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   phoneNumber: string;
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  name: string;
 
   @ApiProperty()
   @IsString()
@@ -53,8 +66,8 @@ export class UpdateUserDto {
 
   @ApiProperty()
   @IsString()
-  @IsOptional()
-  nric: string;
+  @IsNotEmpty()
+  otpMethod: 'WHATSAPP' | 'TELEGRAM' | 'SMS';
 }
 
 export class GetUsersDto extends PaginationDto {

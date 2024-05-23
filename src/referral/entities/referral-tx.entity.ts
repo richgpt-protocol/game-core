@@ -30,9 +30,9 @@ export class ReferralTx {
 
   @Column({
     nullable: true,
-    comment: 'S - success, P - pending, F - failed, only used for SET_REFERRAL',
+    comment: 'S - success, P - pending, PD - Pending Developer, F - failed, only used for SET_REFERRAL',
   })
-  status: string;
+  status: 'S' | 'P' | 'PD' | 'F';
 
   @Column({
     nullable: true,

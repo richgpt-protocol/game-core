@@ -1,28 +1,33 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsNumber } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsNumber,
+} from 'class-validator';
 
-export class BetDto {
+export class RedeemDto {
   @ApiProperty()
   @IsNumber()
   @IsNotEmpty()
-  epoch: number;
+  chainId: number;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  numberPair: string;
+  tokenAddress: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  tokenSymbol: string;
 
   @ApiProperty()
   @IsNumber()
   @IsNotEmpty()
-  bigForecastAmount: number;
+  amount: number;
 
   @ApiProperty()
-  @IsNumber()
+  @IsString()
   @IsNotEmpty()
-  smallForecastAmount: number;
-
-  @ApiProperty()
-  @IsNotEmpty()
-  gameIds: number[];
+  receiverAddress: string;
 }

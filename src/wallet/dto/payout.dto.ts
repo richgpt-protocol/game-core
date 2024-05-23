@@ -2,18 +2,17 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsNotEmpty,
   IsString,
-  IsBoolean,
   IsNumber,
 } from 'class-validator';
 
-export class RedeemDto {
+export class PayoutDto {
   @ApiProperty()
   @IsNumber()
   @IsNotEmpty()
-  amount: number;
+  redeemTxId: number;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  destinationWallet: string;
+  signature: string;
 }

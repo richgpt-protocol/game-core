@@ -32,17 +32,21 @@ export class RedeemTx {
 
   @Column({
     comment: 'S - success, P - Pending, F - Failed',
+    nullable: true,
   })
-  payoutStatus: string;
+  payoutStatus: 'S' | 'P' | 'F';
 
-  @Column()
+  @Column({
+    comment: 'address that initiate the payout tx',
+    nullable: true,
+  })
   fromAddress: string;
 
   @Column()
   receiverAddress: string;
 
-  @Column()
-  isTransferred: boolean;
+  @Column({ default: false })
+  isPayoutTransferred: boolean;
 
   @Column()
   chainId: number;
@@ -83,10 +87,12 @@ export class RedeemTx {
   @UpdateDateColumn()
   updatedDate: Date;
 
-  @Column()
-  reviewBy: number;
+  @Column({ nullable: true })
+  // adminId, 999 represent reviewed by system(auto payout criteria met)
+  reviewedBy: number;
 
   @ManyToOne(() => Admin, (admin) => admin.redeemTxs)
+  // human admin who reviewed this redeem-tx and set payoutCanProceed
   admin: Admin;
 
   @OneToOne(() => WalletTx, (walletTx) => walletTx.redeemTx)

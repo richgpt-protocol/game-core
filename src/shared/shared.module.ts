@@ -1,3 +1,4 @@
+import { TelegramService } from './services/telegram.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
@@ -11,6 +12,10 @@ import { HttpModule } from '@nestjs/axios';
 import { TwilioModule } from 'nestjs-twilio';
 import { ConfigService } from 'src/config/config.service';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
+import { AdminNotificationService } from './services/admin-notification.service';
+import { GasService } from './services/gas.service';
+import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 
 @Module({
   imports: [
@@ -22,6 +27,8 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
       Notification,
       UserNotification,
       SmsLogs,
+      ReloadTx,
+      UserWallet,
     ]),
     TwilioModule.forRootAsync({
       imports: [ConfigModule],
@@ -32,7 +39,7 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
       inject: [ConfigService],
     }),
   ],
-  providers: [SMSService, CacheSettingService],
-  exports: [SMSService, CacheSettingService],
+  providers: [GasService, SMSService, CacheSettingService, AdminNotificationService, TelegramService],
+  exports: [SMSService, CacheSettingService, AdminNotificationService, TelegramService],
 })
 export class SharedModule {}

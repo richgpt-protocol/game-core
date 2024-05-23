@@ -82,73 +82,17 @@ export class AuthService {
   }
 
   async loginAsUser(payload: UserLoginDto): Promise<any> {
-    // const user = await this.userService.findByEmail(payload.emailAddress);
-    const user = await this.userService.findByPhoneNumber(payload.phoneNumber);
-
-    if (!user) {
-      return {
-        // error: 'user.WRONG_EMAIL_PASSWORD',
-        error: 'user.WRONG_PHONE_NUMBER',
-      };
+    const result = await this.userService.verifyOtp(payload);
+    if (result.error) {
+      return { error: result.error, data: null };
     }
 
-    switch (user.status) {
-      case UserStatus.INACTIVE:
-        return {
-          error: 'user.ACCOUNT_INACTIVE',
-        };
-      case UserStatus.SUSPENDED:
-        return {
-          error: 'user.ACCOUNT_SUSPEND',
-          args: {
-            id: 1,
-            supportEmail: this.cacheSettingService.get(
-              SettingEnum.SUPPORT_CONTACT_EMAIL,
-            ),
-          },
-        };
-      case UserStatus.TERMINATED:
-        return {
-          error: 'user.ACCOUNT_TERMINATED',
-        };
-      case UserStatus.UNVERIFIED:
-        return {
-          error: 'user.ACCOUNT_UNVERIFIED',
-        };
-    }
-
-    if (user.loginAttempt >= 3) {
-      await this.userService.update(user.id, {
-        status: UserStatus.SUSPENDED,
-      });
-      return {
-        error: 'user.EXCEED_LOGIN_ATTEMPT',
-      };
-    }
-
-    const { ...result } = user;
-    if (payload.code === result.verificationCode) {
-      // Clear Login Attempt
-      await this.userService.update(user.id, {
-        loginAttempt: 0,
-      });
-    } else {
-      // Increase failed login attempt
-      await this.userService.update(user.id, {
-        loginAttempt: user.loginAttempt + 1,
-      });
-      return {
-        error: 'user.WRONG_EMAIL_PASSWORD',
-      };
-    }
-
-    return result;
+    return result.data;
   }
 
   async createToken(user: any, role: string) {
-    const username = user.username ? user.username : user.emailAddress;
     const payload = {
-      username,
+      phoneNumber: user.phoneNumber,
       sub: user.id,
       role,
       exp:

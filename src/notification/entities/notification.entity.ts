@@ -2,10 +2,13 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { UserNotification } from './user-notification.entity';
+import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 
 @Entity()
 export class Notification {
@@ -34,4 +37,8 @@ export class Notification {
     (userNotification) => userNotification.notification,
   )
   userNotifications: UserNotification[];
+
+  @ManyToOne(() => WalletTx, (walletTx) => walletTx.id)
+  @JoinColumn()
+  walletTx: WalletTx;
 }
