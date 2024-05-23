@@ -13,6 +13,15 @@ export class BackOfficeController {
     private backOfficeService: BackOfficeService,
     private configService: ConfigService,
   ) {}
+  
+  @Get('admin-login')
+  @ApiExcludeEndpoint()
+  @Render('admin-login')
+  async adminLogin() {
+    return {
+      data: {},
+    };
+  }
 
   //   @Secure(null, UserRole.ADMIN)
   @Get('users')
@@ -29,7 +38,7 @@ export class BackOfficeController {
     };
   }
 
-  //   @Secure(null, UserRole.ADMIN)
+  @Secure(null, UserRole.ADMIN)
   @Get('wallets')
   @ApiExcludeEndpoint()
   @Render('wallet-listing')

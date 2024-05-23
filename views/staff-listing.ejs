@@ -241,7 +241,7 @@
     <div class="content-wrapper">
       <div class="table-area">
         <div class="staff-menu">
-          <button class="staff-menu-btn"><a href="/create-admin">Create Admin</a></button>
+          <button class="staff-menu-btn"><a href="/back-office/create-admin">Create Admin</a></button>
         </div>
         <!-- <div class="wrapper"> -->
           <table>
@@ -262,14 +262,33 @@
               <% for(var i=0; i<data.staffs.length; i++) {%>
                 <tr>
                   <td><%= data.staffs[i].id %></td>
-                  <td><%= data.staffs[i].name %></td>
+                  <!-- <td><%= data.staffs[i].name %></td> -->
+                  <td class="name" data-id="<%= data.staffs[i].id %>"><%= data.staffs[i].name %></td>
                   <td><%= data.staffs[i].username %></td>
-                  <td><%= data.staffs[i].email %></td>
+                  <td class="email" data-id="<%= data.staffs[i].id %>"><%= data.staffs[i].emailAddress %></td>
                   <td><%= data.staffs[i].createdDate %></td>
                   <td><%= data.staffs[i].createdBy %></td>
-                  <td><%= data.staffs[i].status %></td>
-                  <td><%= data.staffs[i].adminType %></td>
-                  <td><a href="/api/v1/admin/update-admin-view/<%= data.staffs[i].id %>">update</a></td>
+                  <td>
+                    <select class="status" data-id="<%= data.staffs[i].id %>">
+                      <option value="A" <%= data.staffs[i].status === 'A' ? 'selected' : '' %>>Active</option>
+                      <option value="I" <%= data.staffs[i].status === 'I' ? 'selected' : '' %>>Inactive</option>
+                      <option value="S" <%= data.staffs[i].status === 'S' ? 'selected' : '' %>>Suspended</option>
+                      <!-- Add more options as needed -->
+                    </select>
+                  </td>
+                  <td>
+                    <select class="adminType" data-id="<%= data.staffs[i].id %>">
+                      <option value="S" <%= data.staffs[i].adminType === 'S' ? 'selected' : '' %>>SuperUser</option>
+                      <option value="F" <%= data.staffs[i].adminType === 'F' ? 'selected' : '' %>>Finance</option>
+                      <option value="O" <%= data.staffs[i].adminType === 'O' ? 'selected' : '' %>>Operations</option>
+                      <option value="B" <%= data.staffs[i].adminType === 'B' ? 'selected' : '' %>>Bot</option>
+                      <!-- Add more options as needed -->
+                    </select>
+                  </td>
+                  <td>
+                    <button class="update-btn" data-id="<%= data.staffs[i].id %>">Update</button>
+                  </td>
+                  <!-- <td><a href="/api/v1/admin/update-admin-view/<%= data.staffs[i].id %>">update</a></td> -->
                 </tr>
               <% } %>
             </tbody>
@@ -296,5 +315,35 @@
   <div id="footer">
     <p>&#169; 4DGPT 2024. All Rights Reserved.</p>
   </div>
+
+  <script>
+    document.querySelectorAll('.update-btn').forEach(function(button) {
+      button.addEventListener('click', function() {
+        const id = this.getAttribute('data-id');
+        const status = document.querySelector('.status[data-id="' + id + '"]').value;
+        const adminType = document.querySelector('.adminType[data-id="' + id + '"]').value;
+        const name=document.querySelector('.name[data-id="' + id + '"]').textContent;
+        const emailAddress = document.querySelector('.email[data-id="' + id + '"]').textContent;
+  
+        fetch('/api/v1/admin/update-admin/' + id, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name,
+            status,
+            adminType,
+            emailAddress
+          }),
+        })
+        .then(response => response.json())
+        .then(data => console.log(data))
+        .catch((error) => {
+          console.error('Error:', error);
+        });
+      });
+    });
+  </script>
 </body>
 </html>

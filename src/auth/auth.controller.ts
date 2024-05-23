@@ -7,8 +7,10 @@ import {
   Param,
   Post,
   Request,
+  Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiHeader, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AdminService } from 'src/admin/admin.service';
 import { CreateAdminVo } from 'src/admin/vo/admin.vo';
@@ -63,6 +65,7 @@ export class AuthController {
     @Body() payload: LoginDto,
     @IpAddress() ipAddress,
     @HandlerClass() classInfo: IHandlerClass,
+    @Res() res: Response,
   ) {
     const admin = await this.authService.validateAdmin(payload);
     if (admin.error) {
@@ -96,13 +99,15 @@ export class AuthController {
         UserRole.ADMIN,
       );
 
-      const res: ResponseAdminAuthVo = {
+      const responseData: ResponseAdminAuthVo = {
         statusCode: HttpStatus.OK,
         message: 'Admin Login Successful.',
         data: result,
       };
 
-      return res;
+      console.log('result', result);
+      console.log(typeof result.access_token)
+      res.cookie('token', result.access_token, { httpOnly: true });
     }
   }
 
