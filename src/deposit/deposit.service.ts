@@ -201,7 +201,9 @@ export class DepositService {
   ) {
     try {
       const supplyWallet = new ethers.Wallet(
-        await MPC.retrievePrivateKey(this.configService.get('SUPPLY_ACCOUNT_ADDRESS')),
+        await MPC.retrievePrivateKey(
+          this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+        ),
         this.getProvider(chainId),
       );
       const gasLimit = await supplyWallet.provider.estimateGas({
@@ -272,6 +274,7 @@ export class DepositService {
     userId: number,
     depositAmount: number,
     gameUsdTxId: number,
+    depositGameUsdTxHash: string,
   ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -296,6 +299,7 @@ export class DepositService {
       walletTx.status = 'S';
       walletTx.userWalletId = userInfo.referralUserId;
       walletTx.userWallet = userInfo.referralUser.wallet;
+      walletTx.txHash = depositGameUsdTxHash;
 
       const previousWalletTx = await queryRunner.manager.findOne(WalletTx, {
         where: {
@@ -328,6 +332,7 @@ export class DepositService {
       gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
       gameUsdTx.walletTxs = [walletTx];
       gameUsdTx.walletTxId = walletTx.id;
+      gameUsdTx.txHash = depositGameUsdTxHash;
 
       await queryRunner.manager.save(gameUsdTx);
 
@@ -504,7 +509,7 @@ export class DepositService {
         const provider = this.getProvider(tx.chainId);
         const userSigner = new ethers.Wallet(
           await MPC.retrievePrivateKey(userWallet.walletAddress),
-          provider
+          provider,
         );
         const tokenContract = new ethers.Contract(
           tx.currency,
@@ -757,6 +762,7 @@ export class DepositService {
             walletTx.userWallet.id,
             walletTx.txAmount,
             tx.id,
+            onchainGameUsdTx.hash,
           );
         }
       } catch (error) {
