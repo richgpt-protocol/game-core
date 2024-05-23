@@ -41,7 +41,7 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
-      - ./fdgpt:/data/backup/fdgpt
+      - ./backup:/data/backup
   webserver:
     image: nginx:alpine
     container_name: webserver
