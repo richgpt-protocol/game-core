@@ -65,7 +65,7 @@ export class AuthController {
     @Body() payload: LoginDto,
     @IpAddress() ipAddress,
     @HandlerClass() classInfo: IHandlerClass,
-    @Res() res: Response,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const admin = await this.authService.validateAdmin(payload);
     if (admin.error) {
@@ -105,9 +105,14 @@ export class AuthController {
         data: result,
       };
 
-      console.log('result', result);
-      console.log(typeof result.access_token)
-      res.cookie('token', result.access_token, { httpOnly: true });
+      const expires: Date = new Date(new Date().getTime() + result.expiresIn);
+      res.cookie('token', result.access_token, {
+        httpOnly: true,
+        expires,
+        sameSite: 'strict',
+      });
+
+      return responseData;
     }
   }
 
@@ -156,7 +161,6 @@ export class AuthController {
         ipAddress,
       });
       throw new UnauthorizedException(message);
-
     } else {
       await this.auditLogService.userInsert({
         module: classInfo.class,
