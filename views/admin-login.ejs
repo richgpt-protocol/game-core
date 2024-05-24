@@ -86,14 +86,14 @@
                 body: JSON.stringify({
                   username,
                   password,
-                  rememberMe: rememberMe == 'on' ? true : false,
+                  rememberMe,
                 }),
             })
             .then(response => response.json())
             .then(data => {
                 // console.log(data)
                 if (data.statusCode == 200) {
-                    // window.location.href = '/back-office/users';
+                    window.location.href = '/back-office/users';
                 } else {
                     alert(data.message);
                 }

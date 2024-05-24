@@ -2,7 +2,7 @@ import { Controller, Get, Query, Render } from '@nestjs/common';
 import { BackOfficeService } from './back-office.service';
 import { ApiExcludeEndpoint, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from 'src/config/config.service';
-import { Secure } from 'src/shared/decorators/secure.decorator';
+import { Secure, SecureEJS } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 
@@ -23,7 +23,7 @@ export class BackOfficeController {
     };
   }
 
-  //   @Secure(null, UserRole.ADMIN)
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('users')
   @ApiExcludeEndpoint()
   @Render('user-listing')
@@ -38,7 +38,7 @@ export class BackOfficeController {
     };
   }
 
-  @Secure(null, UserRole.ADMIN)
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('wallets')
   @ApiExcludeEndpoint()
   @Render('wallet-listing')
@@ -53,7 +53,7 @@ export class BackOfficeController {
     };
   }
 
-  //   @Secure(null, UserRole.ADMIN)
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('staffs')
   @ApiExcludeEndpoint()
   @Render('staff-listing')
@@ -68,7 +68,7 @@ export class BackOfficeController {
     };
   }
 
-  //   @Secure(null, UserRole.ADMIN)
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('transactions')
   @ApiExcludeEndpoint()
   @Render('transactions')
@@ -83,7 +83,7 @@ export class BackOfficeController {
     };
   }
 
-//   @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
+  @SecureEJS(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
   @Get('create-admin')
   @ApiExcludeEndpoint()
   @Render('create-admin')
@@ -105,8 +105,8 @@ export class BackOfficeController {
     };
   }
 
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('referralListing')
-
   async referralListing() {
     const result = await this.backOfficeService.getReferralListing();
     return {
@@ -118,6 +118,7 @@ export class BackOfficeController {
     };
   }
 
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('betListing')
   async betListing(
     @Query('startDate') startDate: string,
@@ -140,6 +141,7 @@ export class BackOfficeController {
     };
   }
 
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('salesReport')
   async salesReport(
     @Query('startDate') startDate: string,

@@ -17,7 +17,7 @@ import { CreateAdminVo } from 'src/admin/vo/admin.vo';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { HandlerClass } from 'src/shared/decorators/handler-class.decorator';
 import { IpAddress } from 'src/shared/decorators/ip-address.decorator';
-import { Secure } from 'src/shared/decorators/secure.decorator';
+import { Secure, SecureEJS } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { IHandlerClass } from 'src/shared/interfaces/handler-class.interface';
 import { ErrorResponseVo, ResponseVo } from 'src/shared/vo/response.vo';
@@ -114,6 +114,32 @@ export class AuthController {
 
       return responseData;
     }
+  }
+
+  @Post('admin-logout')
+  @ApiResponse({
+    status: 201,
+    description: 'Successful Logout',
+    type: ResponseVo,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseVo,
+  })
+  async adminLogout(
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+    @Request() req,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    //need to be cleared through the api as its a http-only cookie.
+    res.clearCookie('token');
+    return {
+      statusCode: HttpStatus.OK,
+      success: true,
+      data: {},
+    };
   }
 
   @Post('user-login')

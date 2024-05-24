@@ -11,6 +11,7 @@ import { AuditLogModule } from 'src/audit-log/audit-log.module';
 import { PermissionModule } from 'src/permission/permission.module';
 import { UserModule } from 'src/user/user.module';
 import { SharedModule } from 'src/shared/shared.module';
+import { CookieStrategy } from './cookie.strategy';
 
 @Module({
   imports: [
@@ -36,7 +37,7 @@ import { SharedModule } from 'src/shared/shared.module';
       },
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, CookieStrategy],
   controllers: [AuthController],
   exports: [PassportModule.register({ defaultStrategy: 'jwt' })],
 })
