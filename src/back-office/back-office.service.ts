@@ -2,6 +2,8 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
+import { DrawResult } from 'src/game/entities/draw-result.entity';
+import { Game } from 'src/game/entities/game.entity';
 import { User } from 'src/user/entities/user.entity';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
@@ -32,6 +34,10 @@ export class BackOfficeService {
     private gameUsdTxRepository: Repository<GameUsdTx>,
     @InjectRepository(BetOrder)
     private betOrderRepository: Repository<BetOrder>,
+    @InjectRepository(Game)
+    private gameRepository: Repository<Game>,
+    @InjectRepository(DrawResult)
+    private drawResultRepository: Repository<DrawResult>,
   ) {}
 
   async getUsers(page: number = 1, limit: number = 10): Promise<any> {
@@ -201,6 +207,45 @@ export class BackOfficeService {
     });
 
     return userCount;
+  }
+
+  async getPastDrawResults(page: number = 1, limit: number = 10) {
+    const games = await this.gameRepository.findAndCount({
+      where: {
+        isClosed: true,
+      },
+      select: ['id', 'epoch'],
+      order: {
+        epoch: 'DESC',
+      },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    const results = await this.drawResultRepository.find({
+      where: {
+        gameId: In(games[0].map((game) => game.id)),
+      },
+      select: ['id', 'numberPair', 'prizeCategory', 'prizeIndex', 'gameId'],
+    });
+
+    const resultByGameId = results.reduce((acc, result) => {
+      const epoch = games[0].find((game) => game.id === result.gameId).epoch;
+      if (!acc[epoch]) {
+        acc[epoch] = [];
+      }
+
+      acc[epoch].push(result);
+
+      return acc;
+    }, {});
+
+    //resultByGameId = { gameId: [drawResult1, drawResult2, ...] }
+    return {
+      data: resultByGameId,
+      currentPage: page,
+      totalPages: Math.ceil(games[1] / limit),
+    };
   }
 
   async getCreditWalletTxns(
@@ -477,8 +522,10 @@ export class BackOfficeService {
         userByDate[date] = new Set();
       }
 
-      resultByDate[date].totalBetAmount +=
-        +betOrder.bigForecastAmount + +betOrder.smallForecastAmount;
+      resultByDate[date].totalBetAmount =
+        Number(resultByDate[date].totalBetAmount) +
+        Number(betOrder.bigForecastAmount) +
+        Number(betOrder.smallForecastAmount);
       resultByDate[date].betCount += 1;
       resultByDate[date].userCount += userByDate[date].has(
         betOrder.walletTx.userWallet.userId,
@@ -488,12 +535,14 @@ export class BackOfficeService {
       userByDate[date].add(betOrder.walletTx.userWallet.userId);
 
       if (betOrder.claimDetail) {
-        resultByDate[date].totalPayoutRewards +=
-          (+betOrder.claimDetail.claimAmount || 0) +
-          (+betOrder.claimDetail.bonusAmount || 0);
+        resultByDate[date].totalPayoutRewards =
+          Number(resultByDate[date].totalPayoutRewards) +
+          (Number(betOrder.claimDetail.claimAmount) || 0) +
+          (Number(betOrder.claimDetail.bonusAmount) || 0);
 
-        resultByDate[date].totalPayout +=
-          +betOrder.claimDetail.claimAmount || 0;
+        resultByDate[date].totalPayout =
+          Number(resultByDate[date].totalPayout) +
+            Number(betOrder.claimDetail.claimAmount) || 0;
       }
     });
 

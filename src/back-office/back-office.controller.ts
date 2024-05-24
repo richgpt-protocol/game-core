@@ -53,7 +53,7 @@ export class BackOfficeController {
     };
   }
 
-  @SecureEJS(null, UserRole.ADMIN)
+  // @SecureEJS(null, UserRole.ADMIN)
   @Get('staffs')
   @ApiExcludeEndpoint()
   @Render('staff-listing')
@@ -77,6 +77,33 @@ export class BackOfficeController {
     return {
       data: {
         transactions: data.data,
+        currentPage: data.currentPage,
+        totalPages: data.totalPages,
+      },
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('past-draw-results')
+  @ApiExcludeEndpoint()
+  @Render('past-draw-results')
+  async pastDrawResults(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    // if (!page) page = 1;
+    // if (!limit) limit = 10;
+    const data = await this.backOfficeService.getPastDrawResults(page, limit);
+    console.log({
+      data: {
+        pastDrawResults: data.data,
+        currentPage: data.currentPage,
+        totalPages: data.totalPages,
+      },
+    });
+    return {
+      data: {
+        pastDrawResults: data.data,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
       },
