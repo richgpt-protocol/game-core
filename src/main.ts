@@ -7,6 +7,7 @@ import { TransformInterceptor } from './shared/interceptors/transform.intercepto
 import { sseMiddleware } from 'express-sse-middleware';
 import * as bodyParser from 'body-parser';
 import { join } from 'path';
+import { ConfigService } from './config/config.service';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -27,6 +28,8 @@ async function bootstrap() {
   app.useStaticAssets(join(__dirname, '..', 'public'), { prefix: '/' });
   app.setBaseViewsDir(join(__dirname, '..', 'views'));
   app.setViewEngine('hbs');
-  await app.listen(process.env.PORT);
+
+  const configService = app.get(ConfigService);
+  await app.listen(configService.get('APP_PORT'));
 }
 bootstrap();
