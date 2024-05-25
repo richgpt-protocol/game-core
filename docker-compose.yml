@@ -44,6 +44,7 @@ services:
       - ./backup:/data/backup
   webserver:
     image: nginx:latest
+    container_name: webserver
     ports:
       - "80:80"
       - "443:443"
