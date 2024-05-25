@@ -53,13 +53,12 @@ services:
       - ./nginx:/etc/nginx/conf.d
       - ./data/certbot/conf:/etc/letsencrypt
       - ./data/certbot/www:/var/www/certbot
-    certbot:
-      image: certbot/certbot
     depends_on:
       - main
     networks:
       - webnet
   certbot:
+    image: certbot/certbot
     volumes:
       - ./data/certbot/conf:/etc/letsencrypt
       - ./data/certbot/www:/var/www/certbot
