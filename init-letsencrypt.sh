@@ -5,7 +5,7 @@ if ! [ -x "$(command -v docker-compose)" ]; then
   exit 1
 fi
 
-domains=(test-api.4dgpt.xyz www.test-api.4dgpt.xyz)
+domains=(test-api.4dgpt.xyz)
 rsa_key_size=4096
 data_path="./data/certbot"
 email="siew@daoventures.co" # Adding a valid address is strongly recommended
