@@ -22,7 +22,7 @@ import { MPC } from 'src/shared/mpc';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const client = new MongoClient('mongodb://localhost:27017'); // for number recommendation based on input
+const client = new MongoClient(process.env.MONGODB_URI); // for number recommendation based on input
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const model = 'gpt-3.5-turbo';
 

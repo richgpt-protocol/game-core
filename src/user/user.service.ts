@@ -31,14 +31,7 @@ import { NotificationDto } from './dto/notification.dto';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 
-const serverUrls = [
-  // TO CHANGE
-  'http://localhost:4896',
-  'http://localhost:4897',
-  'http://localhost:4898',
-];
-
-const depositBotAddAddress = 'http://localhost:3002/addAddress';
+const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
   txHash: string;
   referralTxId: number;

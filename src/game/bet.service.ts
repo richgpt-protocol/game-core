@@ -247,7 +247,7 @@ export class BetService {
       gameUsdTx.walletTxId = walletTx.id;
       gameUsdTx.senderAddress = userInfo.wallet.walletAddress;
       gameUsdTx.receiverAddress = this.configService.get(
-        'GAMEUSD_POOL_ADDRESS',
+        'GAMEUSD_POOL_CONTRACT_ADDRESS',
       );
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
       gameUsdTx.retryCount = 0;
@@ -558,8 +558,8 @@ export class BetService {
 
     // console.log(`earliestNonClosedGame`); //TODO delete
     // console.log(earliestNonClosedGame); //TODO delete
-    // const coreContractAddr = this.configService.get('CORE_CONTRACT');
-    // const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+    // const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
+    // const provider = new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL'));
     // const coreContract = Core__factory.connect(coreContractAddr, provider);
 
     // const currentEpoch = await coreContract.currentEpoch();
@@ -632,7 +632,7 @@ export class BetService {
     allowanceNeeded: bigint,
   ) {
     try {
-      const coreContractAddr = this.configService.get('CORE_CONTRACT');
+      const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
       const gmaeUsdContract = GameUSD__factory.connect(
         this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
         userSigner,
@@ -685,10 +685,13 @@ export class BetService {
     userSigner,
     provider,
   ) {
-    const helperSigner = new Wallet(process.env.HELPER_BOT_PK, provider);
+    const helperSigner = new Wallet(
+      await MPC.retrievePrivateKey(process.env.HELPER_BOT_ADDRESS),
+      provider
+    );
 
     const helperContract = Helper__factory.connect(
-      this.configService.get('HELPER_CONTRACT'),
+      this.configService.get('HELPER_CONTRACT_ADDRESS'),
       helperSigner,
     );
 
@@ -749,7 +752,7 @@ export class BetService {
 
   private async _betWithoutCredit(payload: BetOrder[], userSigner, provider) {
     try {
-      const coreContractAddr = this.configService.get('CORE_CONTRACT');
+      const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
       const coreContract = Core__factory.connect(coreContractAddr, provider);
 
       console.log(`bet without credit`);
@@ -786,6 +789,7 @@ export class BetService {
         parseUnits(totalAmount.toString(), 18),
       );
 
+      // console.log(bets)
       // console.log(`Approve done`);
       const gasLimit = await coreContract
         .connect(userSigner)
@@ -821,7 +825,7 @@ export class BetService {
     gameUsdTx: GameUsdTx;
     creditBalanceUsed: number;
   }) {
-    const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+    const provider = new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL'));
 
     const userWallet = await this.walletRepository.findOne({
       where: {
@@ -891,6 +895,8 @@ export class BetService {
       }
     } catch (error) {
       console.error(error);
+      payload.gameUsdTx.retryCount += 1;
+      await this.gameUsdTxRepository.save(payload.gameUsdTx);
       //TODO add admin notification
     }
   }
@@ -1023,7 +1029,11 @@ export class BetService {
 
       await queryRunner.commitTransaction();
 
-      await this.handleReferralFlow(user.id, payload.walletTx.txAmount);
+      await this.handleReferralFlow(
+        user.id,
+        payload.walletTx.txAmount,
+        payload.gameUsdTx.txHash,
+      );
     } catch (error) {
       console.error(error);
       await queryRunner.rollbackTransaction();
@@ -1041,7 +1051,11 @@ export class BetService {
     }
   }
 
-  private async handleReferralFlow(userId: number, betAmount: number) {
+  private async handleReferralFlow(
+    userId: number,
+    betAmount: number,
+    betTxHash: string,
+  ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1064,6 +1078,7 @@ export class BetService {
       walletTx.txAmount = commisionAmount;
       walletTx.status = 'S';
       walletTx.userWalletId = userInfo.referralUserId;
+      walletTx.txHash = betTxHash;
 
       const lastValidWalletTx = await queryRunner.manager
         .createQueryBuilder(WalletTx, 'walletTx')
@@ -1093,10 +1108,11 @@ export class BetService {
       gameUsdTx.status = 'S';
       gameUsdTx.retryCount = 0;
       gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
-      gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_ADDRESS');
+      gameUsdTx.senderAddress = this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS');
       gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
       gameUsdTx.walletTxs = [walletTx];
       gameUsdTx.walletTxId = walletTx.id;
+      gameUsdTx.txHash = betTxHash;
 
       await queryRunner.manager.save(gameUsdTx);
 
@@ -1184,7 +1200,7 @@ export class BetService {
     userWallet: UserWallet,
     chainId: number,
   ): Promise<boolean> {
-    const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+    const provider = new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL'));
 
     const nativeBalance = await provider.getBalance(userWallet.walletAddress);
 
@@ -1237,13 +1253,13 @@ export class BetService {
         {
           gameStatus: 'P',
           retryCount: 1,
-          gameUsdPoolAddress: this.configService.get('GAMEUSD_POOL_ADDRESS'),
+          gameUsdPoolAddress: this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
         },
       )
       .andWhere('walletTxs.txType = :txType', { txType: 'PLAY' })
       .getMany();
 
-    const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+    const provider = new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL'));
 
     for (const gameUsdTx of pendingGameUsdTx) {
       try {
@@ -1322,7 +1338,8 @@ export class BetService {
                 userSigner,
                 provider,
               );
-              console.log(`tx: ${tx}`);
+              console.log('Bettx: ')
+              console.log(tx);
               // tx = {
               //   hash: '0x123',
               // };
@@ -1334,7 +1351,7 @@ export class BetService {
           }
 
           if (tx) {
-            const txStatus = await provider.getTransactionReceipt(tx);
+            const txStatus = await provider.getTransactionReceipt(tx.hash);
             if (txStatus.status && txStatus.status === 1) {
               // gameUsdTx.status = 'S';
               // await queryRunner.manager.save(gameUsdTx);

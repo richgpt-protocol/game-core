@@ -8,6 +8,7 @@ import { sseMiddleware } from 'express-sse-middleware';
 import * as bodyParser from 'body-parser';
 import * as cookieParser from 'cookie-parser';
 import { join } from 'path';
+import { ConfigService } from './config/config.service';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -29,6 +30,8 @@ async function bootstrap() {
   app.useStaticAssets(join(__dirname, '..', 'public'), { prefix: '/' });
   app.setBaseViewsDir(join(__dirname, '..', 'views'));
   app.setViewEngine('ejs');
-  await app.listen(3001);
+
+  const configService = app.get(ConfigService);
+  await app.listen(configService.get('APP_PORT'));
 }
 bootstrap();

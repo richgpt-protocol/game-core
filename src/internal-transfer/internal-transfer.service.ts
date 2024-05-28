@@ -266,7 +266,7 @@ export class InternalTransferService {
         },
       });
 
-      const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+      const provider = new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL'));
 
       const userSigner = new Wallet(
         await MPC.retrievePrivateKey(senderWalletTx.userWallet.walletAddress),
@@ -391,7 +391,7 @@ export class InternalTransferService {
     chainId: number,
   ): Promise<boolean> {
     try {
-      const provider = new JsonRpcProvider(this.configService.get('RPC_URL'));
+      const provider = new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL'));
 
       const nativeBalance = await provider.getBalance(userWallet.walletAddress);
 
