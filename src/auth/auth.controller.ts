@@ -7,15 +7,17 @@ import {
   Param,
   Post,
   Request,
+  Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiHeader, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AdminService } from 'src/admin/admin.service';
 import { CreateAdminVo } from 'src/admin/vo/admin.vo';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { HandlerClass } from 'src/shared/decorators/handler-class.decorator';
 import { IpAddress } from 'src/shared/decorators/ip-address.decorator';
-import { Secure } from 'src/shared/decorators/secure.decorator';
+import { Secure, SecureEJS } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { IHandlerClass } from 'src/shared/interfaces/handler-class.interface';
 import { ErrorResponseVo, ResponseVo } from 'src/shared/vo/response.vo';
@@ -63,6 +65,7 @@ export class AuthController {
     @Body() payload: LoginDto,
     @IpAddress() ipAddress,
     @HandlerClass() classInfo: IHandlerClass,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const admin = await this.authService.validateAdmin(payload);
     if (admin.error) {
@@ -96,14 +99,47 @@ export class AuthController {
         UserRole.ADMIN,
       );
 
-      const res: ResponseAdminAuthVo = {
+      const responseData: ResponseAdminAuthVo = {
         statusCode: HttpStatus.OK,
         message: 'Admin Login Successful.',
         data: result,
       };
 
-      return res;
+      const expires: Date = new Date(new Date().getTime() + result.expiresIn);
+      res.cookie('token', result.access_token, {
+        httpOnly: true,
+        expires,
+        sameSite: 'strict',
+      });
+
+      return responseData;
     }
+  }
+
+  @Post('admin-logout')
+  @ApiResponse({
+    status: 201,
+    description: 'Successful Logout',
+    type: ResponseVo,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseVo,
+  })
+  async adminLogout(
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+    @Request() req,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    //need to be cleared through the api as its a http-only cookie.
+    res.clearCookie('token');
+    return {
+      statusCode: HttpStatus.OK,
+      success: true,
+      data: {},
+    };
   }
 
   @Post('user-login')
@@ -151,7 +187,6 @@ export class AuthController {
         ipAddress,
       });
       throw new UnauthorizedException(message);
-
     } else {
       await this.auditLogService.userInsert({
         module: classInfo.class,

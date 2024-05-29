@@ -1,0 +1,101 @@
+<html>
+  <head></head>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    .root-wrapper {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #000;
+      height: 100%;
+      max-width: 240px;
+      width: 100%;
+    }
+    .child-container {
+        width: 100%;
+        padding: 15px;
+        /* backdrop-filter: blur(20px); */
+        border-radius: 32px;
+        text-align: center;
+    }
+
+    .header-1 {
+        font-weight: 700;
+        font-size: 20px;
+        text-align: center;
+        letter-spacing: -0.02em;
+        color: #667085;
+    }
+
+    .header-menu {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 12px 6px;
+      background: #e0e0e0;
+      justify-content: center;
+      align-items: center;
+      gap: 22px;
+    }
+    .h-btn {
+      cursor: pointer;
+    }
+    .h-btn a {
+      text-decoration: none;
+      color: #000;
+    }
+
+    @media screen and (max-width: 500px) {
+      .child-container {
+        width: unset;
+      }
+
+      .header-1 {
+        font-size: 16px;
+      }
+    }
+  </style>
+  <body>
+    <div class="root-wrapper">
+      <div class="child-container">
+        <img class="img" src="/images/app.icon.svg" />
+        <p class="title">4DGPT (Admin Panel)</p>
+
+        <span class="header-1">User Listing</span>
+        <!-- {{!-- <p class="content">Pre<a href="#" onclick="window.history.back();">Go back</a>, or head over to <a href="{{data.appUrl}}">Dashboard</a> to choose a new direction.</p> --}} -->
+      </div>
+      <div class="header-menu">
+        <div class="h-btn"><a href="/back-office/users">USER</a></div>
+        <div class="h-btn"><a href="/back-office/wallets">WALLET</a></div>
+        <div class="h-btn"><a href="/back-office/staffs">STAFF</a></div>
+        <div class="h-btn"><a href="/back-office/transactions">TRANSACTIONS</a></div>
+        <div class="h-btn"><a href="/back-office/past-draw-results">RESULT & HISTORY</a></div>
+        <div id="logout" class="h-btn"><a href="#">LOG OUT</a></div>
+      </div>
+    </div>
+    <script>
+      document.getElementById('logout').addEventListener('click', () => {
+        event.preventDefault();
+        fetch('/api/v1/auth/admin-logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        }).then(response => response.json())
+          .then(data => {
+              if (data.statusCode == 200) {
+                  window.location.href = '/back-office/admin-login';
+              } else {
+                  alert(data.message);
+              }
+          })
+          .catch((error) => {
+            console.error('Error:', error);
+          });
+      });
+    </script>
+  </body>
+</html>

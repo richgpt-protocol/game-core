@@ -20,7 +20,7 @@ import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { HandlerClass } from 'src/shared/decorators/handler-class.decorator';
 import { IpAddress } from 'src/shared/decorators/ip-address.decorator';
 import { IHandlerClass } from 'src/shared/interfaces/handler-class.interface';
-import { Secure } from 'src/shared/decorators/secure.decorator';
+import { Secure, SecureEJS } from 'src/shared/decorators/secure.decorator';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { ResponseListVo, ResponseVo } from 'src/shared/vo/response.vo';
 import { UpdateAdminNotificationDto } from './dto/admin-notification.dto';
@@ -235,7 +235,7 @@ export class AdminController {
     };
   }
 
-  @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
+  @SecureEJS(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
   @Post('create-admin')
   @ApiResponse({
     status: 200,
@@ -275,7 +275,7 @@ export class AdminController {
     }
   }
 
-  @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
+  @SecureEJS(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
   @Put('update-admin/:id')
   @ApiResponse({
     status: 200,

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>4DGPT | Unedited</title>
+    <link href="https://fonts.googleapis.com/css?family=Inter" rel="stylesheet">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="title" content="4DGPT | Unedited"/>
+    <meta name="description" content="4DGPT | Unedited"/>
+    <meta property="og:title" content="4DGPT | Unedited">
+    <meta content="4DGPT | Unedited" property="og:description">
+    <meta content="4DGPT | Unedited" property="twitter:description">
+    <meta content="https://gateway.pinata.cloud/ipfs/QmT6YbMJ7bnW2p5QYWNbNDujNSGtNceqqFrxH12mW4bGDa?_gl=1*1iy25mi*_ga*MTU0MzIwMDk3MC4xNjc3NjIxMDYx*_ga_5RMPXG14TE*MTY3NzYyMTA2MS4xLjEuMTY3NzYyMTMzOS4zOS4wLjA." property="twitter:image">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://gateway.pinata.cloud/ipfs/QmT6YbMJ7bnW2p5QYWNbNDujNSGtNceqqFrxH12mW4bGDa?_gl=1*1iy25mi*_ga*MTU0MzIwMDk3MC4xNjc3NjIxMDYx*_ga_5RMPXG14TE*MTY3NzYyMTA2MS4xLjEuMTY3NzYyMTMzOS4zOS4wLjA.">
+    <meta name="twitter:title" content="4DGPT | Unedited">
+    
+    <link rel="icon" type="image/x-icon" href="/images/favicon.ico">
+    <link rel="manifest" href="/images/manifest.json" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/logo192.png">
+  </head>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+        color: #101828;
+        font-family: 'Inter', seif;
+        font-style: normal;
+        height: 100%;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: cover;
+        position: relative;
+        display: block;
+        margin: 0;
+        padding: 0;
+        /* Rectangle 38 */
+    }
+
+    .title {
+        color: #0C9383;
+        font-weight: 600;
+        font-size: 16px;
+        line-height: 24px;
+    }
+
+    .img {
+        width: 80px;
+        margin: auto;
+        display: block;
+    }
+
+    .container {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    .content {
+        font-style: normal;
+        font-weight: 400;
+        font-size: 20px;
+        line-height: 30px;
+        text-align: center;
+        color: #667085;
+        width: 480px;
+        display: block;
+        margin: auto;
+    }
+
+    a {
+        color: #43D9BB;
+        text-decoration: none;
+    }
+
+    #footer {
+        backdrop-filter: brightness(0.1);
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+    }
+
+    #footer p {
+        font-style: normal;
+        font-weight: 400;
+        font-size: 16px;
+        text-align: center;
+        color: #98A2B3;
+    }
+
+    main {
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .table-area {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      max-width: 1060px;
+      overflow-x: scroll;
+    }
+    .table-area .wrapper {
+      border-radius: 8px;
+      border: 1px solid #000;
+      background: #F0EEEE;
+      padding: 6px;
+    }
+    .table-area table {
+      width: 100%;
+      border-radius: 8px;
+      background: #F0EEEE;
+      border-collapse: collapse;
+    }
+    .table-area thead {
+      background-color: #000;
+      border: 1px solid #000;
+      color: #fff;
+    }
+    .table-area tbody {
+      background-color: #fff;
+    }
+    .table-area th, td {
+      padding: 12px 6px;
+      text-align: center;
+    }
+
+    .content-wrapper {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #FEEE5B;
+      padding-top: 26px;
+      padding-bottom: 26px;
+    }
+
+    @media screen and (max-width: 500px) {
+        body {
+            background-image: url('/images/app.bg.svg');
+            -webkit-background-size: cover;
+            -moz-background-size: cover;
+            -o-background-size: cover;
+            background-size: cover;
+            position: relative;
+            
+            margin: 0;
+            padding: 0;
+            
+        }
+
+        .bg {
+            width: 100%;
+            height: 100%;
+            bottom: 0;
+            position: absolute;
+            background: url('/images/not-found-background-mobile.png') no-repeat center bottom fixed;
+                        -webkit-background-size: contain;
+            -moz-background-size: contain;
+            -o-background-size: contain;
+            background-size: contain;
+        }
+
+        .content {
+            width: 90%;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            font-size: 16px;
+            line-height: 24px;
+        }
+
+        .container {
+            margin-top: 10%;
+            backdrop-filter: blur(20px);
+        }
+
+        .child-container {
+            width: unset;
+        }
+
+        .header-1 {
+          font-size: 16px;
+        }
+
+        #footer {
+            backdrop-filter: brightness(0.1);
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            height: auto;
+        }
+
+        .content-wrapper {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+
+    }
+  </style>
+<body>
+  <div class="container">
+
+    <%- include('sidebar') %>
+    <div class="content-wrapper">
+      <div class="table-area">
+        <!-- <div class="wrapper"> -->
+          <table>
+            <thead>
+              <tr>
+                <th>Id</th>
+                <th>mobile no.</th>
+                <th>email</th>
+                <th>status</th>
+                <th>wallet address</th>
+                <th>Mobile Verified</th>
+                <th>creation date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% for(var i=0; i<data.users.length; i++) {%>
+                <tr>
+                  <td><%= data.users[i].id %></td>
+                  <td><%= data.users[i].phoneNumber %></td>
+                  <td><%= data.users[i].emailAddress %></td>
+                  <td><%= data.users[i].status %></td>
+                  <td><%= data.users[i].walletAddress %></td>
+                  <td><%= data.users[i].isMobileVerified %></td>
+                  <td><%= data.users[i].createdDate %></td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+          <!-- <% for(var i=0; i<data.users.length; i++) {%>
+            <li><%= data.users[i].username %></li>
+          <% } %> -->
+        <!-- </div> -->
+      </div>
+
+      <div class="pagination">
+        <% if (data.currentPage > 1) { %>
+          <a href="?page=<%= data.currentPage - 1 %>">Previous</a>
+        <% } %>
+      
+        <% for (let i = 1; i <= data.totalPages; i++) { %>
+          <a href="?page=<%= i %>" class="<%= data.currentPage == i ? 'active' : '' %>"><%= i %></a>
+        <% } %>
+      
+        <% if (data.currentPage < data.totalPages) { %>
+          <a href="?page=<%= data.currentPage + 1 %>">Next</a>
+        <% } %>
+      </div>
+
+    </div>
+  </div>
+  <!-- <header>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <ul class="navbar-nav mr-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="/">Home</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/about">About</a>
+          </li>
+        </ul>
+      </nav>
+  </header> -->
+
+  <!-- <img src="/logo.svg">  -->
+  <div class="bg"></div>
+  <div class="bg"></div>
+  <div id="footer">
+    <p>&#169; 4DGPT 2024. All Rights Reserved.</p>
+  </div>
+</body>
+</html>

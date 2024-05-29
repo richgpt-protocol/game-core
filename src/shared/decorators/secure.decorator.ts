@@ -4,6 +4,7 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { PermissionGuard } from '../guards/permission.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { ErrorResponseVo } from '../vo/response.vo';
+import { CookieAuthGuard } from 'src/auth/cookie-auth-guard';
 
 export const ROLES_KEY = 'roles';
 export const PERMISSION_KEY = 'required-permission';
@@ -14,6 +15,25 @@ export function Secure(permission?: string, ...roles: string[]) {
     SetMetadata(PERMISSION_KEY, permission),
     ApiBearerAuth(),
     UseGuards(JwtAuthGuard, RolesGuard, PermissionGuard),
+    ApiResponse({
+      status: 401,
+      description: 'Unauthorized',
+      type: ErrorResponseVo,
+    }),
+    ApiResponse({
+      status: 403,
+      description: 'Forbidden Resources',
+      type: ErrorResponseVo,
+    }),
+  );
+}
+
+export function SecureEJS(permission?: string, ...roles: string[]) {
+  return applyDecorators(
+    SetMetadata(ROLES_KEY, roles),
+    SetMetadata(PERMISSION_KEY, permission),
+    ApiBearerAuth(),
+    UseGuards(CookieAuthGuard, RolesGuard, PermissionGuard),
     ApiResponse({
       status: 401,
       description: 'Unauthorized',

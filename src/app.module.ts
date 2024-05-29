@@ -27,6 +27,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { GameModule } from './game/game.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
+import { BackOfficeModule } from './back-office/back-office.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DepositModule } from './deposit/deposit.module';
 import { PointModule } from './point/point.module';
@@ -98,6 +99,7 @@ import { InternalTransferModule } from './internal-transfer/internal-transfer.mo
       ignoreErrors: false,
     }),
     ChatbotModule,
+    BackOfficeModule,
     ScheduleModule.forRoot(),
     PointModule,
   ],

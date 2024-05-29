@@ -7,4 +7,8 @@ export enum UserRole {
 export enum AdminType {
   SUPERUSER = 'S',
   BOT = 'B',
+  FINANCE = 'F',
+  MARKETING = 'M',
+  OPERATIONS = 'O',
+  RECRUITER = 'R',
 }

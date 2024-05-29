@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>4DGPT | Unedited</title>
+    <link href="https://fonts.googleapis.com/css?family=Inter" rel="stylesheet">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="title" content="4DGPT | Unedited"/>
+    <meta name="description" content="4DGPT | Unedited"/>
+    <meta property="og:title" content="4DGPT | Unedited">
+    <meta content="4DGPT | Unedited" property="og:description">
+    <meta content="4DGPT | Unedited" property="twitter:description">
+    <meta content="https://gateway.pinata.cloud/ipfs/QmT6YbMJ7bnW2p5QYWNbNDujNSGtNceqqFrxH12mW4bGDa?_gl=1*1iy25mi*_ga*MTU0MzIwMDk3MC4xNjc3NjIxMDYx*_ga_5RMPXG14TE*MTY3NzYyMTA2MS4xLjEuMTY3NzYyMTMzOS4zOS4wLjA." property="twitter:image">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://gateway.pinata.cloud/ipfs/QmT6YbMJ7bnW2p5QYWNbNDujNSGtNceqqFrxH12mW4bGDa?_gl=1*1iy25mi*_ga*MTU0MzIwMDk3MC4xNjc3NjIxMDYx*_ga_5RMPXG14TE*MTY3NzYyMTA2MS4xLjEuMTY3NzYyMTMzOS4zOS4wLjA.">
+    <meta name="twitter:title" content="4DGPT | Unedited">
+    
+    <link rel="icon" type="image/x-icon" href="/images/favicon.ico">
+    <link rel="manifest" href="/images/manifest.json" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/logo192.png">
+  </head>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+        color: #101828;
+        font-family: 'Inter', seif;
+        font-style: normal;
+        height: 100%;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: cover;
+        position: relative;
+        display: block;
+        margin: 0;
+        padding: 0;
+        /* Rectangle 38 */
+    }
+
+    .title {
+        color: #0C9383;
+        font-weight: 600;
+        font-size: 16px;
+        line-height: 24px;
+    }
+
+    .img {
+        width: 80px;
+        margin: auto;
+        display: block;
+    }
+
+    .container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        margin-top: 1%;
+    }
+
+    .child-container {
+        width: 500px;
+        padding: 15px;
+        /* backdrop-filter: blur(20px); */
+        border-radius: 32px;
+        text-align: center;
+    }
+
+    .header-1 {
+        font-weight: 700;
+        font-size: 20px;
+        text-align: center;
+        letter-spacing: -0.02em;
+        color: #667085;
+    }
+
+    .content {
+        font-style: normal;
+        font-weight: 400;
+        font-size: 20px;
+        line-height: 30px;
+        text-align: center;
+        color: #667085;
+        width: 480px;
+        display: block;
+        margin: auto;
+    }
+
+    a {
+        color: #43D9BB;
+        text-decoration: none;
+    }
+
+    #footer {
+        backdrop-filter: brightness(0.1);
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+    }
+
+    #footer p {
+        font-style: normal;
+        font-weight: 400;
+        font-size: 16px;
+        text-align: center;
+        color: #98A2B3;
+    }
+
+    main {
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .content-wrapper {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #FEEE5B;
+      padding-top: 26px;
+      padding-bottom: 26px;
+    }
+
+    .flex-form {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 700px;
+      border: 1px solid #000;
+      padding: 16px 24px;
+      background: white;
+      gap: 16px;
+    }
+
+    .input-area {
+      display: flex;
+      width: 100%;
+      gap: 12px;
+    }
+    .input-area span {
+      font-weight: 600;
+    }
+    .btn-app {
+      background-color: #000;
+      border-radius: 8px;
+      color: #fff;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    @media screen and (max-width: 500px) {
+        body {
+            background-image: url('/images/app.bg.svg');
+            -webkit-background-size: cover;
+            -moz-background-size: cover;
+            -o-background-size: cover;
+            background-size: cover;
+            position: relative;
+            
+            margin: 0;
+            padding: 0;
+            
+        }
+
+        .bg {
+            width: 100%;
+            height: 100%;
+            bottom: 0;
+            position: absolute;
+            background: url('/images/not-found-background-mobile.png') no-repeat center bottom fixed;
+                        -webkit-background-size: contain;
+            -moz-background-size: contain;
+            -o-background-size: contain;
+            background-size: contain;
+        }
+
+        .content {
+            width: 90%;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            font-size: 16px;
+            line-height: 24px;
+        }
+
+        .container {
+            margin-top: 10%;
+            backdrop-filter: blur(20px);
+        }
+
+        .child-container {
+            width: unset;
+        }
+
+        .header-1 {
+          font-size: 16px;
+        }
+
+        #footer {
+            backdrop-filter: brightness(0.1);
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            height: auto;
+        }
+
+        .content-wrapper {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+    }
+  </style>
+<body>
+  <div class="container">
+    <div class="child-container">
+        <img class="img" src="/images/app.icon.svg" />
+        <p class="title">4DGPT (Admin Panel)</p>
+
+        <span class="header-1">Staff Listing</span>
+        <!-- {{!-- <p class="content">Pre<a href="#" onclick="window.history.back();">Go back</a>, or head over to <a href="{{data.appUrl}}">Dashboard</a> to choose a new direction.</p> --}} -->
+    </div>
+    <%- include('header') %>
+
+    <div class="content-wrapper">
+      <form class="flex-form" id="updateForm">
+        <div class="input-area">
+          <span>username: </span>
+          <input id="usernameInput" type="text" value="<%= data.staffInfo.username %>" />
+        </div>
+        <div class="input-area">
+          <span>name: </span>
+          <input id="nameInput" type="text" value="<%= data.staffInfo.name %>" />
+        </div>
+        <div class="input-area">
+          <span>email: </span>
+          <input id="emailInput" type="text" value="<%= data.staffInfo.emailAddress %>" />
+        </div>
+        <div class="input-area">
+          <span>admin type: </span>
+          <select id="adminTypeSelect">
+            <option value="S" <%= data.staffInfo.adminType === 'S' ? 'selected' : '' %>>S</option>
+            <option value="F" <%= data.staffInfo.adminType === 'F' ? 'selected' : '' %>>F</option>
+            <option value="M" <%= data.staffInfo.adminType === 'M' ? 'selected' : '' %>>M</option>
+            <option value="O" <%= data.staffInfo.adminType === 'O' ? 'selected' : '' %>>O</option>
+            <option value="R" <%= data.staffInfo.adminType === 'R' ? 'selected' : '' %>>R</option>
+          </select>
+        </div>
+        <button class="btn-app" type="button" onclick="updateAdminSetting()">Update</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- <img src="/logo.svg">  -->
+  <div class="bg"></div>
+  <div class="bg"></div>
+  <div id="footer">
+    <p>&#169; 4DGPT 2024. All Rights Reserved.</p>
+  </div>
+
+  <script>
+    function updateAdminSetting() {
+
+      // Get form data
+      const username = document.getElementById('usernameInput').value;
+      const name = document.getElementById('nameInput').value;
+      const email = document.getElementById('emailInput').value;
+      const adminType = document.getElementById('adminTypeSelect').value;
+  
+      // Perform any additional validation if needed
+  
+      // Create an object with the form data
+      const formData = {
+        username: username,
+        name: name,
+        emailAddress: email,
+        adminType: adminType,
+        status: "A"
+      };
+  
+      // Perform AJAX request or any other method to submit the form data
+      // For example, using fetch API
+      fetch('http://localhost:3001/api/v1/admin/update-admin/1', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWlueiIsInN1YiI6MSwicm9sZSI6IkEiLCJleHAiOjE3MDk2ODAxNzY2MTEsImlhdCI6MTcwOTY2NTE3Nn0.ybwmvJk-gbgAl2XAaGBj2UqAVf13Cas0awwZ1674pV0'
+        },
+        body: JSON.stringify(formData),
+      })
+      .then(response => response.json())
+      .then(data => {
+        // Handle the response data as needed
+        console.log(data);
+      })
+      .catch(error => {
+        console.error('Error:', error);
+      });
+    }
+  </script>
+  
+</body>
+</html>
