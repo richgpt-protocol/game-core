@@ -53,12 +53,15 @@ export class GameGateway {
         order: { id: 'DESC' },
         relations: { drawResult: true }
       });
+      console.log('lastGame:', lastGame)
       const drawResult = lastGame.drawResult;
+      console.log('drawResult:', drawResult)
       // current drawResult is in sequence(first, second...)
       // loop through drawResult in reverse order(consolation, special...) and emit to client
       for (let i = drawResult.length - 1; i >= 0; i--) {
         // omit unnecessary fields to reduce payload size
         const {prizeIndex, createdDate, ...result} = drawResult[i];
+        console.log('result:', result)
         // TODO: use return instead of emit, to utilize nestjs functions(i.e. interceptor)
         // return { event: 'events', data: result };
         this.server.emit('liveDrawResult', result);
