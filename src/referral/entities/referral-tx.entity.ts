@@ -17,7 +17,12 @@ export class ReferralTx {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({
+    type: 'decimal',
+    precision: 30,
+    scale: 18,
+    default: 0,
+  })
   rewardAmount: number;
 
   @Column({
