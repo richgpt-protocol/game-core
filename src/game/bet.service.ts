@@ -136,9 +136,10 @@ export class BetService {
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
         .orderBy('bet.id', 'DESC')
-        .where('game.epoch = :epoch', { epoch: await this._getCurrentEpoch() })
-        .andWhere('walletTx.status = :status', { status: 'S' })
+        .where('walletTx.status = :status', { status: 'S' })
+        // .andWhere('walletTx.status = :status', { status: 'S' })
         .limit(count)
+        .orderBy('walletTx.createdDate', 'DESC')
         .getMany();
 
       if (betsDb.length === 0) return [];
