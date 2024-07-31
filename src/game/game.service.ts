@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, MoreThan, Repository } from 'typeorm';
+import { In, LessThan, MoreThan, Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -419,14 +419,26 @@ export class GameService {
     }
   }
 
-  async getPastResult(count?: number, date?: Date, numberPair?: string) {
+  async getPastResult(
+    count?: number,
+    startDate?: number,
+    endDate?: number,
+    numberPair?: string,
+  ) {
     let drawResults;
 
-    if (date) {
-      count = 24;
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      const games = await this.gameRepository.find({
+        where: { endDate: LessThan(end), startDate: MoreThan(start) },
+        order: { id: 'DESC' },
+      });
+
       drawResults = await this.drawResultRepository.find({
-        where: { createdDate: MoreThan(date) },
-        take: count,
+        where: { gameId: In(games.map((game) => game.id)) },
+        order: { id: 'DESC' },
       });
     }
 
@@ -438,8 +450,9 @@ export class GameService {
       });
     }
 
-    return drawResults.map(result => {
-      const {id, prizeIndex, ...rest} = result;
+    return drawResults.map((result) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id, prizeIndex, ...rest } = result;
       return rest;
     });
   }

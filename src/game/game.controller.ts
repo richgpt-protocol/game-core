@@ -42,7 +42,6 @@ export class GameController {
         data: result.data,
         message: 'get all bets success',
       };
-
     } catch (error) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
@@ -62,9 +61,8 @@ export class GameController {
         data: availableGames,
         message: 'get available games success',
       };
-
     } catch (error) {
-      console.error(error)
+      console.error(error);
       return {
         statusCode: HttpStatus.BAD_REQUEST,
         data: null,
@@ -83,9 +81,8 @@ export class GameController {
         data: leaderboard,
         message: 'get leaderboard success',
       };
-
     } catch (error) {
-      console.error(error)
+      console.error(error);
       return {
         statusCode: HttpStatus.BAD_REQUEST,
         data: null,
@@ -96,17 +93,14 @@ export class GameController {
 
   @Secure(null, UserRole.USER)
   @Get('get-past-draw-results')
-  async getPastDrawResults(
-    @Body() payload: { gameIds: number[] }
-  ) {
+  async getPastDrawResults(@Body() payload: { gameIds: number[] }) {
     try {
       const result = await this.gameService.getPastDrawResults(payload.gameIds);
-      return { 
+      return {
         statusCode: HttpStatus.OK,
         data: result.data,
         message: 'get past draw result success',
       };
-
     } catch (error) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
@@ -118,22 +112,20 @@ export class GameController {
 
   @Secure(null, UserRole.USER)
   @Get('get-past-result')
-  async getPastResult(
-    @Query() query: PastResultDto,
-  ) {
+  async getPastResult(@Query() query: PastResultDto) {
     try {
-
-      if (query.date && query.numberPair) {
+      if ((query.startDate || query.endDate) && query.numberPair) {
         throw new Error('date and numberPair cannot be used together');
       }
 
-      if (!query.date && !query.numberPair) {
+      if (!(query.startDate || query.endDate) && !query.numberPair) {
         throw new Error('either date or numberPair must be provided');
       }
-      
+
       const pastResult = await this.gameService.getPastResult(
         query.count,
-        query.date,
+        query.startDate,
+        query.endDate,
         query.numberPair,
       );
 
@@ -142,10 +134,9 @@ export class GameController {
         data: pastResult,
         message: 'get past result success',
       };
-
     } catch (error) {
       // todo: inform if error come from throw above
-      console.log(error)
+      console.log(error);
       return {
         statusCode: HttpStatus.BAD_REQUEST,
         data: null,
