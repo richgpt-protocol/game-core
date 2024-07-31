@@ -186,7 +186,7 @@ export class GameService {
         numberPairs,
         ethers.parseEther(process.env.MAX_BET_AMOUNT),
         '0x',
-        { gasLimit: 1100000 }
+        { gasLimit: 1500000 }
       );
       const txReceipt = await txResponse.wait();
 
