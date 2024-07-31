@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsString, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
 
 export class PastResultDto {
   @ApiProperty({ required: false })
@@ -13,12 +13,10 @@ export class PastResultDto {
   numberPair: string;
 
   @ApiProperty({ required: false })
-  @IsNumber()
   @IsOptional()
-  startDate: number;
+  startDate: string;
 
   @ApiProperty({ required: false })
-  @IsNumber()
   @IsOptional()
-  endDate: number;
+  endDate: string;
 }

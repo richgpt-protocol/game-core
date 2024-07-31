@@ -421,15 +421,15 @@ export class GameService {
 
   async getPastResult(
     count?: number,
-    startDate?: number,
-    endDate?: number,
+    startDate?: string,
+    endDate?: string,
     numberPair?: string,
   ) {
     let drawResults;
 
     if (startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
+      const start = new Date(Number(startDate));
+      const end = new Date(Number(endDate));
 
       const games = await this.gameRepository.find({
         where: { endDate: LessThan(end), startDate: MoreThan(start) },
