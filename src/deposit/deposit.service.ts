@@ -106,6 +106,8 @@ export class DepositService {
         },
       });
 
+      if (!userWallet) return;
+
       const walletTx = new WalletTx();
       walletTx.txType = 'DEPOSIT';
       walletTx.txAmount = payload.amount;
@@ -370,6 +372,8 @@ export class DepositService {
       );
       // console.log('referralTx', referralTxInsertResult);
       await this.handleReferralDepositXp(depositAmount, walletTx, queryRunner);
+
+      await queryRunner.commitTransaction();
     } catch (error) {
       console.error('Error in referral tx', error);
       this.adminNotificationService.setAdminNotification(
@@ -893,7 +897,7 @@ export class DepositService {
         );
       }
     } catch (error) {
-      console.log('Error in gameUSD tx', error);
+      console.log('Error in gameUSD tx ', error);
       await queryRunner.rollbackTransaction();
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
