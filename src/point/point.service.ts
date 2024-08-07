@@ -31,21 +31,22 @@ export class PointService {
   ) {}
 
   getDepositPoints(depositAmount: number): { xp: number; bonusPerc: number } {
-    switch (depositAmount) {
-      case 5:
-        return { xp: 5, bonusPerc: 0 };
-      case 10:
-        return { xp: 10, bonusPerc: 10 };
-      case 20:
-        return { xp: 20, bonusPerc: 25 };
-      case 50:
-        return { xp: 50, bonusPerc: 50 };
-      case 100:
-        return { xp: 100, bonusPerc: 100 };
-      default:
-        return { xp: 0, bonusPerc: 0 };
-      // throw new Error('Invalid deposit amount');
-    }
+    return { xp: depositAmount, bonusPerc: 0 }; //TODO
+    // switch (depositAmount) {
+    //   case 5:
+    //     return { xp: 5, bonusPerc: 0 };
+    //   case 10:
+    //     return { xp: 10, bonusPerc: 10 };
+    //   case 20:
+    //     return { xp: 20, bonusPerc: 25 };
+    //   case 50:
+    //     return { xp: 50, bonusPerc: 50 };
+    //   case 100:
+    //     return { xp: 100, bonusPerc: 100 };
+    //   default:
+    //     return { xp: 0, bonusPerc: 0 };
+    //   // throw new Error('Invalid deposit amount');
+    // }
   }
 
   /// This method should not be called more than once per day
@@ -214,21 +215,22 @@ export class PointService {
   }
 
   getReferralDepositXp(depositAmount: number): number {
-    switch (depositAmount) {
-      case 5:
-        return 2.5;
-      case 10:
-        return 5;
-      case 20:
-        return 10;
-      case 50:
-        return 25;
-      case 100:
-        return 50;
-      default:
-        return 0;
-      // throw new Error('Invalid deposit amount');
-    }
+    return depositAmount; //TODO
+    // switch (depositAmount) {
+    //   case 5:
+    //     return 2.5;
+    //   case 10:
+    //     return 5;
+    //   case 20:
+    //     return 10;
+    //   case 50:
+    //     return 25;
+    //   case 100:
+    //     return 50;
+    //   default:
+    //     return 0;
+    //   // throw new Error('Invalid deposit amount');
+    // }
   }
 
   async getReferralBetXp(
@@ -283,35 +285,34 @@ export class PointService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-
       const pointTxs = await this.pointTxRepository.find({
         where: {
           isLevelUp: IsNull(),
-        }
-      })
+        },
+      });
 
       for (const pointTx of pointTxs) {
         let isLevelUp = false;
-        const levelBefore = Math.floor(this.walletService.calculateLevel(Number(pointTx.startingBalance)));
-        const levelAfter = Math.floor(this.walletService.calculateLevel(Number(pointTx.endingBalance)));
+        const levelBefore = Math.floor(
+          this.walletService.calculateLevel(Number(pointTx.startingBalance)),
+        );
+        const levelAfter = Math.floor(
+          this.walletService.calculateLevel(Number(pointTx.endingBalance)),
+        );
         if (levelAfter > levelBefore) {
-          await this.userService.setUserNotification(
-            pointTx.walletId,
-            {
-              type: 'point',
-              title: 'Congratulations on Level Up',
-              message: `You have level up from ${levelBefore} to level ${levelAfter}.`,
-              walletTxId: pointTx.walletTxId,
-            }
-          )
+          await this.userService.setUserNotification(pointTx.walletId, {
+            type: 'point',
+            title: 'Congratulations on Level Up',
+            message: `You have level up from ${levelBefore} to level ${levelAfter}.`,
+            walletTxId: pointTx.walletTxId,
+          });
 
           isLevelUp = true;
         }
 
         pointTx.isLevelUp = isLevelUp;
-        await this.pointTxRepository.save(pointTx)
+        await this.pointTxRepository.save(pointTx);
       }
-
     } catch (err) {
       await queryRunner.rollbackTransaction();
 
@@ -322,7 +323,6 @@ export class PointService {
         'Transaction Rollbacked',
         true,
       );
-
     } finally {
       await queryRunner.release();
     }

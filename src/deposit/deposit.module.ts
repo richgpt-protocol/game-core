@@ -21,6 +21,8 @@ import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointModule } from 'src/point/point.module';
 import { UserModule } from 'src/user/user.module';
+import { NotifyModule } from 'src/notify/notify.module';
+import { NotifyService } from 'src/notify/notify.service';
 
 @Module({
   imports: [
@@ -44,11 +46,13 @@ import { UserModule } from 'src/user/user.module';
     PointModule,
     SharedModule,
     UserModule,
+    NotifyModule,
   ],
   providers: [
     DepositService,
     WalletService,
     AdminNotificationService /* HttpService */,
+    NotifyService,
   ],
   controllers: [DepositController],
   exports: [],

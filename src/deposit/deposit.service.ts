@@ -38,9 +38,12 @@ import { UserService } from 'src/user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MPC } from 'src/shared/mpc';
 import { Mutex } from 'async-mutex';
+import { NotifyService } from 'src/notify/notify.service';
 
 @Injectable()
 export class DepositService {
+  private TG_ADMIN_GROUP;
+  private DEPOSIT_NOTIFY_THRESHOLD = 100;
   constructor(
     @InjectRepository(DepositTx)
     private depositRepository: Repository<DepositTx>,
@@ -60,8 +63,11 @@ export class DepositService {
     private dataSource: DataSource,
     private readonly pointService: PointService,
     private readonly userService: UserService,
+    private readonly notifyService: NotifyService,
     private eventEmitter: EventEmitter2,
-  ) {}
+  ) {
+    this.TG_ADMIN_GROUP = this.configService.get('ADMIN_TG_CHAT_ID');
+  }
 
   private referralCommissionByRank = (rank: number) => {
     switch (rank) {
@@ -107,6 +113,13 @@ export class DepositService {
       });
 
       if (!userWallet) return;
+
+      if (payload.amount >= this.DEPOSIT_NOTIFY_THRESHOLD) {
+        await this.notifyService.notify(
+          [this.TG_ADMIN_GROUP],
+          `Deposit of ${payload.amount} ${payload.tokenAddress} received at ${payload.walletAddress}`,
+        );
+      }
 
       const walletTx = new WalletTx();
       walletTx.txType = 'DEPOSIT';
@@ -301,8 +314,8 @@ export class DepositService {
 
       if (!userInfo || userInfo.referralUserId == null) return;
 
-      const commisionAmount =
-        depositAmount * this.referralCommissionByRank(userInfo.referralRank);
+      // const commisionAmount =
+      //   depositAmount * this.referralCommissionByRank(userInfo.referralRank);
 
       const previousWalletTx = await queryRunner.manager.findOne(WalletTx, {
         where: {
@@ -315,19 +328,19 @@ export class DepositService {
       });
 
       const walletTxStartingBalance = previousWalletTx?.endingBalance || 0;
-      const walletTxEndingBalance =
-        (Number(previousWalletTx?.endingBalance) || 0) +
-        Number(commisionAmount);
+      // const walletTxEndingBalance =
+      // (Number(previousWalletTx?.endingBalance) || 0) +
+      // Number(commisionAmount);
 
       const walletTxInsertResult = await queryRunner.manager.insert(WalletTx, {
         txType: 'REFERRAL',
-        txAmount: commisionAmount,
+        txAmount: 0,
         status: 'S',
         userWalletId: userInfo.referralUserId,
         userWallet: userInfo.referralUser.wallet,
         txHash: depositGameUsdTxHash,
         startingBalance: walletTxStartingBalance,
-        endingBalance: walletTxEndingBalance,
+        endingBalance: walletTxStartingBalance,
       });
 
       const walletTx = await queryRunner.manager
@@ -338,25 +351,25 @@ export class DepositService {
         .innerJoinAndSelect('walletTx.userWallet', 'userWallet')
         .getOne();
 
-      walletTx.userWallet.walletBalance = walletTx.endingBalance;
-      walletTx.userWallet.redeemableBalance =
-        Number(walletTx.userWallet.redeemableBalance) + Number(commisionAmount);
-      await queryRunner.manager.save(walletTx.userWallet);
+      // walletTx.userWallet.walletBalance = walletTx.endingBalance;
+      // walletTx.userWallet.redeemableBalance =
+      // Number(walletTx.userWallet.redeemableBalance) + Number(commisionAmount);
+      // await queryRunner.manager.save(walletTx.userWallet);
 
-      const gameUsdTx = new GameUsdTx();
-      gameUsdTx.amount = commisionAmount;
-      gameUsdTx.status = 'S';
-      gameUsdTx.retryCount = 0;
-      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
-      gameUsdTx.senderAddress = this.configService.get(
-        'GAMEUSD_POOL_CONTRACT_ADDRESS',
-      );
-      gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
-      gameUsdTx.walletTxs = [walletTx];
-      gameUsdTx.walletTxId = walletTx.id;
-      gameUsdTx.txHash = depositGameUsdTxHash;
+      // const gameUsdTx = new GameUsdTx();
+      // gameUsdTx.amount = commisionAmount;
+      // gameUsdTx.status = 'S';
+      // gameUsdTx.retryCount = 0;
+      // gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      // gameUsdTx.senderAddress = this.configService.get(
+      //   'GAMEUSD_POOL_CONTRACT_ADDRESS',
+      // );
+      // gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
+      // gameUsdTx.walletTxs = [walletTx];
+      // gameUsdTx.walletTxId = walletTx.id;
+      // gameUsdTx.txHash = depositGameUsdTxHash;
 
-      await queryRunner.manager.save(gameUsdTx);
+      // await queryRunner.manager.save(gameUsdTx);
 
       const referralTxInsertResult = await queryRunner.manager.insert(
         ReferralTx,
