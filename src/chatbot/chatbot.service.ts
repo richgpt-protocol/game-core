@@ -9,9 +9,6 @@ import { ethers } from 'ethers';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ChatLog } from './entities/chatLog.entity';
 import { Repository } from 'typeorm';
-import { Message } from './entities/message.entity';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
@@ -19,26 +16,25 @@ import { PointTx } from 'src/point/entities/point-tx.entity';
 import { PointReward__factory } from 'src/contract';
 import { UserService } from 'src/user/user.service';
 import { MPC } from 'src/shared/mpc';
+import { ChatCompletionMessageParam } from 'openai/resources';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
 const client = new MongoClient(process.env.MONGODB_URI); // for number recommendation based on input
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const model = 'gpt-3.5-turbo';
+const model = 'gpt-4o-mini';
 
 @Injectable()
 export class ChatbotService {
   availableFunctions: { [key: string]: Function } = {
     getNumberRecommendation: this.getNumberRecommendation,
+    getImage: this.getImage,
   };
 
   constructor(
     @InjectRepository(ChatLog)
     private chatLogRepository: Repository<ChatLog>,
-    @InjectRepository(Message)
-    private messageRepository: Repository<Message>,
     private eventEmitter: EventEmitter2,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private adminNotificationService: AdminNotificationService,
     @InjectRepository(UserWallet)
     private userWalletRepository: Repository<UserWallet>,
@@ -47,75 +43,63 @@ export class ChatbotService {
     private userService: UserService,
   ) {}
 
-  async sendMessage(id: number, payload: SendMessageDto): Promise<string> {
-    let chatLog: ChatLog;
+  async sendMessage(userId: number, payload: SendMessageDto): Promise<Array<{type: string, contents: string}>> {
+    const chatLog = await this.chatLogRepository.findBy({ userId });
+    // extract chat completion message from chatLog
+    // @ts-ignore
+    let messages: Array<ChatCompletionMessageParam> = chatLog.map(log => ({ role: log.role, content: log.content }));
 
-    // fetch previous messages from cache
-    const feeds: any[] = await this.cacheManager.get(id.toString()) ?? [];
+    const initialContent = 
+`You are human, and reply in casual conversation in simple English under 3 sentences.
+Try to figure out my gender and slightly use some flirty words.
+You can reply with image(to execute getImage function) if the topic regards something that can be visualized.
+You should ONLY mention 4-Digits lottery when current topic is related to bet.
+When I mention lost or number not matched in 4-Digits lottery, pity me / ask me to take a break / control the cost of betting.
+Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`;
 
-    const isInitialMessage = payload.isInitialMessage;
-    if (isInitialMessage) {
-      chatLog = await this.chatLogRepository.save(
-        this.chatLogRepository.create({ userId: id }),
-      );
+    // there is an initial chat from Professor Rich in frontend: Hi How are you today?
+    // TODO: add this into chatCompletion & database
 
-      const initialRole = 'system';
-      const initialContent =
-        'You are a fun and playful assistant.' +
-        'You assist me who likely to bet in 4D lottery.' +
-        '\n' +
-        'Your reply should within 3 sentences, make the reply close to lottery if possible.' +
-        'Your reply may include emoji.' +
-        '\n' +
-        "If and only if I ask for number, provide me a 4-Digits number between 0000 and 9999. Don't tell me it is random." +
-        'If I ask why this number, tell me any reason besides random.' +
-        'If I ask how to deposit, guide me to the homepage and press the deposit logo.' +
-        '\n' +
-        `Today is ${new Date(Date.now()).toString()}.`;
-      const message = await this.messageRepository.save(
-        this.messageRepository.create({
-          role: initialRole,
+    // TODO: if the conversation is too long, summarize it to save tokens
+
+    if (messages.length === 0) {
+      // initial chat, save initial chatLog in database
+      await this.chatLogRepository.save(
+        this.chatLogRepository.create({
+          userId,
+          role: 'system',
           content: initialContent,
-          chatLog,
         }),
       );
-      chatLog.messages = [message];
-      await this.chatLogRepository.save(chatLog);
-
-      // initiate / clear previous messages in cache if isInitialMessage
-      feeds.length = 0; // clear array
-      await this.cacheManager.set(id.toString(), feeds, 0);
-
-      feeds.push({ role: initialRole, content: initialContent });
 
     } else {
-      // isInitialMessage == false
-      // fetch previous messages from db
-      chatLog = await this.chatLogRepository
-        .createQueryBuilder('chatLog')
-        .select()
-        .leftJoinAndSelect('chatLog.messages', 'message')
-        .where({ userId: id })
-        .orderBy('chatLog.id', 'DESC')
-        .getOne();
+      // naively update initialCotent to latest one in database
+      // TODO: if today date is same, no need update database
+      await this.chatLogRepository.update(
+        chatLog[0].id,
+        { content: initialContent },
+      );
+      // also update in messages
+      messages[0].content = initialContent
     }
 
-    // add current message to feeds
-    feeds.push({ role: 'user', content: payload.message });
-    // set feeds into cache
-    await this.cacheManager.set(id.toString(), feeds, 0);
-    // save current message into db
-    await this.messageRepository.save(
-      this.messageRepository.create({
+    // save user message into dabatase
+    await this.chatLogRepository.save(
+      this.chatLogRepository.create({
+        userId,
         role: 'user',
         content: payload.message,
-        chatLog,
       }),
     );
+    // add user message into messages
+    messages.push({
+      role: 'user',
+      content: payload.message,
+    });
 
-    // submit to chatgpt
+    // submit to chatCompletion
     const completion = await openai.chat.completions.create({
-      messages: feeds,
+      messages,
       model: model,
       tools: [
         {
@@ -136,21 +120,34 @@ export class ChatbotService {
             },
           },
         },
+        {
+          type: 'function',
+          function: {
+            name: 'getImage',
+            description: 'get any image based on keywords',
+            parameters: {
+              type: 'object',
+              properties: {
+                keyword: {
+                  type: 'string',
+                  description: 'keyword from user message',
+                },
+              },
+              required: ['keyword'],
+            },
+          }
+        }
       ],
+      // https://platform.openai.com/docs/guides/text-generation/how-should-i-set-the-temperature-parameter
+      temperature: 1.2, // 0.0 to 2.0
     });
     const assistantMessage = completion.choices[0].message;
 
-    // save this message into db
-    await this.messageRepository.save(
-      this.messageRepository.create({
-        role: assistantMessage.role,
-        content: assistantMessage.content,
-        chatLog,
-      }),
-    );
+    // add assistantMessage into messages
+    messages.push(assistantMessage);
 
+    let replies: Array<{type: 'text' | 'image' | 'speech', contents: string}> = [];
     const toolCalls = assistantMessage.tool_calls;
-    let replied = '';
     if (toolCalls) {
       // this message is to call functions
       for (const toolCall of toolCalls) {
@@ -159,89 +156,127 @@ export class ChatbotService {
         const functionArgs = JSON.parse(toolCall.function.arguments); // possible empty {}
         let functionResponse;
 
-        // console.info(`functionName: ${functionName}`)
-        // console.info(functionArgs)
-
         if (functionName === 'getNumberRecommendation') {
           functionResponse = await functionToCall(functionArgs.message);
+
+        } else if (functionName === 'getImage') {
+          functionResponse = await functionToCall(functionArgs.keyword);
+          // add into bot replies(to user)
+          replies.push({ type: 'image', contents: functionResponse });
+
         } else {
           // all other functions (without argument)
           functionResponse = await functionToCall();
         }
-        // console.info(functionResponse)
 
-        feeds.push(assistantMessage); // message contain function call
-        feeds.push({
-          // message contain function response
-          tool_call_id: toolCall.id,
-          role: 'tool',
-          content: JSON.stringify(functionResponse),
-        });
-        // set feeds into cache
-        await this.cacheManager.set(id.toString(), feeds, 0);
+        if (functionName === 'getImage') {
+          // functionResponse is image in base64, save into database
+          await this.chatLogRepository.save(
+            this.chatLogRepository.create({
+              userId,
+              role: 'tool',
+              content: functionResponse,
+            }),
+          );
+          // and add into messages
+          // here treat as user ask bot what is in the image
+          messages.push({
+            role: 'user',
+            content: [{
+              type: 'image_url',
+              image_url: { 'url': `data:image/png;base64,${functionResponse}` }
+            }],
+          })
 
-        // save function reponse into db
-        await this.messageRepository.save(
-          this.messageRepository.create({
+        } else {
+          // function response is object, save into database
+          await this.chatLogRepository.save(
+            this.chatLogRepository.create({
+              userId,
+              role: 'tool',
+              content: JSON.stringify(functionResponse),
+            }),
+          );
+          // and add into messages
+          // bot will create reply based on the object
+          messages.push({
+            tool_call_id: toolCall.id,
             role: 'tool',
             content: JSON.stringify(functionResponse),
-            chatLog,
-          }),
-        );
+          })
+        }
       }
 
-      // submit everything to chatgpt
+      // submit messages with functionResponse to chatCompletion
       const response = await openai.chat.completions.create({
         model: model,
-        messages: feeds,
+        messages,
       });
-      const assistantMessageWithFunctionResponse = response.choices[0].message;
+      const assistantReplyBasedOnFunctionResponse = response.choices[0].message;
 
-      // save assistant message with function response into db
-      await this.messageRepository.save(
-        this.messageRepository.create({
-          role: assistantMessageWithFunctionResponse.role,
-          content: assistantMessageWithFunctionResponse.content,
-          chatLog,
+      // save the reply into database
+      await this.chatLogRepository.save(
+        this.chatLogRepository.create({
+          userId,
+          role: assistantReplyBasedOnFunctionResponse.role,
+          content: assistantReplyBasedOnFunctionResponse.content,
         }),
       );
 
-      replied = assistantMessageWithFunctionResponse.content;
+      // add into bot replies(to user)
+      replies.push({ type: 'text', contents: assistantReplyBasedOnFunctionResponse.content });
 
     } else {
       // this message is normal message
-      replied = assistantMessage.content;
 
-      // set assistant message into cache
-      feeds.push(assistantMessage);
-      await this.cacheManager.set(id.toString(), feeds, 0);
+      // add into bot replies(to user)
+      replies.push({ type: 'text', contents: assistantMessage.content });
+
+      // save the reply into database
+      await this.chatLogRepository.save(
+        this.chatLogRepository.create({
+          userId,
+          role: assistantMessage.role,
+          content: assistantMessage.content,
+        }),
+      );
     }
 
-    // 3 conversation daily get xp
-    let userMessageCount = 0;
-    feeds.forEach(feed => { if (feed.role === 'user') userMessageCount++ });
-    if (userMessageCount === 3) {
-      // only once xp reward per utc day
-      const todayAtUtc0 = new Date()
-      todayAtUtc0.setUTCHours(0, 0, 0, 0); // utc 00:00 of today
-      const pointTx = await this.pointTxRepository.findOne({
-        where: { walletId: id },
-        order: { id: 'DESC' },
-      });
-      if (pointTx && pointTx.createdDate > todayAtUtc0) {
-        // do nothing
+    // convert assistant reply into speech
+    const speech = await openai.audio.speech.create({
+      model: 'tts-1',
+      voice: 'nova',
+      input: replies[replies.length - 1].contents,
+      speed: 1,
+    })
+    const speechInBuffer = Buffer.from(await speech.arrayBuffer());
+    replies.push({ type: 'speech', contents: speechInBuffer.toString('base64') });
 
-      } else {
-        // pass to handlePointRewardEvent() for on-chain interaction
-        this.eventEmitter.emit(
-          'chatbot.service.handlePointReward',
-          id,
-          chatLog.id,
-        );
-      }
-    };
+    // // 3 conversation daily get xp
+    // let userMessageCount = 0;
+    // feeds.forEach(feed => { if (feed.role === 'user') userMessageCount++ });
+    // if (userMessageCount === 3) {
+    //   // only once xp reward per utc day
+    //   const todayAtUtc0 = new Date()
+    //   todayAtUtc0.setUTCHours(0, 0, 0, 0); // utc 00:00 of today
+    //   const pointTx = await this.pointTxRepository.findOne({
+    //     where: { walletId: id },
+    //     order: { id: 'DESC' },
+    //   });
+    //   if (pointTx && pointTx.createdDate > todayAtUtc0) {
+    //     // do nothing
 
-    return replied;
+    //   } else {
+    //     // pass to handlePointRewardEvent() for on-chain interaction
+    //     this.eventEmitter.emit(
+    //       'chatbot.service.handlePointReward',
+    //       id,
+    //       chatLog.id,
+    //     );
+    //   }
+    // };
+
+    return replies;
   }
 
   @OnEvent('chatbot.service.handlePointReward', { async: true })
@@ -256,7 +291,6 @@ export class ChatbotService {
         startingBalance: 0,
         endingBalance: 0,
         walletId: userWallet.id,
-        chatLogId,
       });
       await this.pointTxRepository.save(pointTx);
 
@@ -374,5 +408,17 @@ export class ChatbotService {
       meaning: qztwzt[nearestIndex].english,
     };
     return obj;
+  }
+
+  async getImage(keyword?: string): Promise<string> {
+    const image = await openai.images.generate({
+      prompt: keyword ?? "any image",
+      model: 'dall-e-2',
+      n: 1,
+      quality: 'standard',
+      response_format: 'b64_json',
+      size: '256x256',
+    });
+    return image.data[0].b64_json;
   }
 }
