@@ -10,9 +10,4 @@ export class SendMessageDto {
   @IsString()
   @IsNotEmpty()
   message: string;
-
-  @ApiProperty()
-  @IsBoolean()
-  @IsNotEmpty()
-  isInitialMessage: boolean;
 }
