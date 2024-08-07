@@ -4,13 +4,9 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
-  OneToMany,
-  OneToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
-import { Message } from './message.entity';
-import { PointTx } from 'src/point/entities/point-tx.entity';
 
 @Entity()
 export class ChatLog {
@@ -27,9 +23,9 @@ export class ChatLog {
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @OneToMany(() => Message, (message) => message.chatLog)
-  messages: Message[];
+  @Column()
+  role: 'system' | 'user' | 'assistant' | 'tool' | 'function';
 
-  @OneToOne(() => PointTx, (pointTx) => pointTx.chatLog)
-  pointTx: PointTx;
+  @Column({ type: 'longtext', nullable: true })
+  content: string;
 }
