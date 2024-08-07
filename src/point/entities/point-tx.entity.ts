@@ -59,16 +59,6 @@ export class PointTx {
   @ManyToOne(() => UserWallet, (userWallet) => userWallet.pointTx)
   userWallet: UserWallet;
 
-  // Used for CHAT
-  @Column({
-    nullable: true,
-  })
-  chatLogId: number;
-
-  @OneToOne(() => ChatLog, (chatLog) => chatLog.pointTx)
-  @JoinColumn()
-  chatLog: ChatLog;
-
   @Column({
     nullable: true,
   })
