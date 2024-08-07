@@ -544,7 +544,7 @@ export class ClaimService {
     let smallForecastWinAmount = 0;
     if (drawResult.prizeCategory === '1') {
       bigForecastWinAmount += betOrder.bigForecastAmount * 2500;
-      smallForecastWinAmount += betOrder.smallForecastAmount * 3500;
+      smallForecastWinAmount += betOrder.smallForecastAmount * 4000;
     } else if (drawResult.prizeCategory === '2') {
       bigForecastWinAmount += betOrder.bigForecastAmount * 1000;
       smallForecastWinAmount += betOrder.smallForecastAmount * 2000;
