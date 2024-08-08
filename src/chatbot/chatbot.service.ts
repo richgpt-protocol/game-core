@@ -1,11 +1,9 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { SendMessageDto } from './dto/sendMessage.dto';
 import { MongoClient } from 'mongodb';
 import { QztWzt } from './chatbot.interface';
 var similarity = require('compute-cosine-similarity'); // pure js lib, use import will cause error
-import { ethers } from 'ethers';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ChatLog } from './entities/chatLog.entity';
 import { Repository } from 'typeorm';
@@ -13,9 +11,7 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
-import { PointReward__factory } from 'src/contract';
 import { UserService } from 'src/user/user.service';
-import { MPC } from 'src/shared/mpc';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import * as dotenv from 'dotenv';
 dotenv.config();
@@ -252,38 +248,29 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
     const speechInBuffer = Buffer.from(await speech.arrayBuffer());
     replies.push({ type: 'speech', contents: speechInBuffer.toString('base64') });
 
-    // // 3 conversation daily get xp
-    // let userMessageCount = 0;
-    // feeds.forEach(feed => { if (feed.role === 'user') userMessageCount++ });
-    // if (userMessageCount === 3) {
-    //   // only once xp reward per utc day
-    //   const todayAtUtc0 = new Date()
-    //   todayAtUtc0.setUTCHours(0, 0, 0, 0); // utc 00:00 of today
-    //   const pointTx = await this.pointTxRepository.findOne({
-    //     where: { walletId: id },
-    //     order: { id: 'DESC' },
-    //   });
-    //   if (pointTx && pointTx.createdDate > todayAtUtc0) {
-    //     // do nothing
+    // 3 conversation daily get xp
+    // loop backward and check all the chats that over 00:00 UTC today
+    // get xp only if these chats contains 2 user role + over 2 assistant role
+    // 2 instead of 3 because, newest chat log haven't added into database
+    // and we assume that at least +1 chat for both user and assistant when reach here
+    const todayAtUtc0 = new Date()
+    todayAtUtc0.setUTCHours(0, 0, 0, 0); // utc 00:00 of today
+    let userMessageCount = 0;
+    let assistantMessageCount = 0;
+    for (let i = chatLog.length - 1; i >= 0; i--) {
+      if (chatLog[i].createAt > todayAtUtc0) {
+        if (chatLog[i].role === 'user') {
+          userMessageCount++;
+        } else if (chatLog[i].role === 'assistant') {
+          assistantMessageCount++;
+        }
+      }
+    }
 
-    //   } else {
-    //     // pass to handlePointRewardEvent() for on-chain interaction
-    //     this.eventEmitter.emit(
-    //       'chatbot.service.handlePointReward',
-    //       id,
-    //       chatLog.id,
-    //     );
-    //   }
-    // };
-
-    return replies;
-  }
-
-  @OnEvent('chatbot.service.handlePointReward', { async: true })
-  async handlePointRewardEvent(userId: number, chatLogId: number): Promise<void> {
-    try {
+    // only once xp reward per utc day
+    if (userMessageCount === 2 && assistantMessageCount >= 2) {
       const userWallet = await this.userWalletRepository.findOneBy({ userId });
-
+      
       // create pointTx
       const pointTx = this.pointTxRepository.create({
         txType: 'CHAT',
@@ -294,73 +281,33 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
       });
       await this.pointTxRepository.save(pointTx);
 
-      // set point reward on-chain
-      const provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
-      const pointRewardBot = new ethers.Wallet(
-        await MPC.retrievePrivateKey(process.env.POINT_REWARD_BOT_ADDRESS),
-        provider
-      );
-      const pointRewardContract = PointReward__factory.connect(process.env.POINT_REWARD_CONTRACT_ADDRESS, pointRewardBot);
-      const txResponse = await pointRewardContract.updateRewardPoint(
-        3, // Action.OtherReward
-        ethers.AbiCoder.defaultAbiCoder().encode(
-          // (address user, uint256 _xp) = abi.decode(params, (address, uint256));
-          ['address', 'uint256'],
-          [userWallet.walletAddress, ethers.parseEther('1')]
-        ),
-        { gasLimit: 50000 }, // gasLimit increased by 30%
-      );
+      const lastPointTx = await this.pointTxRepository.findOne({
+        where: { walletId: userWallet.id },
+        order: { id: 'DESC' },
+      })
 
-      // check native token balance for point reward bot
-      this.eventEmitter.emit(
-        'gas.service.reload',
-        pointRewardBot.address,
-        Number(process.env.OPBNB_CHAIN_ID),
-      );
+      // update pointTx
+      pointTx.startingBalance = Number(lastPointTx.endingBalance);
+      pointTx.endingBalance = Number(pointTx.startingBalance) + 1;
+      await this.pointTxRepository.save(pointTx);
 
-      const txReceipt = await txResponse.wait();
-      if (txReceipt.status === 1) {
-        // fetch last pointTx for endingBalance
-        // note: no way to check if the pointTx is valid
-        // (pointTx created but actually failed off-chain/on-chain in any reason)
-        const lastPointTx = await this.pointTxRepository.findOne({
-          where: { walletId: userWallet.id },
-          order: { id: 'DESC' },
-        })
+      // update userWallet
+      userWallet.pointBalance = Number(userWallet.pointBalance) + 1;
+      await this.userWalletRepository.save(userWallet);
 
-        // update pointTx
-        pointTx.startingBalance = Number(lastPointTx.endingBalance);
-        pointTx.endingBalance = Number(pointTx.startingBalance) + 1;
-        await this.pointTxRepository.save(pointTx);
-
-        // update userWallet
-        userWallet.pointBalance = Number(userWallet.pointBalance) + 1;
-        await this.userWalletRepository.save(userWallet);
-
-        // inform user
-        await this.userService.setUserNotification(
-          userWallet.id,
-          {
-            type: 'getXpNotification',
-            title: 'XP Reward Get',
-            message: 'You get 1 xp reward from daily conversation with Professor Rich.',
-            walletTxId: null,
-          }
-        );
-
-      } else {
-        throw new Error(`tx failed, txHash: ${txReceipt.hash}`)
-      }
-
-    } catch (error) {
-      // inform admin
-      await this.adminNotificationService.setAdminNotification(
-        `Error occured in chatbot.service.handlePointRewardEvent, error: ${error}, userId: ${userId}`,
-        'Error',
-        'Error in chatbot.service',
-        true,
+      // inform user
+      await this.userService.setUserNotification(
+        userWallet.id,
+        {
+          type: 'getXpNotification',
+          title: 'XP Reward Get',
+          message: 'You get 1 xp reward from daily conversation with Professor Rich.',
+          walletTxId: null,
+        }
       );
     }
+
+    return replies;
   }
 
   async getNumberRecommendation(
