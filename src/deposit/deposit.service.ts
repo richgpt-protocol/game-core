@@ -42,8 +42,7 @@ import { NotifyService } from 'src/notify/notify.service';
 
 @Injectable()
 export class DepositService {
-  private TG_ADMIN_GROUP;
-  private DEPOSIT_NOTIFY_THRESHOLD = 100;
+  private DEPOSIT_NOTIFY_THRESHOLD = 100; //TODO move to settings table
   constructor(
     @InjectRepository(DepositTx)
     private depositRepository: Repository<DepositTx>,
@@ -65,9 +64,7 @@ export class DepositService {
     private readonly userService: UserService,
     private readonly notifyService: NotifyService,
     private eventEmitter: EventEmitter2,
-  ) {
-    this.TG_ADMIN_GROUP = this.configService.get('ADMIN_TG_CHAT_ID');
-  }
+  ) {}
 
   private referralCommissionByRank = (rank: number) => {
     switch (rank) {
@@ -115,9 +112,11 @@ export class DepositService {
       if (!userWallet) return;
 
       if (payload.amount >= this.DEPOSIT_NOTIFY_THRESHOLD) {
-        await this.notifyService.notify(
-          [this.TG_ADMIN_GROUP],
+        await this.adminNotificationService.setAdminNotification(
           `Deposit of ${payload.amount} ${payload.tokenAddress} received at ${payload.walletAddress}`,
+          'DEPOSIT_THRESHOLD_NOTIFICATION',
+          'Deposit Threshold Notification',
+          false,
         );
       }
 
@@ -550,6 +549,25 @@ export class DepositService {
             userSigner,
           );
 
+          const gameUsdContract = await this.getTokenContract(
+            this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
+            userSigner,
+          );
+
+          const gameUsdDepositSCAllowance = await gameUsdContract.allowance(
+            userWallet.walletAddress,
+            this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
+          );
+
+          if (gameUsdDepositSCAllowance < tx.walletTx.txAmount) {
+            const approveTx = await gameUsdContract.approve(
+              this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
+              ethers.MaxUint256,
+            );
+
+            console.log(`Initial Approve tx hash: ${approveTx.hash}`);
+          }
+
           const escrowAddress = this.configService.get('ESCROW_ADDRESS');
           let receipt, onchainEscrowTxHash;
 
@@ -700,6 +718,9 @@ export class DepositService {
         `function transfer(address,uint256) external`,
         `function balanceOf(address) external view returns (uint256)`,
         `function decimals() external view returns (uint8)`,
+        `function approve(address spender, uint256 amount) external returns (bool)`,
+
+        `function allowance(address owner, address spender) external view returns (uint256)`,
       ],
       signer,
     );
