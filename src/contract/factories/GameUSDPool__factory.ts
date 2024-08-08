@@ -110,19 +110,6 @@ const _abi = [
   },
   {
     type: "function",
-    name: "referral",
-    inputs: [],
-    outputs: [
-      {
-        name: "",
-        type: "address",
-        internalType: "contract IReferral",
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
     name: "renounceOwnership",
     inputs: [],
     outputs: [],
@@ -154,19 +141,6 @@ const _abi = [
         name: "status",
         type: "bool[]",
         internalType: "bool[]",
-      },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "setReferralContract",
-    inputs: [
-      {
-        name: "_referral",
-        type: "address",
-        internalType: "address",
       },
     ],
     outputs: [],
@@ -277,19 +251,6 @@ const _abi = [
       },
       {
         name: "newOwner",
-        type: "address",
-        indexed: true,
-        internalType: "address",
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: "event",
-    name: "ReferralContractSet",
-    inputs: [
-      {
-        name: "referrer",
         type: "address",
         indexed: true,
         internalType: "address",
