@@ -38,6 +38,7 @@ import {
 } from 'ethers';
 import {
   Core__factory,
+  Deposit__factory,
   GameUSDPool__factory,
   GameUSD__factory,
   Helper__factory,
@@ -681,78 +682,7 @@ export class BetService {
     }
   }
 
-  private async _betWithCredit(
-    payload: BetOrder[],
-    creditUsed: number,
-    userSigner,
-    provider,
-  ) {
-    const helperSigner = new Wallet(
-      await MPC.retrievePrivateKey(process.env.HELPER_BOT_ADDRESS),
-      provider,
-    );
-
-    const helperContract = Helper__factory.connect(
-      this.configService.get('HELPER_CONTRACT_ADDRESS'),
-      helperSigner,
-    );
-
-    let totalBetAmount = 0;
-    const bets = [];
-    payload.map((bet) => {
-      if (bet.smallForecastAmount > 0) {
-        bets.push({
-          epoch: +bet.game.epoch,
-          number: +bet.numberPair,
-          amount: parseUnits(bet.smallForecastAmount.toString(), 18),
-          forecast: 0,
-        });
-
-        totalBetAmount += +bet.smallForecastAmount;
-      }
-
-      if (bet.bigForecastAmount > 0) {
-        bets.push({
-          epoch: +bet.game.epoch,
-          number: +bet.numberPair,
-          amount: parseUnits(bet.bigForecastAmount.toString(), 18),
-          forecast: 1,
-        });
-
-        totalBetAmount += +bet.bigForecastAmount;
-      }
-    });
-
-    const betWithCreditParams = {
-      user: userSigner.address,
-      bets,
-      credit: parseUnits(creditUsed.toString(), 18),
-    };
-
-    await this._checkAllowanceAndApprove(
-      userSigner,
-      parseUnits(totalBetAmount.toString(), 18),
-    );
-
-    const gasLimit = await helperContract
-      .connect(userSigner)
-      .betWithCredit.estimateGas(betWithCreditParams);
-    const tx = await helperContract
-      .connect(userSigner)
-      .betWithCredit(betWithCreditParams, {
-        gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
-      });
-
-    this.eventEmitter.emit(
-      'gas.service.reload',
-      await helperSigner.getAddress(),
-      Number(tx.chainId),
-    );
-
-    return tx;
-  }
-
-  private async _betWithoutCredit(payload: BetOrder[], userSigner, provider) {
+  private async _bet(payload: BetOrder[], userSigner, provider) {
     try {
       const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
       const coreContract = Core__factory.connect(coreContractAddr, provider);
@@ -859,20 +789,7 @@ export class BetService {
       }
 
       try {
-        if (payload.creditBalanceUsed > 0) {
-          tx = await this._betWithCredit(
-            payload.betsPayload,
-            payload.creditBalanceUsed,
-            userSigner,
-            provider,
-          );
-        } else {
-          tx = await this._betWithoutCredit(
-            payload.betsPayload,
-            userSigner,
-            provider,
-          );
-        }
+        tx = await this._bet(payload.betsPayload, userSigner, provider);
       } catch (error) {
         console.error(
           `error sending gameUSDTx in bet.service for gameUDSTxId: ${payload.gameUsdTx.id}`,
@@ -888,7 +805,7 @@ export class BetService {
 
         if (txStatus.status === 1) {
           await this.handleTxSuccess({
-            tx,
+            txHash: tx.hash,
             walletTx: payload.walletTx,
             gameUsdTx: payload.gameUsdTx,
           });
@@ -906,7 +823,7 @@ export class BetService {
   }
 
   private async handleTxSuccess(payload: {
-    tx: any;
+    txHash: string;
     walletTx: WalletTx;
     gameUsdTx: GameUsdTx;
     // creditWalletTx: CreditWalletTx;
@@ -939,11 +856,11 @@ export class BetService {
         )
         .orderBy('creditWalletTx.id', 'DESC')
         .getOne();
-      payload.gameUsdTx.txHash = payload.tx.hash;
+      payload.gameUsdTx.txHash = payload.txHash;
       payload.gameUsdTx.status = 'S';
 
       payload.walletTx.status = 'S';
-      payload.walletTx.txHash = payload.tx.hash;
+      payload.walletTx.txHash = payload.txHash;
       payload.walletTx.startingBalance = lastValidWalletTx
         ? lastValidWalletTx.endingBalance
         : 0;
@@ -1034,17 +951,13 @@ export class BetService {
       await queryRunner.manager.save(payload.walletTx);
       await queryRunner.manager.save(userWallet);
 
-      await queryRunner.commitTransaction();
-
       await this.handleReferralFlow(
         user.id,
         payload.walletTx.txAmount,
         payload.gameUsdTx.txHash,
       );
-    } catch (error) {
-      console.error(error);
-      await queryRunner.rollbackTransaction();
-    } finally {
+
+      await queryRunner.commitTransaction();
       await this.userService.setUserNotification(
         payload.walletTx.userWallet.userId,
         {
@@ -1054,6 +967,10 @@ export class BetService {
           walletTxId: payload.walletTx.id,
         },
       );
+    } catch (error) {
+      console.error(error);
+      await queryRunner.rollbackTransaction();
+    } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
@@ -1109,6 +1026,32 @@ export class BetService {
         },
       });
 
+      // Returns false if the user doesn't have enough balance and reload is pending
+      const hasBalance = await this.checkNativeBalance(
+        walletTx.userWallet,
+        +this.configService.get('GAMEUSD_CHAIN_ID'),
+      );
+      // If its false, that means a reload might be pending. So process it in next iteration.
+      if (!hasBalance) throw new Error('Not Enough Native Balance');
+
+      const depositContract = Deposit__factory.connect(
+        this.configService.get('HELPER_CONTRACT_ADDRESS'),
+        new Wallet(
+          await MPC.retrievePrivateKey(
+            this.configService.get('DEPOSIT_BOT_ADDRESS'),
+          ),
+          new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL')),
+        ),
+      );
+
+      const referralRewardOnchainTx =
+        await depositContract.distributeReferralFee(
+          userInfo.referralUser.wallet.walletAddress,
+          commisionAmount,
+        );
+
+      await referralRewardOnchainTx.wait();
+
       const gameUsdTxInsertResult = await queryRunner.manager.insert(
         GameUsdTx,
         {
@@ -1122,7 +1065,7 @@ export class BetService {
           receiverAddress: userInfo.referralUser.wallet.walletAddress,
           walletTxs: [walletTx],
           walletTxId: walletTx.id,
-          txHash: betTxHash,
+          txHash: referralRewardOnchainTx.hash, //betTxHash,
         },
       );
 
@@ -1169,6 +1112,8 @@ export class BetService {
     } catch (error) {
       console.error('Error in referral tx', error);
       await queryRunner.rollbackTransaction();
+
+      throw new Error('BET: Error processing Referral');
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
@@ -1337,6 +1282,16 @@ export class BetService {
           if (!hasBalance) continue;
 
           try {
+            //Since gameUsdTx.txHash is already there, the bet is already success.
+            //so retry only the offchain part
+            if (gameUsdTx.txHash) {
+              return await this.handleTxSuccess({
+                txHash: gameUsdTx.txHash,
+                gameUsdTx,
+                walletTx: gameUsdTx.walletTxs[0],
+              });
+            }
+
             const totalCreditsUsed = betOrders.reduce((acc, bet) => {
               if (bet.creditWalletTx) {
                 acc += bet.creditWalletTx.amount;
@@ -1351,25 +1306,12 @@ export class BetService {
             );
 
             try {
-              if (totalCreditsUsed > 0) {
-                tx = await this._betWithCredit(
-                  betOrders,
-                  totalCreditsUsed,
-                  userSigner,
-                  provider,
-                );
-              } else {
-                tx = await this._betWithoutCredit(
-                  betOrders,
-                  userSigner,
-                  provider,
-                );
-                console.log('Bettx: ');
-                console.log(tx);
-                // tx = {
-                //   hash: '0x123',
-                // };
-              }
+              tx = await this._bet(betOrders, userSigner, provider);
+              // console.log('Bettx: ');
+              // console.log(tx);
+              // tx = {
+              //   hash: '0x123',
+              // };
             } catch (error) {
               console.error(error);
               gameUsdTx.retryCount += 1;
@@ -1382,8 +1324,10 @@ export class BetService {
                 // gameUsdTx.status = 'S';
                 // await queryRunner.manager.save(gameUsdTx);
 
+                gameUsdTx.txHash = tx.hash;
+                await queryRunner.manager.save(gameUsdTx);
                 await this.handleTxSuccess({
-                  tx,
+                  txHash: tx.hash,
                   gameUsdTx,
                   walletTx: gameUsdTx.walletTxs[0],
                 });
