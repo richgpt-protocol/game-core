@@ -46,13 +46,11 @@ import { NotifyService } from 'src/notify/notify.service';
     PointModule,
     SharedModule,
     UserModule,
-    NotifyModule,
   ],
   providers: [
     DepositService,
     WalletService,
     AdminNotificationService /* HttpService */,
-    NotifyService,
   ],
   controllers: [DepositController],
   exports: [],

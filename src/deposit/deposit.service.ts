@@ -38,7 +38,6 @@ import { UserService } from 'src/user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MPC } from 'src/shared/mpc';
 import { Mutex } from 'async-mutex';
-import { NotifyService } from 'src/notify/notify.service';
 
 @Injectable()
 export class DepositService {
@@ -62,7 +61,6 @@ export class DepositService {
     private dataSource: DataSource,
     private readonly pointService: PointService,
     private readonly userService: UserService,
-    private readonly notifyService: NotifyService,
     private eventEmitter: EventEmitter2,
   ) {}
 
