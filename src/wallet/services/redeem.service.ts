@@ -4,7 +4,7 @@ import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { UserWallet } from '../entities/user-wallet.entity';
 import { WalletTx } from '../entities/wallet-tx.entity';
 import { ethers } from 'ethers';
-import { GameUSD__factory, Payout__factory, Redeem__factory } from 'src/contract';
+import { GameUSD__factory, Payout__factory } from 'src/contract';
 import { RedeemDto } from '../dto/redeem.dto';
 import { RedeemTx } from '../entities/redeem-tx.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
@@ -357,38 +357,39 @@ export class RedeemService {
           );
         }
 
+        // TODO: to migrate to withdraw
         // execute redeem() on Redeem contract
-        const redeemContract = Redeem__factory.connect(process.env.REDEEM_CONTRACT_ADDRESS, signer);
-        const txResponse = await redeemContract.redeem(
-          ethers.parseEther(Number(redeemTx.amount).toString()),
-          redeemTx.receiverAddress,
-          { gasLimit: 100000 } // increased by ~30% from actual gas used
-        );
+        // const redeemContract = Redeem__factory.connect(process.env.REDEEM_CONTRACT_ADDRESS, signer);
+        // const txResponse = await redeemContract.redeem(
+        //   ethers.parseEther(Number(redeemTx.amount).toString()),
+        //   redeemTx.receiverAddress,
+        //   { gasLimit: 100000 } // increased by ~30% from actual gas used
+        // );
 
-        // check native token balance for user wallet
-        this.eventEmitter.emit(
-          'gas.service.reload',
-          userWallet.walletAddress,
-          Number(process.env.OPBNB_CHAIN_ID),
-        );
+        // // check native token balance for user wallet
+        // this.eventEmitter.emit(
+        //   'gas.service.reload',
+        //   userWallet.walletAddress,
+        //   Number(process.env.OPBNB_CHAIN_ID),
+        // );
 
-        // update txHash for walletTx & gameUsdTx
-        // this txHash might be in pending, is success, is failed, or is disappeared(in very rare case)
-        walletTx.txHash = txResponse.hash;
-        await queryRunner.manager.save(walletTx);
-        const gameUsdTx = await this.gameUsdTxRepository.findOneBy({ walletTxId: walletTx.id });
-        gameUsdTx.txHash = txResponse.hash;
-        await queryRunner.manager.save(gameUsdTx);
+        // // update txHash for walletTx & gameUsdTx
+        // // this txHash might be in pending, is success, is failed, or is disappeared(in very rare case)
+        // walletTx.txHash = txResponse.hash;
+        // await queryRunner.manager.save(walletTx);
+        // const gameUsdTx = await this.gameUsdTxRepository.findOneBy({ walletTxId: walletTx.id });
+        // gameUsdTx.txHash = txResponse.hash;
+        // await queryRunner.manager.save(gameUsdTx);
 
-        // pass to handleClaimEvent() to check & update database
-        const eventPayload: RequestRedeemEvent = {
-          userId: userWallet.userId,
-          txHash: txResponse.hash,
-          walletTxId: walletTx.id,
-          redeemTxId: redeemTx.id,
-          gameUsdTxId: gameUsdTx.id,
-        }
-        this.eventEmitter.emit('wallet.handleRedeem', eventPayload);
+        // // pass to handleClaimEvent() to check & update database
+        // const eventPayload: RequestRedeemEvent = {
+        //   userId: userWallet.userId,
+        //   txHash: txResponse.hash,
+        //   walletTxId: walletTx.id,
+        //   redeemTxId: redeemTx.id,
+        //   gameUsdTxId: gameUsdTx.id,
+        // }
+        // this.eventEmitter.emit('wallet.handleRedeem', eventPayload);
 
         // need to commit transaction before setUserNotification() to avoid deadlock(QueryFailedError)
         await queryRunner.commitTransaction();
