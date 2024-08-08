@@ -112,17 +112,15 @@ export interface CoreInterface extends Interface {
       | "isBetClosed"
       | "maxBet"
       | "owner"
-      | "pointReward"
+      | "paused"
       | "proxiableUUID"
-      | "redeem"
       | "renounceOwnership"
       | "setBetClose"
       | "setDrawMultipliers"
       | "setDrawResults"
       | "setGameUSDPoolContract"
       | "setHelperContract"
-      | "setPointRewardContract"
-      | "setRedeemContract"
+      | "setPause"
       | "setVRFCoordinator"
       | "totalBetsForNumber"
       | "transferOwnership"
@@ -142,8 +140,8 @@ export interface CoreInterface extends Interface {
       | "HelperContractSet"
       | "Initialized"
       | "OwnershipTransferred"
-      | "PointRewardContractSet"
-      | "RedeemContractSet"
+      | "Paused"
+      | "Unpaused"
       | "Upgraded"
       | "VRFCoordinatorSet"
   ): EventFragment;
@@ -192,7 +190,7 @@ export interface CoreInterface extends Interface {
   encodeFunctionData(functionFragment: "helper", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "initialize",
-    values: [AddressLike, AddressLike, AddressLike, AddressLike, BigNumberish]
+    values: [AddressLike, AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "isBetClosed",
@@ -200,15 +198,11 @@ export interface CoreInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "maxBet", values?: undefined): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
-  encodeFunctionData(
-    functionFragment: "pointReward",
-    values?: undefined
-  ): string;
+  encodeFunctionData(functionFragment: "paused", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "proxiableUUID",
     values?: undefined
   ): string;
-  encodeFunctionData(functionFragment: "redeem", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "renounceOwnership",
     values?: undefined
@@ -233,14 +227,7 @@ export interface CoreInterface extends Interface {
     functionFragment: "setHelperContract",
     values: [AddressLike]
   ): string;
-  encodeFunctionData(
-    functionFragment: "setPointRewardContract",
-    values: [AddressLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setRedeemContract",
-    values: [AddressLike]
-  ): string;
+  encodeFunctionData(functionFragment: "setPause", values: [boolean]): string;
   encodeFunctionData(
     functionFragment: "setVRFCoordinator",
     values: [AddressLike[], boolean[]]
@@ -309,15 +296,11 @@ export interface CoreInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "maxBet", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "pointReward",
-    data: BytesLike
-  ): Result;
+  decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "proxiableUUID",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "redeem", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceOwnership",
     data: BytesLike
@@ -342,14 +325,7 @@ export interface CoreInterface extends Interface {
     functionFragment: "setHelperContract",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "setPointRewardContract",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "setRedeemContract",
-    data: BytesLike
-  ): Result;
+  decodeFunctionResult(functionFragment: "setPause", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "setVRFCoordinator",
     data: BytesLike
@@ -527,11 +503,11 @@ export namespace OwnershipTransferredEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace PointRewardContractSetEvent {
-  export type InputTuple = [pointReward: AddressLike];
-  export type OutputTuple = [pointReward: string];
+export namespace PausedEvent {
+  export type InputTuple = [account: AddressLike];
+  export type OutputTuple = [account: string];
   export interface OutputObject {
-    pointReward: string;
+    account: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -539,11 +515,11 @@ export namespace PointRewardContractSetEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace RedeemContractSetEvent {
-  export type InputTuple = [redeem: AddressLike];
-  export type OutputTuple = [redeem: string];
+export namespace UnpausedEvent {
+  export type InputTuple = [account: AddressLike];
+  export type OutputTuple = [account: string];
   export interface OutputObject {
-    redeem: string;
+    account: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -672,13 +648,7 @@ export interface Core extends BaseContract {
   helper: TypedContractMethod<[], [string], "view">;
 
   initialize: TypedContractMethod<
-    [
-      admin: AddressLike,
-      _gameUSDPool: AddressLike,
-      _redeem: AddressLike,
-      _pointReward: AddressLike,
-      _maxBet: BigNumberish
-    ],
+    [admin: AddressLike, _gameUSDPool: AddressLike, _maxBet: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -689,11 +659,9 @@ export interface Core extends BaseContract {
 
   owner: TypedContractMethod<[], [string], "view">;
 
-  pointReward: TypedContractMethod<[], [string], "view">;
+  paused: TypedContractMethod<[], [boolean], "view">;
 
   proxiableUUID: TypedContractMethod<[], [string], "view">;
-
-  redeem: TypedContractMethod<[], [string], "view">;
 
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
@@ -727,17 +695,7 @@ export interface Core extends BaseContract {
     "nonpayable"
   >;
 
-  setPointRewardContract: TypedContractMethod<
-    [_pointReward: AddressLike],
-    [void],
-    "nonpayable"
-  >;
-
-  setRedeemContract: TypedContractMethod<
-    [_redeem: AddressLike],
-    [void],
-    "nonpayable"
-  >;
+  setPause: TypedContractMethod<[pause: boolean], [void], "nonpayable">;
 
   setVRFCoordinator: TypedContractMethod<
     [vrfCoordinators: AddressLike[], isValidated: boolean[]],
@@ -855,13 +813,7 @@ export interface Core extends BaseContract {
   getFunction(
     nameOrSignature: "initialize"
   ): TypedContractMethod<
-    [
-      admin: AddressLike,
-      _gameUSDPool: AddressLike,
-      _redeem: AddressLike,
-      _pointReward: AddressLike,
-      _maxBet: BigNumberish
-    ],
+    [admin: AddressLike, _gameUSDPool: AddressLike, _maxBet: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -875,13 +827,10 @@ export interface Core extends BaseContract {
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "pointReward"
-  ): TypedContractMethod<[], [string], "view">;
+    nameOrSignature: "paused"
+  ): TypedContractMethod<[], [boolean], "view">;
   getFunction(
     nameOrSignature: "proxiableUUID"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "redeem"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "renounceOwnership"
@@ -910,11 +859,8 @@ export interface Core extends BaseContract {
     nameOrSignature: "setHelperContract"
   ): TypedContractMethod<[_helper: AddressLike], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "setPointRewardContract"
-  ): TypedContractMethod<[_pointReward: AddressLike], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "setRedeemContract"
-  ): TypedContractMethod<[_redeem: AddressLike], [void], "nonpayable">;
+    nameOrSignature: "setPause"
+  ): TypedContractMethod<[pause: boolean], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setVRFCoordinator"
   ): TypedContractMethod<
@@ -1031,18 +977,18 @@ export interface Core extends BaseContract {
     OwnershipTransferredEvent.OutputObject
   >;
   getEvent(
-    key: "PointRewardContractSet"
+    key: "Paused"
   ): TypedContractEvent<
-    PointRewardContractSetEvent.InputTuple,
-    PointRewardContractSetEvent.OutputTuple,
-    PointRewardContractSetEvent.OutputObject
+    PausedEvent.InputTuple,
+    PausedEvent.OutputTuple,
+    PausedEvent.OutputObject
   >;
   getEvent(
-    key: "RedeemContractSet"
+    key: "Unpaused"
   ): TypedContractEvent<
-    RedeemContractSetEvent.InputTuple,
-    RedeemContractSetEvent.OutputTuple,
-    RedeemContractSetEvent.OutputObject
+    UnpausedEvent.InputTuple,
+    UnpausedEvent.OutputTuple,
+    UnpausedEvent.OutputObject
   >;
   getEvent(
     key: "Upgraded"
@@ -1159,26 +1105,26 @@ export interface Core extends BaseContract {
       OwnershipTransferredEvent.OutputObject
     >;
 
-    "PointRewardContractSet(address)": TypedContractEvent<
-      PointRewardContractSetEvent.InputTuple,
-      PointRewardContractSetEvent.OutputTuple,
-      PointRewardContractSetEvent.OutputObject
+    "Paused(address)": TypedContractEvent<
+      PausedEvent.InputTuple,
+      PausedEvent.OutputTuple,
+      PausedEvent.OutputObject
     >;
-    PointRewardContractSet: TypedContractEvent<
-      PointRewardContractSetEvent.InputTuple,
-      PointRewardContractSetEvent.OutputTuple,
-      PointRewardContractSetEvent.OutputObject
+    Paused: TypedContractEvent<
+      PausedEvent.InputTuple,
+      PausedEvent.OutputTuple,
+      PausedEvent.OutputObject
     >;
 
-    "RedeemContractSet(address)": TypedContractEvent<
-      RedeemContractSetEvent.InputTuple,
-      RedeemContractSetEvent.OutputTuple,
-      RedeemContractSetEvent.OutputObject
+    "Unpaused(address)": TypedContractEvent<
+      UnpausedEvent.InputTuple,
+      UnpausedEvent.OutputTuple,
+      UnpausedEvent.OutputObject
     >;
-    RedeemContractSet: TypedContractEvent<
-      RedeemContractSetEvent.InputTuple,
-      RedeemContractSetEvent.OutputTuple,
-      RedeemContractSetEvent.OutputObject
+    Unpaused: TypedContractEvent<
+      UnpausedEvent.InputTuple,
+      UnpausedEvent.OutputTuple,
+      UnpausedEvent.OutputObject
     >;
 
     "Upgraded(address)": TypedContractEvent<

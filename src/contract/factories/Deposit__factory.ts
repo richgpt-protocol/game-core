@@ -52,6 +52,24 @@ const _abi = [
   },
   {
     type: "function",
+    name: "distributeReferralFee",
+    inputs: [
+      {
+        name: "referrer",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "referralFee",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "gameUSDPool",
     inputs: [],
     outputs: [
@@ -96,13 +114,13 @@ const _abi = [
   },
   {
     type: "function",
-    name: "pointReward",
+    name: "payoutPool",
     inputs: [],
     outputs: [
       {
         name: "",
         type: "address",
-        internalType: "contract IPointReward",
+        internalType: "contract IPayoutPool",
       },
     ],
     stateMutability: "view",
@@ -116,19 +134,6 @@ const _abi = [
         name: "",
         type: "bytes32",
         internalType: "bytes32",
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
-    name: "referral",
-    inputs: [],
-    outputs: [
-      {
-        name: "",
-        type: "address",
-        internalType: "contract IReferral",
       },
     ],
     stateMutability: "view",
@@ -168,32 +173,6 @@ const _abi = [
   },
   {
     type: "function",
-    name: "setPointRewardContract",
-    inputs: [
-      {
-        name: "_pointReward",
-        type: "address",
-        internalType: "address",
-      },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "setReferralContract",
-    inputs: [
-      {
-        name: "_referral",
-        type: "address",
-        internalType: "address",
-      },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
     name: "transferOwnership",
     inputs: [
       {
@@ -222,6 +201,29 @@ const _abi = [
     ],
     outputs: [],
     stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "withdraw",
+    inputs: [
+      {
+        name: "recipient",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "fee",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
     type: "event",
@@ -302,26 +304,19 @@ const _abi = [
   },
   {
     type: "event",
-    name: "PointRewardContractSet",
-    inputs: [
-      {
-        name: "pointReward",
-        type: "address",
-        indexed: true,
-        internalType: "address",
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: "event",
-    name: "ReferralContractSet",
+    name: "ReferralFeeDistributed",
     inputs: [
       {
         name: "referrer",
         type: "address",
         indexed: true,
         internalType: "address",
+      },
+      {
+        name: "referralFee",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
     ],
     anonymous: false,
@@ -335,6 +330,37 @@ const _abi = [
         type: "address",
         indexed: true,
         internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Withdraw",
+    inputs: [
+      {
+        name: "user",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "amountAfterFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "payoutNonce",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
     ],
     anonymous: false,
