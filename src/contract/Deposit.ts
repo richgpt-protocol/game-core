@@ -29,19 +29,18 @@ export interface DepositInterface extends Interface {
       | "UPGRADE_INTERFACE_VERSION"
       | "deposit"
       | "depositAdmin"
+      | "distributeReferralFee"
       | "gameUSDPool"
       | "initialize"
       | "owner"
-      | "pointReward"
+      | "payoutPool"
       | "proxiableUUID"
-      | "referral"
       | "renounceOwnership"
       | "setDepositAdmin"
       | "setGameUSDPoolContract"
-      | "setPointRewardContract"
-      | "setReferralContract"
       | "transferOwnership"
       | "upgradeToAndCall"
+      | "withdraw"
   ): FunctionFragment;
 
   getEvent(
@@ -51,9 +50,9 @@ export interface DepositInterface extends Interface {
       | "GameUSDPoolContractSet"
       | "Initialized"
       | "OwnershipTransferred"
-      | "PointRewardContractSet"
-      | "ReferralContractSet"
+      | "ReferralFeeDistributed"
       | "Upgraded"
+      | "Withdraw"
   ): EventFragment;
 
   encodeFunctionData(
@@ -69,6 +68,10 @@ export interface DepositInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "distributeReferralFee",
+    values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "gameUSDPool",
     values?: undefined
   ): string;
@@ -78,14 +81,13 @@ export interface DepositInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "pointReward",
+    functionFragment: "payoutPool",
     values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "proxiableUUID",
     values?: undefined
   ): string;
-  encodeFunctionData(functionFragment: "referral", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "renounceOwnership",
     values?: undefined
@@ -99,20 +101,16 @@ export interface DepositInterface extends Interface {
     values: [AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "setPointRewardContract",
-    values: [AddressLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setReferralContract",
-    values: [AddressLike]
-  ): string;
-  encodeFunctionData(
     functionFragment: "transferOwnership",
     values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "upgradeToAndCall",
     values: [AddressLike, BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "withdraw",
+    values: [AddressLike, BigNumberish, BigNumberish]
   ): string;
 
   decodeFunctionResult(
@@ -125,20 +123,20 @@ export interface DepositInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "distributeReferralFee",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "gameUSDPool",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "initialize", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "pointReward",
-    data: BytesLike
-  ): Result;
+  decodeFunctionResult(functionFragment: "payoutPool", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "proxiableUUID",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "referral", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceOwnership",
     data: BytesLike
@@ -152,14 +150,6 @@ export interface DepositInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "setPointRewardContract",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "setReferralContract",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "transferOwnership",
     data: BytesLike
   ): Result;
@@ -167,6 +157,7 @@ export interface DepositInterface extends Interface {
     functionFragment: "upgradeToAndCall",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "withdraw", data: BytesLike): Result;
 }
 
 export namespace DepositEvent {
@@ -231,23 +222,12 @@ export namespace OwnershipTransferredEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace PointRewardContractSetEvent {
-  export type InputTuple = [pointReward: AddressLike];
-  export type OutputTuple = [pointReward: string];
-  export interface OutputObject {
-    pointReward: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace ReferralContractSetEvent {
-  export type InputTuple = [referrer: AddressLike];
-  export type OutputTuple = [referrer: string];
+export namespace ReferralFeeDistributedEvent {
+  export type InputTuple = [referrer: AddressLike, referralFee: BigNumberish];
+  export type OutputTuple = [referrer: string, referralFee: bigint];
   export interface OutputObject {
     referrer: string;
+    referralFee: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -260,6 +240,31 @@ export namespace UpgradedEvent {
   export type OutputTuple = [implementation: string];
   export interface OutputObject {
     implementation: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace WithdrawEvent {
+  export type InputTuple = [
+    user: AddressLike,
+    amount: BigNumberish,
+    amountAfterFees: BigNumberish,
+    payoutNonce: BigNumberish
+  ];
+  export type OutputTuple = [
+    user: string,
+    amount: bigint,
+    amountAfterFees: bigint,
+    payoutNonce: bigint
+  ];
+  export interface OutputObject {
+    user: string;
+    amount: bigint;
+    amountAfterFees: bigint;
+    payoutNonce: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -320,6 +325,12 @@ export interface Deposit extends BaseContract {
 
   depositAdmin: TypedContractMethod<[], [string], "view">;
 
+  distributeReferralFee: TypedContractMethod<
+    [referrer: AddressLike, referralFee: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
   gameUSDPool: TypedContractMethod<[], [string], "view">;
 
   initialize: TypedContractMethod<
@@ -330,11 +341,9 @@ export interface Deposit extends BaseContract {
 
   owner: TypedContractMethod<[], [string], "view">;
 
-  pointReward: TypedContractMethod<[], [string], "view">;
+  payoutPool: TypedContractMethod<[], [string], "view">;
 
   proxiableUUID: TypedContractMethod<[], [string], "view">;
-
-  referral: TypedContractMethod<[], [string], "view">;
 
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
@@ -350,18 +359,6 @@ export interface Deposit extends BaseContract {
     "nonpayable"
   >;
 
-  setPointRewardContract: TypedContractMethod<
-    [_pointReward: AddressLike],
-    [void],
-    "nonpayable"
-  >;
-
-  setReferralContract: TypedContractMethod<
-    [_referral: AddressLike],
-    [void],
-    "nonpayable"
-  >;
-
   transferOwnership: TypedContractMethod<
     [newOwner: AddressLike],
     [void],
@@ -372,6 +369,12 @@ export interface Deposit extends BaseContract {
     [newImplementation: AddressLike, data: BytesLike],
     [void],
     "payable"
+  >;
+
+  withdraw: TypedContractMethod<
+    [recipient: AddressLike, amount: BigNumberish, fee: BigNumberish],
+    [void],
+    "nonpayable"
   >;
 
   getFunction<T extends ContractMethod = ContractMethod>(
@@ -392,6 +395,13 @@ export interface Deposit extends BaseContract {
     nameOrSignature: "depositAdmin"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "distributeReferralFee"
+  ): TypedContractMethod<
+    [referrer: AddressLike, referralFee: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "gameUSDPool"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
@@ -405,13 +415,10 @@ export interface Deposit extends BaseContract {
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "pointReward"
+    nameOrSignature: "payoutPool"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "proxiableUUID"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "referral"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "renounceOwnership"
@@ -423,12 +430,6 @@ export interface Deposit extends BaseContract {
     nameOrSignature: "setGameUSDPoolContract"
   ): TypedContractMethod<[_gameUSDPool: AddressLike], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "setPointRewardContract"
-  ): TypedContractMethod<[_pointReward: AddressLike], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "setReferralContract"
-  ): TypedContractMethod<[_referral: AddressLike], [void], "nonpayable">;
-  getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
   getFunction(
@@ -437,6 +438,13 @@ export interface Deposit extends BaseContract {
     [newImplementation: AddressLike, data: BytesLike],
     [void],
     "payable"
+  >;
+  getFunction(
+    nameOrSignature: "withdraw"
+  ): TypedContractMethod<
+    [recipient: AddressLike, amount: BigNumberish, fee: BigNumberish],
+    [void],
+    "nonpayable"
   >;
 
   getEvent(
@@ -475,18 +483,11 @@ export interface Deposit extends BaseContract {
     OwnershipTransferredEvent.OutputObject
   >;
   getEvent(
-    key: "PointRewardContractSet"
+    key: "ReferralFeeDistributed"
   ): TypedContractEvent<
-    PointRewardContractSetEvent.InputTuple,
-    PointRewardContractSetEvent.OutputTuple,
-    PointRewardContractSetEvent.OutputObject
-  >;
-  getEvent(
-    key: "ReferralContractSet"
-  ): TypedContractEvent<
-    ReferralContractSetEvent.InputTuple,
-    ReferralContractSetEvent.OutputTuple,
-    ReferralContractSetEvent.OutputObject
+    ReferralFeeDistributedEvent.InputTuple,
+    ReferralFeeDistributedEvent.OutputTuple,
+    ReferralFeeDistributedEvent.OutputObject
   >;
   getEvent(
     key: "Upgraded"
@@ -494,6 +495,13 @@ export interface Deposit extends BaseContract {
     UpgradedEvent.InputTuple,
     UpgradedEvent.OutputTuple,
     UpgradedEvent.OutputObject
+  >;
+  getEvent(
+    key: "Withdraw"
+  ): TypedContractEvent<
+    WithdrawEvent.InputTuple,
+    WithdrawEvent.OutputTuple,
+    WithdrawEvent.OutputObject
   >;
 
   filters: {
@@ -552,26 +560,15 @@ export interface Deposit extends BaseContract {
       OwnershipTransferredEvent.OutputObject
     >;
 
-    "PointRewardContractSet(address)": TypedContractEvent<
-      PointRewardContractSetEvent.InputTuple,
-      PointRewardContractSetEvent.OutputTuple,
-      PointRewardContractSetEvent.OutputObject
+    "ReferralFeeDistributed(address,uint256)": TypedContractEvent<
+      ReferralFeeDistributedEvent.InputTuple,
+      ReferralFeeDistributedEvent.OutputTuple,
+      ReferralFeeDistributedEvent.OutputObject
     >;
-    PointRewardContractSet: TypedContractEvent<
-      PointRewardContractSetEvent.InputTuple,
-      PointRewardContractSetEvent.OutputTuple,
-      PointRewardContractSetEvent.OutputObject
-    >;
-
-    "ReferralContractSet(address)": TypedContractEvent<
-      ReferralContractSetEvent.InputTuple,
-      ReferralContractSetEvent.OutputTuple,
-      ReferralContractSetEvent.OutputObject
-    >;
-    ReferralContractSet: TypedContractEvent<
-      ReferralContractSetEvent.InputTuple,
-      ReferralContractSetEvent.OutputTuple,
-      ReferralContractSetEvent.OutputObject
+    ReferralFeeDistributed: TypedContractEvent<
+      ReferralFeeDistributedEvent.InputTuple,
+      ReferralFeeDistributedEvent.OutputTuple,
+      ReferralFeeDistributedEvent.OutputObject
     >;
 
     "Upgraded(address)": TypedContractEvent<
@@ -583,6 +580,17 @@ export interface Deposit extends BaseContract {
       UpgradedEvent.InputTuple,
       UpgradedEvent.OutputTuple,
       UpgradedEvent.OutputObject
+    >;
+
+    "Withdraw(address,uint256,uint256,uint256)": TypedContractEvent<
+      WithdrawEvent.InputTuple,
+      WithdrawEvent.OutputTuple,
+      WithdrawEvent.OutputObject
+    >;
+    Withdraw: TypedContractEvent<
+      WithdrawEvent.InputTuple,
+      WithdrawEvent.OutputTuple,
+      WithdrawEvent.OutputObject
     >;
   };
 }

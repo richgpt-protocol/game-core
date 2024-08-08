@@ -324,16 +324,6 @@ const _abi = [
         internalType: "address",
       },
       {
-        name: "_redeem",
-        type: "address",
-        internalType: "address",
-      },
-      {
-        name: "_pointReward",
-        type: "address",
-        internalType: "address",
-      },
-      {
         name: "_maxBet",
         type: "uint256",
         internalType: "uint256",
@@ -383,13 +373,13 @@ const _abi = [
   },
   {
     type: "function",
-    name: "pointReward",
+    name: "paused",
     inputs: [],
     outputs: [
       {
         name: "",
-        type: "address",
-        internalType: "contract IPointReward",
+        type: "bool",
+        internalType: "bool",
       },
     ],
     stateMutability: "view",
@@ -403,19 +393,6 @@ const _abi = [
         name: "",
         type: "bytes32",
         internalType: "bytes32",
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
-    name: "redeem",
-    inputs: [],
-    outputs: [
-      {
-        name: "",
-        type: "address",
-        internalType: "contract IRedeem",
       },
     ],
     stateMutability: "view",
@@ -516,25 +493,12 @@ const _abi = [
   },
   {
     type: "function",
-    name: "setPointRewardContract",
+    name: "setPause",
     inputs: [
       {
-        name: "_pointReward",
-        type: "address",
-        internalType: "address",
-      },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "setRedeemContract",
-    inputs: [
-      {
-        name: "_redeem",
-        type: "address",
-        internalType: "address",
+        name: "pause",
+        type: "bool",
+        internalType: "bool",
       },
     ],
     outputs: [],
@@ -899,10 +863,10 @@ const _abi = [
   },
   {
     type: "event",
-    name: "PointRewardContractSet",
+    name: "Paused",
     inputs: [
       {
-        name: "pointReward",
+        name: "account",
         type: "address",
         indexed: false,
         internalType: "address",
@@ -912,10 +876,10 @@ const _abi = [
   },
   {
     type: "event",
-    name: "RedeemContractSet",
+    name: "Unpaused",
     inputs: [
       {
-        name: "redeem",
+        name: "account",
         type: "address",
         indexed: false,
         internalType: "address",
@@ -1005,6 +969,16 @@ const _abi = [
   {
     type: "error",
     name: "ERC1967NonPayable",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "EnforcedPause",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ExpectedPause",
     inputs: [],
   },
   {
