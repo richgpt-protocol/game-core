@@ -525,6 +525,7 @@ export class DepositService {
               'ESCROW_FAILED_5_TIMES',
               'Transfer to Escrow Failed',
               false,
+              false,
               tx.walletTxId,
             );
             continue;
@@ -822,6 +823,7 @@ export class DepositService {
       'GAMEUSD_TX_FAILED_5_TIMES',
       'GameUSD transfer transfer failed',
       false,
+      false,
       tx.walletTxId,
     );
   }
@@ -898,18 +900,18 @@ export class DepositService {
         const pointTxStartingBalance = lastValidPointTx?.endingBalance || 0;
         const pointTxEndingBalance =
           Number(pointTxStartingBalance) + Number(pointTxAmount);
-        const pointTxInsertResult = await queryRunner.manager.insert(PointTx, {
-          amount: pointTxAmount,
-          txType: 'DEPOSIT',
-          walletId: walletTx.userWallet.id,
-          userWallet: walletTx.userWallet,
-          walletTx: walletTx,
-          startingBalance: pointTxStartingBalance,
-          endingBalance: pointTxEndingBalance,
-        });
+        const pointTx = new PointTx();
+        pointTx.amount = pointTxAmount;
+        pointTx.txType = 'DEPOSIT';
+        pointTx.walletId = walletTx.userWallet.id;
+        pointTx.userWallet = walletTx.userWallet;
+        pointTx.walletTx = walletTx;
+        pointTx.startingBalance = pointTxStartingBalance;
+        pointTx.endingBalance = pointTxEndingBalance;
         // console.log('pointTxInsertResult', pointTxInsertResult);
         walletTx.userWallet.pointBalance = pointTxEndingBalance;
 
+        await queryRunner.manager.save(pointTx);
         await queryRunner.manager.save(walletTx.userWallet);
         await queryRunner.manager.save(walletTx);
         await queryRunner.manager.save(gameUsdTx);

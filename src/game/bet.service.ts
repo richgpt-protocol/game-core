@@ -34,6 +34,7 @@ import {
   JsonRpcProvider,
   MaxUint256,
   Wallet,
+  ethers,
   parseUnits,
 } from 'ethers';
 import {
@@ -776,7 +777,7 @@ export class BetService {
 
       // Returns false if the user doesn't have enough balance and reload is pending
       const hasBalance = await this.checkNativeBalance(
-        payload.walletTx.userWallet,
+        userWallet,
         payload.gameUsdTx.chainId,
       );
       // If its false, that means a reload might be pending.
@@ -818,6 +819,8 @@ export class BetService {
       console.error(error);
       payload.gameUsdTx.retryCount += 1;
       await this.gameUsdTxRepository.save(payload.gameUsdTx);
+
+      //DONOT rollback here
       //TODO add admin notification
     }
   }
@@ -826,11 +829,21 @@ export class BetService {
     txHash: string;
     walletTx: WalletTx;
     gameUsdTx: GameUsdTx;
+    _queryRunner?: QueryRunner;
     // creditWalletTx: CreditWalletTx;
   }) {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    // const queryRunner = this.dataSource.createQueryRunner();
+    // await queryRunner.connect();
+    // await queryRunner.startTransaction();
+    let queryRunner;
+
+    if (payload._queryRunner) {
+      queryRunner = payload._queryRunner;
+    } else {
+      queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+    }
 
     try {
       const lastValidWalletTx = await queryRunner.manager
@@ -900,14 +913,14 @@ export class BetService {
         },
       });
 
-      const oldWalletBalance = userWallet.walletBalance;
-      const nonRedeemableWalletBalance =
-        oldWalletBalance - userWallet.redeemableBalance;
+      // const oldWalletBalance = userWallet.walletBalance;
+      // const nonRedeemableWalletBalance =
+      //   oldWalletBalance - userWallet.redeemableBalance;
 
-      if (payload.walletTx.txAmount > nonRedeemableWalletBalance) {
-        userWallet.redeemableBalance -=
-          payload.walletTx.txAmount - nonRedeemableWalletBalance;
-      }
+      // if (payload.walletTx.txAmount > nonRedeemableWalletBalance) {
+      //   userWallet.redeemableBalance -=
+      //     payload.walletTx.txAmount - nonRedeemableWalletBalance;
+      // }
 
       userWallet.walletBalance = payload.walletTx.endingBalance;
       userWallet.creditBalance = previousEndingCreditBalance;
@@ -1009,22 +1022,31 @@ export class BetService {
         .orderBy('walletTx.id', 'DESC')
         .getOne();
 
-      const walletTxInsertResult = await queryRunner.manager.insert(WalletTx, {
-        txType: 'REFERRAL',
-        txAmount: commisionAmount,
-        status: 'S',
-        userWalletId: userInfo.referralUserId,
-        txHash: betTxHash,
-        startingBalance: lastValidWalletTx?.endingBalance || 0,
-        endingBalance:
-          Number(lastValidWalletTx?.endingBalance || 0) + commisionAmount,
-      });
+      const walletTxInserted = new WalletTx();
+      walletTxInserted.txType = 'REFERRAL';
+      walletTxInserted.txAmount = commisionAmount;
+      walletTxInserted.status = 'S';
+      walletTxInserted.userWalletId = userInfo.referralUserId;
+      walletTxInserted.txHash = betTxHash;
+      walletTxInserted.startingBalance = lastValidWalletTx?.endingBalance || 0;
+      walletTxInserted.endingBalance =
+        Number(lastValidWalletTx?.endingBalance || 0) + commisionAmount;
 
-      const walletTx = await queryRunner.manager.findOne(WalletTx, {
-        where: {
-          id: walletTxInsertResult.identifiers[0].id,
-        },
-      });
+      await queryRunner.manager.save(walletTxInserted);
+
+      // const walletTx = await queryRunner.manager.findOne(WalletTx, {
+      //   where: {
+      //     id: walletTxInsertResult.identifiers[0].id,
+      //   },
+      // });
+
+      const walletTx = await queryRunner.manager
+        .createQueryBuilder(WalletTx, 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .where('walletTx.id = :id', {
+          id: walletTxInserted.id,
+        })
+        .getOne();
 
       // Returns false if the user doesn't have enough balance and reload is pending
       const hasBalance = await this.checkNativeBalance(
@@ -1047,7 +1069,7 @@ export class BetService {
       const referralRewardOnchainTx =
         await depositContract.distributeReferralFee(
           userInfo.referralUser.wallet.walletAddress,
-          commisionAmount,
+          ethers.parseEther(commisionAmount.toString()),
         );
 
       await referralRewardOnchainTx.wait();
@@ -1095,8 +1117,8 @@ export class BetService {
       });
 
       referrerWallet.walletBalance = walletTx.endingBalance;
-      referrerWallet.redeemableBalance =
-        Number(referrerWallet.redeemableBalance) + Number(gameUsdTx.amount); //commision amount
+      // referrerWallet.redeemableBalance =
+      // Number(referrerWallet.redeemableBalance) + Number(gameUsdTx.amount); //commision amount
 
       await this.updateReferrerXpPoints(
         queryRunner,
@@ -1289,6 +1311,7 @@ export class BetService {
                 txHash: gameUsdTx.txHash,
                 gameUsdTx,
                 walletTx: gameUsdTx.walletTxs[0],
+                _queryRunner: queryRunner,
               });
             }
 
@@ -1330,6 +1353,7 @@ export class BetService {
                   txHash: tx.hash,
                   gameUsdTx,
                   walletTx: gameUsdTx.walletTxs[0],
+                  _queryRunner: queryRunner,
                 });
               } else if (txStatus.status && txStatus.status != 1) {
                 gameUsdTx.retryCount += 1;
