@@ -14,10 +14,8 @@ import { buildFilterCriterias } from 'src/shared/utils/pagination.util';
 import { ObjectUtil } from 'src/shared/utils/object.util';
 import { DateUtil } from 'src/shared/utils/date.util';
 
-import { ethers } from 'ethers';
 import axios from 'axios';
 import { MPC } from 'src/shared/mpc';
-import { Referral__factory } from 'src/contract';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
@@ -495,53 +493,18 @@ export class UserService {
 
         // referral section
         if (user.referralUserId) {
-          const referrerUserWallet = await this.userWalletRepository.findOneBy({ id: user.referralUserId });
-          const referrerWalletAddress = referrerUserWallet.walletAddress;
-          const userWalletAddress = user.wallet.walletAddress;
-
-          // record user's referrer on-chain
-          const provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
-          const walletCreationBot = new ethers.Wallet(
-            await MPC.retrievePrivateKey(process.env.WALLET_CREATION_BOT_ADDRESS),
-            provider
-          );
-          const referralContract = Referral__factory.connect(
-            process.env.REFERRAL_CONTRACT_ADDRESS,
-            walletCreationBot,
-          );
-          const txResponse = await referralContract.setReferrer(
-            userWalletAddress,
-            referrerWalletAddress,
-            { gasLimit: 100000 },
-          );
-          
-          // check native token balance for wallet creation bot
-          this.eventEmitter.emit(
-            'gas.service.reload',
-            walletCreationBot.address,
-            Number(process.env.OPBNB_CHAIN_ID),
-          );
-
           // create referralTx
           const referralTx = this.referralTxRepository.create({
             rewardAmount: 0,
             referralType: 'SET_REFERRER',
             bonusAmount: 0,
             bonusCurrency: 'USDT',
-            status: 'P',
-            txHash: txResponse.hash,
+            status: 'S',
+            txHash: null,
             userId: user.id,
             referralUserId: user.referralUserId,
           });
           await queryRunner.manager.save(referralTx);
-
-          // emit event to handleSetReferrerEvent() to update on-chain status
-          const referralPayload: SetReferrerEvent = {
-            txHash: txResponse.hash,
-            referralTxId: referralTx.id,
-            userId: user.id,
-          }
-          this.eventEmitter.emit('user.service.referrer', referralPayload);
         }
         //Add new address to Deposit Bot
         await axios.post(
@@ -594,64 +557,6 @@ export class UserService {
     }
 
     return { error: null, data: user };
-  }
-
-  @OnEvent('user.service.referrer', { async: true })
-  async handleSetReferrerEvent(payload: SetReferrerEvent): Promise<void> {
-    // fetch txResponse from hash and wait for txReceipt
-    const provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
-    const txResponse = await provider.getTransaction(payload.txHash);
-    const txReceipt = await txResponse.wait();
-
-    const referralTx = await this.referralTxRepository.findOneBy({ id: payload.referralTxId });
-
-    // start queryRunner
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    try {
-
-      if (txReceipt.status === 1) {
-        // update referralTx
-        referralTx.status = 'S';
-        await queryRunner.manager.save(referralTx);
-
-      } else { // txReceipt.status === 0
-        // update referralTx
-        referralTx.status = 'PD';
-        await queryRunner.manager.save(referralTx);
-
-        // inform admin for failed on-chain set referrer tx
-        await this.adminNotificationService.setAdminNotification(
-          `setReferrer of Referral contract failed, please check. Tx hash: ${txReceipt.hash}, referralTxId: ${payload.referralTxId}`,
-          'onChainTxError',
-          'SetReferrer Failed',
-          true,
-        );
-      }
-
-      await queryRunner.commitTransaction();
-
-    } catch (err) {
-      // rollback queryRunner
-      await queryRunner.rollbackTransaction();
-
-      // update referralTx
-      referralTx.status = 'PD';
-      await this.referralTxRepository.save(referralTx);
-
-      // inform admin for rollback transaction
-      await this.adminNotificationService.setAdminNotification(
-        `Transaction in user.service.handleSetReferrerEvent had been rollback, error: ${err}, referralTxId: ${payload.referralTxId}`,
-        'rollbackTxError',
-        'Transaction Rollbacked',
-        true,
-      );
-
-    } finally {
-      // finalize queryRunner
-      await queryRunner.release();
-    }
   }
 
   async getUsers(payload: GetUsersDto) {
