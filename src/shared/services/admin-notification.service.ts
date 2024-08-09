@@ -28,7 +28,7 @@ export class AdminNotificationService {
     this.bot = new TelegramBot(
       this.configService.get('TG_ADMIN_NOTIFIER_BOT_TOKEN'),
       {
-        polling: true,
+        polling: false,
       },
     );
   }
@@ -38,9 +38,9 @@ export class AdminNotificationService {
     type: string,
     title: string,
     isBroadcast: boolean,
+    sendToTelegram?: boolean,
     walletTxId?: number,
     adminId?: number,
-    sendToTelegram?: boolean,
   ) {
     const queryRunner = this.connection.createQueryRunner();
 

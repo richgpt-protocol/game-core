@@ -115,6 +115,7 @@ export class DepositService {
           'DEPOSIT_THRESHOLD_NOTIFICATION',
           'Deposit Threshold Notification',
           false,
+          true,
         );
       }
 
