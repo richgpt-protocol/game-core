@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { PointService } from './point.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PointTx } from './entities/point-tx.entity';
@@ -15,7 +15,7 @@ import { UserModule } from 'src/user/user.module';
   imports: [
     TypeOrmModule.forFeature([PointTx, BetOrder, ChatLog, User, DrawResult]),
     SharedModule,
-    WalletModule,
+    forwardRef(() => WalletModule),
     UserModule,
   ],
   providers: [PointService],

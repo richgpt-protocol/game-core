@@ -19,7 +19,7 @@ import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
-import { DepositDTO } from './dto/deposit.dto';
+import { DepositDTO } from '../dto/deposit.dto';
 import {
   JsonRpcProvider,
   Provider,

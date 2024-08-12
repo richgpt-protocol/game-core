@@ -9,7 +9,13 @@ import {
   Req,
   Request,
 } from '@nestjs/common';
-import { ApiBody, ApiHeader, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiHeader,
+  ApiHeaders,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Secure } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { ErrorResponseVo, ResponseVo } from 'src/shared/vo/response.vo';
@@ -22,6 +28,9 @@ import { CalculateLevelDto } from './dto/calculateLevel.dto';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { TransferGameUSDDto } from './dto/InternalTransferDto';
 import { InternalTransferService } from './services/internal-transfer.service';
+import { DepositDTO } from './dto/deposit.dto';
+import { DepositService } from './services/deposit.service';
+import { ConfigService } from 'src/config/config.service';
 
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
@@ -31,12 +40,9 @@ export class WalletController {
     private withdrawService: WithdrawService,
     private claimService: ClaimService,
     private internalTransferService: InternalTransferService,
+    private depositService: DepositService,
+    private configService: ConfigService,
   ) {}
-
-  // TODO
-  @Secure(null, UserRole.USER)
-  @Post('deposit')
-  async deposit() {}
 
   // TODO: supply free credit to wallet. Here is not a good place for this API.
   @Secure(null, UserRole.ADMIN)
@@ -454,5 +460,44 @@ export class WalletController {
       console.log(error);
       throw new BadRequestException(error.message);
     }
+  }
+
+  @Post('deposit')
+  @ApiHeaders([
+    {
+      name: 'x-secret',
+      description: 'Deposit bot secret',
+    },
+  ])
+  @ApiBody({ type: DepositDTO })
+  async deposit(
+    @Req() req: Request,
+    @Body() payload: DepositDTO,
+  ): Promise<ResponseVo<any>> {
+    const headerSecret = req.headers['x-secret'];
+    if (headerSecret !== this.configService.get('DEPOSIT_BOT_SECRET')) {
+      throw new BadRequestException('Invalid secret');
+    }
+    await this.depositService.processDeposit(payload);
+
+    return {
+      statusCode: HttpStatus.OK,
+      data: {},
+      message: 'Deposit',
+    };
+  }
+
+  @Get('all-wallet-addresses')
+  async getAllWalletAddresses(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.depositService.getAllAddress(page, limit);
+
+    return {
+      statusCode: HttpStatus.OK,
+      data: data,
+      message: '',
+    };
   }
 }

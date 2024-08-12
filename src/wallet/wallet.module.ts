@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
 import { CreditWalletTx } from './entities/credit-wallet-tx.entity';
@@ -28,6 +28,9 @@ import { UserModule } from 'src/user/user.module';
 import { InternalTransferService } from './services/internal-transfer.service';
 import { InternalTransfer } from './entities/internal-transfer.entity';
 import { ConfigService } from 'src/config/config.service';
+import { DepositService } from './services/deposit.service';
+import { PointModule } from 'src/point/point.module';
+import { ConfigModule } from 'src/config/config.module';
 
 @Module({
   imports: [
@@ -55,6 +58,8 @@ import { ConfigService } from 'src/config/config.service';
     PermissionModule,
     SharedModule,
     UserModule,
+    forwardRef(() => PointModule),
+    ConfigModule,
   ],
   providers: [
     WalletService,
@@ -62,6 +67,7 @@ import { ConfigService } from 'src/config/config.service';
     WithdrawService,
     InternalTransferService,
     ConfigService,
+    DepositService,
   ],
   controllers: [WalletController],
   exports: [WalletService],
