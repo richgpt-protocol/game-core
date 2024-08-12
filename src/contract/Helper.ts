@@ -42,13 +42,22 @@ export declare namespace ICore {
 export declare namespace IHelper {
   export type BetLastMinuteParamsStruct = {
     user: AddressLike;
+    uid: BigNumberish;
+    ticketId: BigNumberish;
     bets: ICore.BetParamsStruct[];
   };
 
   export type BetLastMinuteParamsStructOutput = [
     user: string,
+    uid: bigint,
+    ticketId: bigint,
     bets: ICore.BetParamsStructOutput[]
-  ] & { user: string; bets: ICore.BetParamsStructOutput[] };
+  ] & {
+    user: string;
+    uid: bigint;
+    ticketId: bigint;
+    bets: ICore.BetParamsStructOutput[];
+  };
 }
 
 export interface HelperInterface extends Interface {

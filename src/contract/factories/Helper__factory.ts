@@ -34,6 +34,16 @@ const _abi = [
             internalType: "address",
           },
           {
+            name: "uid",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "ticketId",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
             name: "bets",
             type: "tuple[]",
             internalType: "struct ICore.BetParams[]",
