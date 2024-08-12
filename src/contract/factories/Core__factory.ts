@@ -24,6 +24,16 @@ const _abi = [
     name: "bet",
     inputs: [
       {
+        name: "uid",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "ticketId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
         name: "_bets",
         type: "tuple[]",
         internalType: "struct ICore.BetParams[]",
@@ -62,6 +72,16 @@ const _abi = [
         name: "user",
         type: "address",
         internalType: "address",
+      },
+      {
+        name: "uid",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "ticketId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
         name: "_bets",
@@ -347,6 +367,19 @@ const _abi = [
   },
   {
     type: "function",
+    name: "jackpotHash",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "contract IJackpotHash",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "maxBet",
     inputs: [],
     outputs: [
@@ -484,6 +517,19 @@ const _abi = [
     inputs: [
       {
         name: "_helper",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setJackpotHashContract",
+    inputs: [
+      {
+        name: "_jackpotHash",
         type: "address",
         internalType: "address",
       },
@@ -838,6 +884,19 @@ const _abi = [
         type: "uint64",
         indexed: false,
         internalType: "uint64",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "JackpotHashContractSet",
+    inputs: [
+      {
+        name: "jackpotHash",
+        type: "address",
+        indexed: false,
+        internalType: "address",
       },
     ],
     anonymous: false,
