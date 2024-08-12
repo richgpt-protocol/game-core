@@ -60,8 +60,11 @@ export class ClaimService {
   async claim(userId: number): Promise<ClaimResponse> {
     // claim is not available within 5 minutes after last game ended
     const lastGame = await this.gameRepository.findOneBy({ isClosed: true });
-    if (!lastGame) return { error: 'Claim is not available yet', data: null }
-    if (new Date().getTime() < new Date(lastGame.endDate).getTime() + (5 * 60 * 1000)) {
+    if (!lastGame) return { error: 'Claim is not available yet', data: null };
+    if (
+      new Date().getTime() <
+      new Date(lastGame.endDate).getTime() + 5 * 60 * 1000
+    ) {
       return { error: 'Claim is not available yet', data: null };
     }
 
@@ -81,7 +84,7 @@ export class ClaimService {
     const claimRes = await this.getPendingClaim(userId);
     const betOrders: BetOrder[] = claimRes.data;
     if (betOrders.length === 0) {
-      return { error: "No bet order available for claim", data: null };
+      return { error: 'No bet order available for claim', data: null };
     }
 
     // create walletTx
@@ -124,7 +127,7 @@ export class ClaimService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      let claimParams: ICore.ClaimParamsStruct[] = [];
+      const claimParams: ICore.ClaimParamsStruct[] = [];
       let totalPointAmount = 0;
 
       for (const betOrder of betOrders) {
@@ -135,16 +138,13 @@ export class ClaimService {
             numberPair: betOrder.numberPair,
           },
         });
-        
+
         // calculate winning amount
         // a betOrder might include both big and small forecast
-        const {
-          bigForecastWinAmount, smallForecastWinAmount
-        } = this.calculateWinningAmount(
-          betOrder,
-          drawResult,
-        );
-        const totalWinningAmount = bigForecastWinAmount + smallForecastWinAmount;
+        const { bigForecastWinAmount, smallForecastWinAmount } =
+          this.calculateWinningAmount(betOrder, drawResult);
+        const totalWinningAmount =
+          bigForecastWinAmount + smallForecastWinAmount;
 
         // totalWinningAmount should not be 0 because is checked in betOrder.availableClaim when set result
         // this is just a double check
@@ -155,12 +155,16 @@ export class ClaimService {
         // calculate pointAmount
         const prize = drawResult.prizeCategory;
         const calculatePointAmount = (amount: number): number => {
-          return prize === '1' ? amount * 50000
-            : prize === '2' ? amount * 20000
-            : prize === '3' ? amount * 10000
-            : prize === 'S' ? amount * 3000
-            : amount * 1000; // prize === 'C'
-        }
+          return prize === '1'
+            ? amount * 50000
+            : prize === '2'
+              ? amount * 20000
+              : prize === '3'
+                ? amount * 10000
+                : prize === 'S'
+                  ? amount * 3000
+                  : amount * 1000; // prize === 'C'
+        };
         let pointAmount = 0;
         // it is possible that one numberPair has both big and small forecast(thus win both)
         if (bigForecastWinAmount > 0) {
@@ -191,58 +195,70 @@ export class ClaimService {
 
         // update walletTx
         // accumulate walletTx.txAmount within betOrders loop
-        walletTx.txAmount = Number(walletTx.txAmount) + Number(totalWinningAmount);
+        walletTx.txAmount =
+          Number(walletTx.txAmount) + Number(totalWinningAmount);
         walletTx.claimDetails.push(claimDetail);
         await queryRunner.manager.save(walletTx);
 
         // construct claimParams for on-chain transaction
         const epoch = Number(
-          (await this.gameRepository.findOneBy({ id: betOrder.gameId }))
-          .epoch
+          (await this.gameRepository.findOneBy({ id: betOrder.gameId })).epoch,
         );
-        const numberPair = ethers.toBigInt(Number(betOrder.numberPair))
-        const drawResultIndex = drawResult.prizeIndex
+        const numberPair = ethers.toBigInt(Number(betOrder.numberPair));
+        const drawResultIndex = drawResult.prizeIndex;
         // smart contract treat big forecast and small forecast as separate claim
         if (bigForecastWinAmount > 0) {
-          const amount = ethers.parseEther(betOrder.bigForecastAmount.toString())
+          const amount = ethers.parseEther(
+            betOrder.bigForecastAmount.toString(),
+          );
           // betOrder treat 2 bets with same numberPair same forecast as 2 bets
           // but on-chain claim treat 2 bets with same numberPair same forecast as 1 bet(with accumulated amount)
           // hence we need to accumulate betOrder amount for same numberPair same forecast (and same epoch)
-          const claimParamsIndex = claimParams.findIndex(claimParam =>
-            claimParam.number === numberPair && claimParam.epoch === epoch && claimParam.forecast === 1
-          )
+          const claimParamsIndex = claimParams.findIndex(
+            (claimParam) =>
+              claimParam.number === numberPair &&
+              claimParam.epoch === epoch &&
+              claimParam.forecast === 1,
+          );
           if (claimParamsIndex !== -1) {
             // there is already a claimParam for same numberPair, forecast & epoch
             // just accumulate the amount
-            claimParams[claimParamsIndex].amount = ethers.toBigInt(claimParams[claimParamsIndex].amount) + amount;
-
+            claimParams[claimParamsIndex].amount =
+              ethers.toBigInt(claimParams[claimParamsIndex].amount) + amount;
           } else {
             claimParams.push({
               epoch,
               number: numberPair,
               amount,
               forecast: 1,
-              drawResultIndex
-            })
+              drawResultIndex,
+            });
           }
         }
         if (smallForecastWinAmount > 0) {
-          const amount = ethers.parseEther(betOrder.smallForecastAmount.toString())
+          const amount = ethers.parseEther(
+            betOrder.smallForecastAmount.toString(),
+          );
           // refer above
-          const claimParamsIndex = claimParams.findIndex(claimParam =>
-            claimParam.number === numberPair && claimParam.epoch === epoch && claimParam.forecast === 0
-          )
+          const claimParamsIndex = claimParams.findIndex(
+            (claimParam) =>
+              claimParam.number === numberPair &&
+              claimParam.epoch === epoch &&
+              claimParam.forecast === 0,
+          );
           if (claimParamsIndex !== -1) {
-            claimParams[claimParamsIndex].amount = ethers.toBigInt(claimParams[claimParamsIndex].amount) + amount;
-
+            claimParams[claimParamsIndex].amount =
+              ethers.toBigInt(claimParams[claimParamsIndex].amount) + amount;
           } else {
             claimParams.push({
               epoch,
               number: numberPair,
-              amount: ethers.parseEther(betOrder.smallForecastAmount.toString()),
+              amount: ethers.parseEther(
+                betOrder.smallForecastAmount.toString(),
+              ),
               forecast: 0,
-              drawResultIndex
-            })
+              drawResultIndex,
+            });
           }
         }
 
@@ -256,7 +272,9 @@ export class ClaimService {
         where: { walletId: userWallet.id },
         order: { id: 'DESC' },
       });
-      const lastEndingBalance = latestPointTx ? Number(latestPointTx.endingBalance) : 0;
+      const lastEndingBalance = latestPointTx
+        ? Number(latestPointTx.endingBalance)
+        : 0;
       const pointTx = this.pointTxRepository.create({
         txType: 'CLAIM',
         amount: totalPointAmount,
@@ -274,16 +292,20 @@ export class ClaimService {
       await queryRunner.manager.save(walletTx);
 
       // update userWallet
-      userWallet.pointBalance = Number(userWallet.pointBalance) + totalPointAmount;
+      userWallet.pointBalance =
+        Number(userWallet.pointBalance) + totalPointAmount;
       userWallet.pointTx.push(pointTx);
       await queryRunner.manager.save(userWallet);
 
       // submit transaction on-chain at once for all claims
       const signer = new ethers.Wallet(
         await MPC.retrievePrivateKey(userWallet.walletAddress),
-        this.provider
+        this.provider,
       );
-      const coreContract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, signer);
+      const coreContract = Core__factory.connect(
+        process.env.CORE_CONTRACT_ADDRESS,
+        signer,
+      );
       // calculate estimate gas used by on-chain transaction
       const estimatedGas = await coreContract.claim.estimateGas(
         userWallet.walletAddress,
@@ -293,7 +315,10 @@ export class ClaimService {
         userWallet.walletAddress,
         claimParams,
         // increase gasLimit by 30%
-        { gasLimit: estimatedGas * ethers.toBigInt(130) / ethers.toBigInt(100) },
+        {
+          gasLimit:
+            (estimatedGas * ethers.toBigInt(130)) / ethers.toBigInt(100),
+        },
       );
 
       // update walletTx
@@ -306,8 +331,8 @@ export class ClaimService {
         txHash: txResponse.hash,
         walletTxId: walletTx.id,
         gameUsdTxId: gameUsdTx.id,
-        betOrderIds: betOrders.map(betOrder => betOrder.id),
-      }
+        betOrderIds: betOrders.map((betOrder) => betOrder.id),
+      };
       this.eventEmitter.emit('wallet.claim', eventPayload);
 
       // check native token balance for user wallet
@@ -318,7 +343,6 @@ export class ClaimService {
       );
 
       await queryRunner.commitTransaction();
-
     } catch (err) {
       await queryRunner.rollbackTransaction();
 
@@ -332,10 +356,10 @@ export class ClaimService {
         'rollbackTxError',
         'Transaction Rollbacked',
         true,
-        walletTx.id
+        false,
+        walletTx.id,
       );
       return { error: err.message, data: null };
-
     } finally {
       await queryRunner.release();
     }
@@ -360,12 +384,13 @@ export class ClaimService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-
       if (txReceipt.status === 1) {
-        let totalPointAmount = 0;
+        const totalPointAmount = 0;
 
         // update GameUsdTx
-        const gameUsdTx = await this.gameUsdTxRepository.findOneBy({ id: payload.gameUsdTxId });
+        const gameUsdTx = await this.gameUsdTxRepository.findOneBy({
+          id: payload.gameUsdTxId,
+        });
         gameUsdTx.amount = walletTx.txAmount;
         gameUsdTx.status = 'S';
         gameUsdTx.txHash = txReceipt.hash;
@@ -377,30 +402,36 @@ export class ClaimService {
           order: { id: 'DESC' },
         });
         walletTx.startingBalance = latestWalletTx.endingBalance;
-        walletTx.endingBalance = Number(walletTx.startingBalance) + Number(walletTx.txAmount);
+        walletTx.endingBalance =
+          Number(walletTx.startingBalance) + Number(walletTx.txAmount);
         walletTx.status = 'S';
         await queryRunner.manager.save(walletTx);
 
         // update userWallet
-        const userWallet = await this.userWalletRepository.findOneBy({ id: walletTx.userWalletId });
-        userWallet.walletBalance = Number(userWallet.walletBalance) + Number(walletTx.txAmount);
-        userWallet.redeemableBalance = Number(userWallet.redeemableBalance) + Number(walletTx.txAmount);
-        userWallet.pointBalance = Number(userWallet.pointBalance) + totalPointAmount;
+        const userWallet = await this.userWalletRepository.findOneBy({
+          id: walletTx.userWalletId,
+        });
+        userWallet.walletBalance =
+          Number(userWallet.walletBalance) + Number(walletTx.txAmount);
+        // userWallet.redeemableBalance =
+        // Number(userWallet.redeemableBalance) + Number(walletTx.txAmount);
+        userWallet.pointBalance =
+          Number(userWallet.pointBalance) + totalPointAmount;
         await queryRunner.manager.save(userWallet);
-
-      } else { // txReceipt.status === 0
+      } else {
+        // txReceipt.status === 0
         // inform admin for failed on-chain claim tx
         await this.adminNotificationService.setAdminNotification(
           `claim() of Core contract failed, please check. Tx hash: ${txReceipt.hash}`,
           'onChainTxError',
           'Claim Failed',
           true,
-          walletTx.id
+          false,
+          walletTx.id,
         );
       }
 
       await queryRunner.commitTransaction();
-
     } catch (err) {
       // rollback queryRunner
       await queryRunner.rollbackTransaction();
@@ -415,22 +446,19 @@ export class ClaimService {
         'rollbackTxError',
         'Transaction Rollbacked',
         true,
-        walletTx.id
+        false,
+        walletTx.id,
       );
-
     } finally {
       // finalize queryRunner
       await queryRunner.release();
 
-      await this.userService.setUserNotification(
-        payload.userId,
-        {
-          type: 'claim',
-          title: 'Claim Processed Successfully',
-          message: 'Your claim has been successfully processed',
-          walletTxId: walletTx.id,
-        }
-      );
+      await this.userService.setUserNotification(payload.userId, {
+        type: 'claim',
+        title: 'Claim Processed Successfully',
+        message: 'Your claim has been successfully processed',
+        walletTxId: walletTx.id,
+      });
     }
   }
 
@@ -485,12 +513,12 @@ export class ClaimService {
       where: {
         userWalletId: userWallet.id,
         txType: 'PLAY',
-        status: 'S'
+        status: 'S',
       },
     });
 
     // fetch all betOrders that available for claim
-    let betOrders: BetOrder[] = []
+    let betOrders: BetOrder[] = [];
     for (const walletTx of walletTxs) {
       const _betOrders = await this.betOrderRepository.find({
         where: {
@@ -498,7 +526,7 @@ export class ClaimService {
           // availableClaim=true only after live results end
           // so this function won't return matched numberPair within live results
           availableClaim: true,
-          isClaimed: false
+          isClaimed: false,
         },
       });
       betOrders = [...betOrders, ..._betOrders];
@@ -522,23 +550,22 @@ export class ClaimService {
           numberPair: betOrder.numberPair,
         },
       });
-      
+
       // calculate winning amount
       // a betOrder might include both big and small forecast
-      const {
-        bigForecastWinAmount, smallForecastWinAmount
-      } = this.calculateWinningAmount(
-        betOrder,
-        drawResult,
-      );
+      const { bigForecastWinAmount, smallForecastWinAmount } =
+        this.calculateWinningAmount(betOrder, drawResult);
       totalWinningAmount += bigForecastWinAmount + smallForecastWinAmount;
     }
     return totalWinningAmount;
   }
 
-  calculateWinningAmount(betOrder: BetOrder, drawResult: DrawResult): {
-    bigForecastWinAmount: number,
-    smallForecastWinAmount: number
+  calculateWinningAmount(
+    betOrder: BetOrder,
+    drawResult: DrawResult,
+  ): {
+    bigForecastWinAmount: number;
+    smallForecastWinAmount: number;
   } {
     let bigForecastWinAmount = 0;
     let smallForecastWinAmount = 0;
@@ -561,7 +588,7 @@ export class ClaimService {
 
     return {
       bigForecastWinAmount,
-      smallForecastWinAmount
-    }
+      smallForecastWinAmount,
+    };
   }
 }

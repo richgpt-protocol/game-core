@@ -10,7 +10,7 @@ import { GameUsdTx } from './entities/game-usd-tx.entity';
 import { ClaimDetail } from './entities/claim-detail.entity';
 import { WalletController } from './wallet.controller';
 import { ClaimService } from './services/claim.service';
-import { RedeemService } from './services/redeem.service';
+import { WithdrawService } from './services/withdraw.service';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { Game } from 'src/game/entities/game.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
@@ -25,6 +25,9 @@ import { User } from 'src/user/entities/user.entity';
 import { SharedModule } from 'src/shared/shared.module';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { UserModule } from 'src/user/user.module';
+import { InternalTransferService } from './services/internal-transfer.service';
+import { InternalTransfer } from './entities/internal-transfer.entity';
+import { ConfigService } from 'src/config/config.service';
 
 @Module({
   imports: [
@@ -47,12 +50,19 @@ import { UserModule } from 'src/user/user.module';
       Admin,
       Setting,
       ReferralTx,
+      InternalTransfer,
     ]),
     PermissionModule,
     SharedModule,
     UserModule,
   ],
-  providers: [WalletService, ClaimService, RedeemService],
+  providers: [
+    WalletService,
+    ClaimService,
+    WithdrawService,
+    InternalTransferService,
+    ConfigService,
+  ],
   controllers: [WalletController],
   exports: [WalletService],
 })
