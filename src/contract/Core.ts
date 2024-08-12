@@ -97,8 +97,8 @@ export interface CoreInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "UPGRADE_INTERFACE_VERSION"
-      | "bet((uint256,uint256,uint256,uint8)[])"
-      | "bet(address,(uint256,uint256,uint256,uint8)[])"
+      | "bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])"
+      | "bet(address,uint256,uint256,(uint256,uint256,uint256,uint8)[])"
       | "claim"
       | "currentEpoch"
       | "currentEpochTimestamp"
@@ -110,6 +110,7 @@ export interface CoreInterface extends Interface {
       | "helper"
       | "initialize"
       | "isBetClosed"
+      | "jackpotHash"
       | "maxBet"
       | "owner"
       | "paused"
@@ -120,6 +121,7 @@ export interface CoreInterface extends Interface {
       | "setDrawResults"
       | "setGameUSDPoolContract"
       | "setHelperContract"
+      | "setJackpotHashContract"
       | "setPause"
       | "setVRFCoordinator"
       | "totalBetsForNumber"
@@ -139,6 +141,7 @@ export interface CoreInterface extends Interface {
       | "GameUSDPoolContractSet"
       | "HelperContractSet"
       | "Initialized"
+      | "JackpotHashContractSet"
       | "OwnershipTransferred"
       | "Paused"
       | "Unpaused"
@@ -151,12 +154,12 @@ export interface CoreInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "bet((uint256,uint256,uint256,uint8)[])",
-    values: [ICore.BetParamsStruct[]]
+    functionFragment: "bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])",
+    values: [BigNumberish, BigNumberish, ICore.BetParamsStruct[]]
   ): string;
   encodeFunctionData(
-    functionFragment: "bet(address,(uint256,uint256,uint256,uint8)[])",
-    values: [AddressLike, ICore.BetParamsStruct[]]
+    functionFragment: "bet(address,uint256,uint256,(uint256,uint256,uint256,uint8)[])",
+    values: [AddressLike, BigNumberish, BigNumberish, ICore.BetParamsStruct[]]
   ): string;
   encodeFunctionData(
     functionFragment: "claim",
@@ -196,6 +199,10 @@ export interface CoreInterface extends Interface {
     functionFragment: "isBetClosed",
     values?: undefined
   ): string;
+  encodeFunctionData(
+    functionFragment: "jackpotHash",
+    values?: undefined
+  ): string;
   encodeFunctionData(functionFragment: "maxBet", values?: undefined): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
@@ -225,6 +232,10 @@ export interface CoreInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "setHelperContract",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setJackpotHashContract",
     values: [AddressLike]
   ): string;
   encodeFunctionData(functionFragment: "setPause", values: [boolean]): string;
@@ -258,11 +269,11 @@ export interface CoreInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "bet((uint256,uint256,uint256,uint8)[])",
+    functionFragment: "bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "bet(address,(uint256,uint256,uint256,uint8)[])",
+    functionFragment: "bet(address,uint256,uint256,(uint256,uint256,uint256,uint8)[])",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "claim", data: BytesLike): Result;
@@ -294,6 +305,10 @@ export interface CoreInterface extends Interface {
     functionFragment: "isBetClosed",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "jackpotHash",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "maxBet", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
@@ -323,6 +338,10 @@ export interface CoreInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "setHelperContract",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "setJackpotHashContract",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "setPause", data: BytesLike): Result;
@@ -490,6 +509,18 @@ export namespace InitializedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace JackpotHashContractSetEvent {
+  export type InputTuple = [jackpotHash: AddressLike];
+  export type OutputTuple = [jackpotHash: string];
+  export interface OutputObject {
+    jackpotHash: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace OwnershipTransferredEvent {
   export type InputTuple = [previousOwner: AddressLike, newOwner: AddressLike];
   export type OutputTuple = [previousOwner: string, newOwner: string];
@@ -597,14 +628,19 @@ export interface Core extends BaseContract {
 
   UPGRADE_INTERFACE_VERSION: TypedContractMethod<[], [string], "view">;
 
-  "bet((uint256,uint256,uint256,uint8)[])": TypedContractMethod<
-    [_bets: ICore.BetParamsStruct[]],
+  "bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])": TypedContractMethod<
+    [uid: BigNumberish, ticketId: BigNumberish, _bets: ICore.BetParamsStruct[]],
     [void],
     "nonpayable"
   >;
 
-  "bet(address,(uint256,uint256,uint256,uint8)[])": TypedContractMethod<
-    [user: AddressLike, _bets: ICore.BetParamsStruct[]],
+  "bet(address,uint256,uint256,(uint256,uint256,uint256,uint8)[])": TypedContractMethod<
+    [
+      user: AddressLike,
+      uid: BigNumberish,
+      ticketId: BigNumberish,
+      _bets: ICore.BetParamsStruct[]
+    ],
     [void],
     "nonpayable"
   >;
@@ -655,6 +691,8 @@ export interface Core extends BaseContract {
 
   isBetClosed: TypedContractMethod<[], [boolean], "view">;
 
+  jackpotHash: TypedContractMethod<[], [string], "view">;
+
   maxBet: TypedContractMethod<[], [bigint], "view">;
 
   owner: TypedContractMethod<[], [string], "view">;
@@ -691,6 +729,12 @@ export interface Core extends BaseContract {
 
   setHelperContract: TypedContractMethod<
     [_helper: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  setJackpotHashContract: TypedContractMethod<
+    [_jackpotHash: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -754,16 +798,21 @@ export interface Core extends BaseContract {
     nameOrSignature: "UPGRADE_INTERFACE_VERSION"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "bet((uint256,uint256,uint256,uint8)[])"
+    nameOrSignature: "bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])"
   ): TypedContractMethod<
-    [_bets: ICore.BetParamsStruct[]],
+    [uid: BigNumberish, ticketId: BigNumberish, _bets: ICore.BetParamsStruct[]],
     [void],
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "bet(address,(uint256,uint256,uint256,uint8)[])"
+    nameOrSignature: "bet(address,uint256,uint256,(uint256,uint256,uint256,uint8)[])"
   ): TypedContractMethod<
-    [user: AddressLike, _bets: ICore.BetParamsStruct[]],
+    [
+      user: AddressLike,
+      uid: BigNumberish,
+      ticketId: BigNumberish,
+      _bets: ICore.BetParamsStruct[]
+    ],
     [void],
     "nonpayable"
   >;
@@ -821,6 +870,9 @@ export interface Core extends BaseContract {
     nameOrSignature: "isBetClosed"
   ): TypedContractMethod<[], [boolean], "view">;
   getFunction(
+    nameOrSignature: "jackpotHash"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "maxBet"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
@@ -858,6 +910,9 @@ export interface Core extends BaseContract {
   getFunction(
     nameOrSignature: "setHelperContract"
   ): TypedContractMethod<[_helper: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setJackpotHashContract"
+  ): TypedContractMethod<[_jackpotHash: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setPause"
   ): TypedContractMethod<[pause: boolean], [void], "nonpayable">;
@@ -968,6 +1023,13 @@ export interface Core extends BaseContract {
     InitializedEvent.InputTuple,
     InitializedEvent.OutputTuple,
     InitializedEvent.OutputObject
+  >;
+  getEvent(
+    key: "JackpotHashContractSet"
+  ): TypedContractEvent<
+    JackpotHashContractSetEvent.InputTuple,
+    JackpotHashContractSetEvent.OutputTuple,
+    JackpotHashContractSetEvent.OutputObject
   >;
   getEvent(
     key: "OwnershipTransferred"
@@ -1092,6 +1154,17 @@ export interface Core extends BaseContract {
       InitializedEvent.InputTuple,
       InitializedEvent.OutputTuple,
       InitializedEvent.OutputObject
+    >;
+
+    "JackpotHashContractSet(address)": TypedContractEvent<
+      JackpotHashContractSetEvent.InputTuple,
+      JackpotHashContractSetEvent.OutputTuple,
+      JackpotHashContractSetEvent.OutputObject
+    >;
+    JackpotHashContractSet: TypedContractEvent<
+      JackpotHashContractSetEvent.InputTuple,
+      JackpotHashContractSetEvent.OutputTuple,
+      JackpotHashContractSetEvent.OutputObject
     >;
 
     "OwnershipTransferred(address,address)": TypedContractEvent<
