@@ -101,6 +101,10 @@ export class DepositService {
     await queryRunner.startTransaction();
 
     try {
+      if (payload.amount <= 1) {
+        throw new Error('Amount should be greater than 1');
+      }
+
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
         where: {
           walletAddress: payload.walletAddress,

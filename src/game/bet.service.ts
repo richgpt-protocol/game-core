@@ -683,7 +683,13 @@ export class BetService {
     }
   }
 
-  private async _bet(payload: BetOrder[], userSigner, provider) {
+  private async _bet(
+    uid: number,
+    ticketId: number,
+    payload: BetOrder[],
+    userSigner,
+    provider,
+  ) {
     try {
       const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
       const coreContract = Core__factory.connect(coreContractAddr, provider);
@@ -726,11 +732,15 @@ export class BetService {
       // console.log(`Approve done`);
       const gasLimit = await coreContract
         .connect(userSigner)
-        ['bet((uint256,uint256,uint256,uint8)[])'].estimateGas(bets);
+        [
+          'bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])'
+        ].estimateGas(uid, ticketId, bets);
 
       const tx = await coreContract
         .connect(userSigner)
-        ['bet((uint256,uint256,uint256,uint8)[])'](bets, {
+        [
+          'bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])'
+        ](uid, ticketId, bets, {
           gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
         });
 
@@ -762,11 +772,17 @@ export class BetService {
       this.configService.get('OPBNB_PROVIDER_RPC_URL'),
     );
 
-    const userWallet = await this.walletRepository.findOne({
-      where: {
-        id: payload.walletTx.userWalletId,
-      },
-    });
+    // const userWallet = await this.walletRepository.findOne({
+    //   where: {
+    //     id: payload.walletTx.userWalletId,
+    //   },
+    // });
+
+    const userWallet = await this.walletRepository
+      .createQueryBuilder('userWallet')
+      .leftJoinAndSelect('userWallet.user', 'user')
+      .where('userWallet.id = :id', { id: payload.walletTx.userWalletId })
+      .getOne();
 
     try {
       let tx = null;
@@ -790,7 +806,13 @@ export class BetService {
       }
 
       try {
-        tx = await this._bet(payload.betsPayload, userSigner, provider);
+        tx = await this._bet(
+          Number(userWallet.user.uid),
+          payload.walletTx.id,
+          payload.betsPayload,
+          userSigner,
+          provider,
+        );
       } catch (error) {
         console.error(
           `error sending gameUSDTx in bet.service for gameUDSTxId: ${payload.gameUsdTx.id}`,
@@ -1234,6 +1256,7 @@ export class BetService {
         .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
         .leftJoinAndSelect('walletTxs.betOrders', 'betOrders')
         .leftJoinAndSelect('walletTxs.userWallet', 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
         .leftJoinAndSelect('betOrders.creditWalletTx', 'creditWalletTx')
         .leftJoinAndSelect('betOrders.game', 'game')
         .where(
@@ -1329,7 +1352,13 @@ export class BetService {
             );
 
             try {
-              tx = await this._bet(betOrders, userSigner, provider);
+              tx = await this._bet(
+                Number(walletTx.userWallet.user.uid),
+                walletTx.id,
+                betOrders,
+                userSigner,
+                provider,
+              );
               // console.log('Bettx: ');
               // console.log(tx);
               // tx = {

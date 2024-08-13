@@ -79,6 +79,13 @@ export class WithdrawService {
   ): Promise<RedeemResponse> {
     const userWallet = await this.userWalletRepository.findOneBy({ userId });
 
+    if (payload.amount <= 1) {
+      return {
+        error: 'Minimum withdrawable amount is $1',
+        data: null,
+      };
+    }
+
     // check if user has sufficient amount for redeem
     if (userWallet.walletBalance < payload.amount) {
       return {
