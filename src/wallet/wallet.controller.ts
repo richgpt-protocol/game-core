@@ -16,7 +16,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Secure } from 'src/shared/decorators/secure.decorator';
+import { Secure, SecureEJS } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { ErrorResponseVo, ResponseVo } from 'src/shared/vo/response.vo';
 import { WalletService } from './wallet.service';
@@ -31,6 +31,7 @@ import { InternalTransferService } from './services/internal-transfer.service';
 import { DepositDTO } from './dto/deposit.dto';
 import { DepositService } from './services/deposit.service';
 import { ConfigService } from 'src/config/config.service';
+import { PermissionEnum } from 'src/shared/enum/permission.enum';
 
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
@@ -162,7 +163,8 @@ export class WalletController {
     }
   }
 
-  @Secure(null, UserRole.ADMIN)
+  // @Secure(null, UserRole.ADMIN)
+  @SecureEJS(PermissionEnum.PAYOUT, UserRole.ADMIN)
   @Post('review-redeem')
   @ApiHeader({
     name: 'x-custom-lang',
@@ -209,7 +211,7 @@ export class WalletController {
     }
   }
 
-  // @Secure(null, UserRole.USER)
+  @Secure(null, UserRole.USER)
   @Get('get-withdrawl-fee')
   async getWithdrawlFee(
     @Query('chainId') chainId: number,

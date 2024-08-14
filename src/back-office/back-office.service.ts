@@ -148,6 +148,50 @@ export class BackOfficeService {
     }
   }
 
+  async getPendingWithdraw(page: number = 1, limit: number = 10): Promise<any> {
+    try {
+      const data = await this.walletTxRepository
+        .createQueryBuilder('walletTx')
+        .select([
+          'walletTx.id',
+          'walletTx.txType',
+          'walletTx.txAmount',
+          'walletTx.status',
+          'walletTx.createdDate',
+          'walletTx.userWalletId',
+          'walletTx.redeemTx',
+          'userWallet.walletAddress',
+          'userWallet.userId',
+        ])
+        .leftJoin('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('walletTx.redeemTx', 'redeemTx')
+        .where('walletTx.txType = :type', { type: 'REDEEM' })
+        .andWhere('walletTx.status = :status', { status: 'PA' })
+        .orderBy('walletTx.createdDate', 'DESC')
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getManyAndCount();
+
+      const transactions = data[0].map((tx) => {
+        return {
+          ...tx,
+          createdDate: tx.createdDate.toLocaleDateString(),
+        };
+      });
+
+      console.log(transactions);
+
+      return {
+        data: transactions,
+        currentPage: page,
+        totalPages: Math.ceil(data[1] / limit),
+      };
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Internal Server Error');
+    }
+  }
+
   async getTransactions(page: number = 1, limit: number = 10): Promise<any> {
     try {
       const data = await this.walletTxRepository

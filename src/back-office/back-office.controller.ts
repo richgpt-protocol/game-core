@@ -13,7 +13,7 @@ export class BackOfficeController {
     private backOfficeService: BackOfficeService,
     private configService: ConfigService,
   ) {}
-  
+
   @Get('admin-login')
   @ApiExcludeEndpoint()
   @Render('admin-login')
@@ -53,7 +53,7 @@ export class BackOfficeController {
     };
   }
 
-  // @SecureEJS(null, UserRole.ADMIN)
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('staffs')
   @ApiExcludeEndpoint()
   @Render('staff-listing')
@@ -62,6 +62,23 @@ export class BackOfficeController {
     return {
       data: {
         staffs: data.data,
+        currentPage: data.currentPage,
+        totalPages: data.totalPages,
+      },
+    };
+  }
+
+  @Get('pending-withdraw')
+  @ApiExcludeEndpoint()
+  @Render('pending-withdraw')
+  async pendingWithdraw(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const data = await this.backOfficeService.getPendingWithdraw(page, limit);
+    return {
+      data: {
+        transactions: data.data,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
       },
@@ -180,7 +197,7 @@ export class BackOfficeController {
     );
     return {
       data: {
-        bets: result.data
+        bets: result.data,
       },
     };
   }
