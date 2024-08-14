@@ -38,6 +38,7 @@
     "@nestjs/swagger": "^7.3.0",
     "@nestjs/typeorm": "^10.0.2",
     "@nestjs/websockets": "^10.3.5",
+    "@slack/web-api": "^7.3.2",
     "@typechain/ethers-v6": "^0.5.1",
     "async-mutex": "^0.5.0",
     "axios": "^1.6.7",

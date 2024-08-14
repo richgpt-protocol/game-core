@@ -6,12 +6,16 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
 import { Connection, Repository } from 'typeorm';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { ConfigService } from 'src/config/config.service';
+import { WebClient } from '@slack/web-api';
 
 @Injectable()
 export class AdminNotificationService {
   private bot: TelegramBot;
   private tg_admins: Array<string>;
   private TG_ADMIN_GROUP;
+  private slackToken: string;
+  private slackChannel: string;
+  private slackClient: WebClient;
   constructor(
     @InjectRepository(Notification)
     private notificationRepository: Repository<Notification>,
@@ -31,6 +35,13 @@ export class AdminNotificationService {
         polling: false,
       },
     );
+
+    this.slackToken = this.configService.get('SLACK_TOKEN');
+    this.slackChannel = this.configService.get('SLACK_CHANNEL_ID');
+
+    if (this.slackToken) {
+      this.slackClient = new WebClient(this.slackToken);
+    }
   }
 
   async setAdminNotification(
@@ -38,7 +49,7 @@ export class AdminNotificationService {
     type: string,
     title: string,
     isBroadcast: boolean,
-    sendToTelegram?: boolean,
+    notifyOtherChannels?: boolean,
     walletTxId?: number,
     adminId?: number,
   ) {
@@ -58,8 +69,9 @@ export class AdminNotificationService {
         }),
       );
 
-      if (sendToTelegram) {
+      if (notifyOtherChannels) {
         await this.notifyTelegram([this.TG_ADMIN_GROUP], message);
+        await this.notifySlack(message);
       }
 
       if (isBroadcast) {
@@ -111,6 +123,19 @@ export class AdminNotificationService {
       }
     } catch (error) {
       console.error('Error sending message to telegram', error);
+    }
+  }
+
+  private async notifySlack(message: string) {
+    if (this.slackChannel && this.slackToken) {
+      try {
+        await this.slackClient.chat.postMessage({
+          channel: this.slackChannel,
+          text: message,
+        });
+      } catch (error) {
+        console.error('Error sending message to slack', error);
+      }
     }
   }
 }

@@ -209,6 +209,19 @@ export class WalletController {
     }
   }
 
+  // @Secure(null, UserRole.USER)
+  @Get('get-withdrawl-fee')
+  async getWithdrawlFee(
+    @Query('chainId') chainId: number,
+  ): Promise<ResponseVo<any>> {
+    const fee = await this.withdrawService.getWithdrawalFees(chainId);
+
+    return {
+      statusCode: HttpStatus.OK,
+      data: fee,
+      message: '',
+    };
+  }
   // TODO
   @Secure(null, UserRole.USER)
   @Get('get-redeem-status')

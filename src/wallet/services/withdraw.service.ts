@@ -144,7 +144,7 @@ export class WithdrawService {
       receiverAddress: payload.receiverAddress,
       isPayoutTransferred: false,
       chainId: payload.chainId,
-      fees: Number(setting.value),
+      fees: (Number(payload.amount) * Number(setting.value)) / 100,
       tokenSymbol: payload.tokenSymbol,
       tokenAddress: payload.tokenAddress,
       amount: payload.amount,
@@ -223,7 +223,7 @@ export class WithdrawService {
 
       if (Number(usdt_balance) < payload.amount) {
         // send notification to admin for reload payout pool
-        this.adminNotificationService.setAdminNotification(
+        await this.adminNotificationService.setAdminNotification(
           `Payout contract has insufficient USDT to payout for amount $${payload.amount}. Please reload payout pool.`,
           'error',
           'Payout Pool Reload',
@@ -466,6 +466,13 @@ export class WithdrawService {
     }
 
     return { error: null, data: { redeemTx: redeemTx, walletTx: walletTx } };
+  }
+
+  async getWithdrawalFees(chainId: number): Promise<number> {
+    const setting = await this.settingRepository.findOneBy({
+      key: `WITHDRAWAL_FEES_${chainId}`,
+    });
+    return Number(setting.value);
   }
 
   @OnEvent('wallet.handleRedeem', { async: true })
