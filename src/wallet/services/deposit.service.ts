@@ -101,10 +101,6 @@ export class DepositService {
     await queryRunner.startTransaction();
 
     try {
-      if (payload.amount <= 1) {
-        throw new Error('Amount should be greater than 1');
-      }
-
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
         where: {
           walletAddress: payload.walletAddress,
@@ -112,6 +108,21 @@ export class DepositService {
       });
 
       if (!userWallet) return;
+
+      if (payload.amount <= 1) {
+        await this.adminNotificationService.setAdminNotification(
+          `Error processing deposit for wallet: ${payload.walletAddress} \n
+          Minimum Deposit Amount not met. \n
+          UserId: ${userWallet.userId}. \n
+          Deposit amount: ${payload.amount} \n
+          TxHash: ${payload.txHash}`,
+          'MINIMUM_DEPOSIT_AMOUNT',
+          'Deposit Failed',
+          false,
+          true,
+        );
+        return;
+      }
 
       if (payload.amount >= this.DEPOSIT_NOTIFY_THRESHOLD) {
         await this.adminNotificationService.setAdminNotification(
