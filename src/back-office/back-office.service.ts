@@ -9,13 +9,8 @@ import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
-import {
-  Between,
-  In,
-  LessThanOrEqual,
-  MoreThanOrEqual,
-  Repository,
-} from 'typeorm';
+import { WalletService } from 'src/wallet/wallet.service';
+import { Between, In, Repository } from 'typeorm';
 
 @Injectable()
 export class BackOfficeService {
@@ -38,6 +33,7 @@ export class BackOfficeService {
     private gameRepository: Repository<Game>,
     @InjectRepository(DrawResult)
     private drawResultRepository: Repository<DrawResult>,
+    private walletService: WalletService,
   ) {}
 
   async getUsers(page: number = 1, limit: number = 10): Promise<any> {
@@ -141,6 +137,50 @@ export class BackOfficeService {
         data: data[0],
         currentPage: page,
         totalPages: Math.ceil(data[1] / limit),
+      };
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Internal Server Error');
+    }
+  }
+
+  async getUserPoints(page: number = 1, limit: number = 10): Promise<any> {
+    try {
+      const wallets = await this.userWalletRepository
+        .createQueryBuilder('userWallet')
+        .select([
+          'userWallet.id',
+          // 'userWallet.user',
+          'userWallet.walletBalance',
+          'userWallet.creditBalance',
+          'userWallet.pointBalance',
+          'userWallet.walletAddress',
+        ])
+        .leftJoin('userWallet.user', 'user')
+        .addSelect('user.uid')
+        .orderBy('userWallet.pointBalance', 'DESC')
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getManyAndCount();
+
+      console.log(wallets[0]);
+
+      const data = wallets[0].map((wallet) => {
+        const level = this.walletService.calculateLevel(wallet.pointBalance);
+        return {
+          ...wallet,
+          walletBalance: (+wallet.walletBalance).toFixed(2),
+          pointBalance: (+wallet.pointBalance).toFixed(2),
+          level: Math.trunc(level),
+        };
+      });
+
+      console.log(data);
+
+      return {
+        data,
+        currentPage: page,
+        totalPages: Math.ceil(wallets[1] / limit),
       };
     } catch (error) {
       console.log(error);

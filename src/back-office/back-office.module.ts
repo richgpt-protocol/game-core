@@ -15,6 +15,10 @@ import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { Game } from 'src/game/entities/game.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
+import { CampaignService } from 'src/campaign/campaign.service';
+import { Campaign } from 'src/campaign/entities/campaign.entity';
+import { CampaignModule } from 'src/campaign/campaign.module';
+import { WalletService } from 'src/wallet/wallet.service';
 
 @Module({
   imports: [
@@ -28,14 +32,16 @@ import { DrawResult } from 'src/game/entities/draw-result.entity';
       BetOrder,
       Game,
       DrawResult,
+      Campaign,
     ]),
+    CampaignModule,
     ConfigModule,
     PermissionModule,
     SharedModule,
     AdminModule,
   ],
   controllers: [BackOfficeController],
-  providers: [BackOfficeService],
+  providers: [BackOfficeService, CampaignService, WalletService],
   exports: [BackOfficeService],
 })
 export class BackOfficeModule {}
