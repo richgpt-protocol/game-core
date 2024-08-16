@@ -1,5 +1,6 @@
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { WalletTx } from './wallet-tx.entity';
+import { CreditWalletTx } from './credit-wallet-tx.entity';
 
 @Entity()
 export class GameUsdTx {
@@ -36,9 +37,14 @@ export class GameUsdTx {
   @Column()
   retryCount: number;
 
-  @Column()
+  @Column({
+    nullable: true,
+  })
   walletTxId: number;
 
   @OneToMany(() => WalletTx, (walletTx) => walletTx.gameUsdTx)
   walletTxs: WalletTx[];
+
+  @OneToMany(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.gameUsdTx)
+  creditWalletTx: CreditWalletTx;
 }

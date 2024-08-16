@@ -31,6 +31,7 @@ import { ConfigService } from 'src/config/config.service';
 import { DepositService } from './services/deposit.service';
 import { PointModule } from 'src/point/point.module';
 import { ConfigModule } from 'src/config/config.module';
+import { CreditService } from './services/credit.service';
 
 @Module({
   imports: [
@@ -68,8 +69,9 @@ import { ConfigModule } from 'src/config/config.module';
     InternalTransferService,
     ConfigService,
     DepositService,
+    CreditService,
   ],
   controllers: [WalletController],
-  exports: [WalletService],
+  exports: [WalletService, CreditService],
 })
 export class WalletModule {}

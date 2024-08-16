@@ -6,6 +6,7 @@ import { SecureEJS } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { CampaignService } from 'src/campaign/campaign.service';
+import { CreditService } from 'src/wallet/services/credit.service';
 
 @ApiTags('back-office')
 @Controller('back-office')
@@ -14,6 +15,7 @@ export class BackOfficeController {
     private backOfficeService: BackOfficeService,
     private configService: ConfigService,
     private campaignService: CampaignService,
+    private creditService: CreditService,
   ) {}
 
   @Get('admin-login')
@@ -243,5 +245,43 @@ export class BackOfficeController {
         bets: result.data,
       },
     };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('credit-txns-listing')
+  @Render('credit-txns-listing')
+  async creditTxns(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const { data, currentPage, total } =
+      await this.creditService.getAllCreditWalletTxList(page, limit);
+    return {
+      data: {
+        transactions: data,
+        currentPage: currentPage,
+        totalPages: total,
+      },
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('add-credit')
+  @Render('add-credit')
+  async addCredit() {
+    try {
+      const campaigns = await this.campaignService.findActiveCampaigns();
+      return {
+        data: {
+          campaigns,
+        },
+      };
+    } catch (error) {
+      return {
+        data: {
+          campaigns: [],
+        },
+      };
+    }
   }
 }

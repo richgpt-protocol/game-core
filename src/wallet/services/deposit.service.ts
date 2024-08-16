@@ -812,6 +812,7 @@ export class DepositService {
           this.configService.get('DEPOSIT_BOT_ADDRESS'),
           this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
         ]),
+        creditWalletTx: null,
       },
       order: {
         id: 'ASC',

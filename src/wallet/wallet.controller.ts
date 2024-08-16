@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpStatus,
+  InternalServerErrorException,
   Post,
   Query,
   Req,
@@ -32,6 +33,8 @@ import { DepositDTO } from './dto/deposit.dto';
 import { DepositService } from './services/deposit.service';
 import { ConfigService } from 'src/config/config.service';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
+import { CreditService } from './services/credit.service';
+import { AddCreditDto } from './dto/credit.dto';
 
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
@@ -43,6 +46,7 @@ export class WalletController {
     private internalTransferService: InternalTransferService,
     private depositService: DepositService,
     private configService: ConfigService,
+    private creditService: CreditService,
   ) {}
 
   // TODO: supply free credit to wallet. Here is not a good place for this API.
@@ -514,5 +518,64 @@ export class WalletController {
       data: data,
       message: '',
     };
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('credit-balance')
+  async getCreditBalance(@Request() req): Promise<ResponseVo<any>> {
+    const userId = req.user.userId;
+    const creditBalance = await this.creditService.getCreditBalance(userId);
+    return {
+      statusCode: HttpStatus.OK,
+      data: { creditBalance },
+      message: '',
+    };
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('credit-transactions')
+  async getCreditTransactions(
+    @Request() req,
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    const userId = req.user.userId;
+    const {
+      data: transactions,
+      currentPage,
+      total: totalPages,
+    } = await this.creditService.getCreditWalletTxList(userId, page, limit);
+    return {
+      statusCode: HttpStatus.OK,
+      data: {
+        transactions,
+        currentPage,
+        totalPages,
+      },
+      message: '',
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Post('add-credit')
+  async addCredit(@Body() payload: AddCreditDto): Promise<ResponseVo<any>> {
+    try {
+      const { campaignId, ...restPayload } = payload;
+
+      const creditTx = await this.creditService.addCredit({
+        amount: Number(payload.amount),
+        ...restPayload,
+        campaignId: campaignId || null, // Handle empty campaignId
+      });
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'credit added',
+        data: { creditTx },
+      };
+    } catch (error) {
+      console.error(error);
+      throw new InternalServerErrorException();
+    }
   }
 }

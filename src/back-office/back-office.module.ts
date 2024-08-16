@@ -19,6 +19,9 @@ import { CampaignService } from 'src/campaign/campaign.service';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { CampaignModule } from 'src/campaign/campaign.module';
 import { WalletService } from 'src/wallet/wallet.service';
+import { CreditService } from 'src/wallet/services/credit.service';
+import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
+import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 
 @Module({
   imports: [
@@ -33,6 +36,8 @@ import { WalletService } from 'src/wallet/wallet.service';
       Game,
       DrawResult,
       Campaign,
+      CreditWalletTx,
+      ReloadTx,
     ]),
     CampaignModule,
     ConfigModule,
@@ -41,7 +46,7 @@ import { WalletService } from 'src/wallet/wallet.service';
     AdminModule,
   ],
   controllers: [BackOfficeController],
-  providers: [BackOfficeService, CampaignService, WalletService],
+  providers: [BackOfficeService, CampaignService, WalletService, CreditService],
   exports: [BackOfficeService],
 })
 export class BackOfficeModule {}

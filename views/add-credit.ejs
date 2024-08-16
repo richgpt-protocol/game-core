@@ -215,33 +215,26 @@
     <%- include('sidebar') %>
 
     <div class="content-wrapper">
-      <form class="flex-form" method="post" action="/api/v1/campaign/create">
+      <form class="flex-form" method="post" action="/api/v1/wallet/add-credit">
         <div class="input-area">
-          <span>name: </span>
-          <input type="text" name="name" required/>
+          <span>WalletAddress: </span>
+          <input type="text" name="walletAddress" required/>
         </div>
         <div class="input-area">
-          <span>description: </span>
-          <input type="text" name="description" required/>
+          <span>Amount: </span>
+          <input type="number" name="amount" required/>
         </div>
         <div class="input-area">
-          <span>Reward per user: </span>
-          <input type="text" name="rewardPerUser" required/>
-        </div>
-        <div class="input-area">
-          <span>banner: </span>
-          <input type="text" name="banner"/>
-        </div>
-        <div class="input-area">
-          <span>Start time: </span>
-          <input type="text" name="startTime" required/>
-        </div>
-        <div class="input-area">
-          <span>End time: </span>
-          <input type="text" name="endTime" required/>
+          <span>Campaign: </span>
+          <select name="campaignId">
+            <option value="">Select a campaign (optional)</option>
+            <% data.campaigns.forEach(function(campaign) { %>
+              <option value="<%= campaign.id %>"><%= campaign.name %></option>
+            <% }); %>
+          </select>
         </div>
         
-        <button>Create</button>
+        <button>Add Credits</button>
       </form>
     </div>
   </div>

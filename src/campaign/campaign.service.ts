@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Campaign } from './entities/campaign.entity';
-import { Repository } from 'typeorm';
+import { LessThan, MoreThan, Repository } from 'typeorm';
 import { CreateCampaignDto } from './dto/campaign.dto';
 
 @Injectable()
@@ -18,8 +18,8 @@ export class CampaignService {
       campaign.description = payload.description;
       campaign.rewardPerUser = payload.rewardPerUser;
       campaign.banner = payload.banner;
-      campaign.startTime = new Date(+payload.startTime).getTime() / 1000;
-      campaign.endTime = new Date(+payload.endTime).getTime() / 1000;
+      campaign.startTime = new Date(+payload.startTime).getTime();
+      campaign.endTime = new Date(+payload.endTime).getTime();
       await this.campaignRepository.save(campaign);
 
       return;
@@ -49,5 +49,18 @@ export class CampaignService {
       currentPage: page,
       totalPages: Math.ceil(campaigns[1] / limit),
     };
+  }
+
+  async findActiveCampaigns() {
+    const currentTime = new Date().getTime() / 1000;
+
+    const campaigns = await this.campaignRepository.find({
+      where: {
+        startTime: LessThan(currentTime),
+        endTime: MoreThan(currentTime),
+      },
+    });
+
+    return campaigns;
   }
 }

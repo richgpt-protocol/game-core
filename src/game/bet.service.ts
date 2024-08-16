@@ -446,6 +446,7 @@ export class BetService {
         creditWalletTxn.txType = 'PLAY';
         creditWalletTxn.status = 'P';
         creditWalletTxn.walletId = userInfo.wallet.id;
+        creditWalletTxn.userWallet = userInfo.wallet;
         // creditWalletTxn.campaignId = 0; //TODO
 
         creditWalletTxns.push(creditWalletTxn);
