@@ -9,17 +9,28 @@ import { User } from 'src/user/entities/user.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { WalletModule } from 'src/wallet/wallet.module';
 import { UserModule } from 'src/user/user.module';
+import { Setting } from 'src/setting/entities/setting.entity';
+import { PointController } from './point.controller';
+import { PermissionModule } from 'src/permission/permission.module';
 // import { PointController } from './point.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PointTx, BetOrder, ChatLog, User, DrawResult]),
+    TypeOrmModule.forFeature([
+      PointTx,
+      BetOrder,
+      ChatLog,
+      User,
+      DrawResult,
+      Setting,
+    ]),
     SharedModule,
+    PermissionModule,
     forwardRef(() => WalletModule),
     UserModule,
   ],
   providers: [PointService],
   exports: [PointService, TypeOrmModule.forFeature([ChatLog])],
-  // controllers: [PointController],
+  controllers: [PointController],
 })
 export class PointModule {}

@@ -19,9 +19,10 @@ import { CampaignService } from 'src/campaign/campaign.service';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { CampaignModule } from 'src/campaign/campaign.module';
 import { WalletService } from 'src/wallet/wallet.service';
-import { CreditService } from 'src/wallet/services/credit.service';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
+import { WalletModule } from 'src/wallet/wallet.module';
+import { PointModule } from 'src/point/point.module';
 
 @Module({
   imports: [
@@ -44,9 +45,11 @@ import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
     PermissionModule,
     SharedModule,
     AdminModule,
+    WalletModule,
+    PointModule,
   ],
   controllers: [BackOfficeController],
-  providers: [BackOfficeService, CampaignService, WalletService, CreditService],
+  providers: [BackOfficeService, CampaignService, WalletService],
   exports: [BackOfficeService],
 })
 export class BackOfficeModule {}

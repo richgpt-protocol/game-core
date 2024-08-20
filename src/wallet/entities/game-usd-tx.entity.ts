@@ -1,4 +1,10 @@
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { WalletTx } from './wallet-tx.entity';
 import { CreditWalletTx } from './credit-wallet-tx.entity';
 
@@ -45,6 +51,6 @@ export class GameUsdTx {
   @OneToMany(() => WalletTx, (walletTx) => walletTx.gameUsdTx)
   walletTxs: WalletTx[];
 
-  @OneToMany(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.gameUsdTx)
+  @ManyToOne(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.gameUsdTx)
   creditWalletTx: CreditWalletTx;
 }

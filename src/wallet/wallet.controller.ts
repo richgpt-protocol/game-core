@@ -562,7 +562,7 @@ export class WalletController {
     try {
       const { campaignId, ...restPayload } = payload;
 
-      const creditTx = await this.creditService.addCredit({
+      await this.creditService.addCredit({
         amount: Number(payload.amount),
         ...restPayload,
         campaignId: campaignId || null, // Handle empty campaignId
@@ -571,7 +571,7 @@ export class WalletController {
       return {
         statusCode: HttpStatus.OK,
         message: 'credit added',
-        data: { creditTx },
+        data: {},
       };
     } catch (error) {
       console.error(error);

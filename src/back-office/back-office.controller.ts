@@ -7,6 +7,7 @@ import { UserRole } from 'src/shared/enum/role.enum';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { CampaignService } from 'src/campaign/campaign.service';
 import { CreditService } from 'src/wallet/services/credit.service';
+import { PointService } from 'src/point/point.service';
 
 @ApiTags('back-office')
 @Controller('back-office')
@@ -16,6 +17,7 @@ export class BackOfficeController {
     private configService: ConfigService,
     private campaignService: CampaignService,
     private creditService: CreditService,
+    private pointService: PointService,
   ) {}
 
   @Get('admin-login')
@@ -283,5 +285,16 @@ export class BackOfficeController {
         },
       };
     }
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('set-referral-prize-bonus')
+  @Render('set-referral-prize-bonus')
+  async setReferralPrizeBonus() {
+    const data = await this.pointService.getAllReferralPrizeBonus();
+    console.log(data);
+    return {
+      data,
+    };
   }
 }

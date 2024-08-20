@@ -29,7 +29,6 @@ import { CampaignModule } from './campaign/campaign.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { BackOfficeModule } from './back-office/back-office.module';
 import { ScheduleModule } from '@nestjs/schedule';
-import { DepositModule } from './deposit/deposit.module';
 import { PointModule } from './point/point.module';
 
 @Module({
@@ -61,7 +60,6 @@ import { PointModule } from './point/point.module';
     }),
     UserModule,
     SettingModule,
-    DepositModule,
     I18nModule.forRoot({
       fallbackLanguage: 'en',
       fallbacks: {

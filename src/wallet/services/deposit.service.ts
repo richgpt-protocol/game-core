@@ -805,19 +805,31 @@ export class DepositService {
   }
 
   private async getPendingGameUsdTx() {
-    return await this.gameUsdTxRepository.find({
-      where: {
-        status: 'P',
-        senderAddress: In([
+    return await this.gameUsdTxRepository
+      .createQueryBuilder('gameUsdTx')
+      .where('gameUsdTx.status = :status', { status: 'P' })
+      .andWhere('gameUsdTx.senderAddress IN (:...senderAddresses)', {
+        senderAddresses: [
           this.configService.get('DEPOSIT_BOT_ADDRESS'),
           this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
-        ]),
-        creditWalletTx: null,
-      },
-      order: {
-        id: 'ASC',
-      },
-    });
+        ],
+      })
+      .andWhere('gameUsdTx.creditWalletTx IS NULL')
+      .orderBy('gameUsdTx.id', 'ASC')
+      .getMany();
+    // return await this.gameUsdTxRepository.find({
+    //   where: {
+    //     status: 'P',
+    //     senderAddress: In([
+    //       this.configService.get('DEPOSIT_BOT_ADDRESS'),
+    //       this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
+    //     ]),
+    //     creditWalletTx: null,
+    //   },
+    //   order: {
+    //     id: 'ASC',
+    //   },
+    // });
   }
 
   private async updateGameUsdTxToFailed(tx: GameUsdTx) {

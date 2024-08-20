@@ -413,7 +413,8 @@ export class BetService {
     const totalCredits = userInfo.wallet.creditBalance;
     const walletBalance = userInfo.wallet.walletBalance;
 
-    const maxAllowedCreditAmount = this.configService.get('MAX_CREDIT_AMOUNT');
+    const maxAllowedCreditAmount =
+      this.configService.get('MAX_CREDIT_AMOUNT') || 1;
     let totalBetAmount = 0;
     let creditRemaining = totalCredits;
     let totalCreditUsed = 0;
