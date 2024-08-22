@@ -11,7 +11,7 @@ import { WebClient } from '@slack/web-api';
 @Injectable()
 export class AdminNotificationService {
   private bot: TelegramBot;
-  private tg_admins: Array<string>;
+  // private tg_admins: Array<string>;
   private TG_ADMIN_GROUP;
   private slackToken: string;
   private slackChannel: string;
@@ -28,7 +28,7 @@ export class AdminNotificationService {
   ) {
     this.TG_ADMIN_GROUP = this.configService.get('ADMIN_TG_CHAT_ID');
 
-    this.tg_admins = this.configService.get('ADMIN_TG_USERNAMES').split(',');
+    // this.tg_admins = this.configService.get('ADMIN_TG_USERNAMES').split(',');
     this.bot = new TelegramBot(
       this.configService.get('TG_ADMIN_NOTIFIER_BOT_TOKEN'),
       {

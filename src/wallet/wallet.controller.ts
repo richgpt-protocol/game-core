@@ -4,7 +4,6 @@ import {
   Controller,
   Get,
   HttpStatus,
-  InternalServerErrorException,
   Post,
   Query,
   Req,
@@ -559,23 +558,23 @@ export class WalletController {
   @SecureEJS(null, UserRole.ADMIN)
   @Post('add-credit')
   async addCredit(@Body() payload: AddCreditDto): Promise<ResponseVo<any>> {
-    try {
-      const { campaignId, ...restPayload } = payload;
+    // try {
+    const { campaignId, ...restPayload } = payload;
 
-      await this.creditService.addCredit({
-        amount: Number(payload.amount),
-        ...restPayload,
-        campaignId: campaignId || null, // Handle empty campaignId
-      });
+    await this.creditService.addCredit({
+      amount: Number(payload.amount),
+      ...restPayload,
+      campaignId: campaignId || null, // Handle empty campaignId
+    });
 
-      return {
-        statusCode: HttpStatus.OK,
-        message: 'credit added',
-        data: {},
-      };
-    } catch (error) {
-      console.error(error);
-      throw new InternalServerErrorException();
-    }
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'credit add process initiated',
+      data: {},
+    };
+    // } catch (error) {
+    //   console.error(error);
+    //   throw new InternalServerErrorException();
+    // }
   }
 }

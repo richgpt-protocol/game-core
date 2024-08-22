@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { UserWallet } from '../entities/user-wallet.entity';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, MoreThan, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
@@ -44,13 +44,13 @@ export class CreditService {
     );
   }
 
-  async getCreditBalance(userId: number): Promise<number> {
-    const userWallet = await this.userWalletRepository.findOne({
-      where: { userId },
-    });
-    if (!userWallet) throw new BadRequestException('User wallet not found');
-    return userWallet.creditBalance;
-  }
+  // async getCreditBalance(userId: number): Promise<number> {
+  //   const userWallet = await this.userWalletRepository.findOne({
+  //     where: { userId },
+  //   });
+  //   if (!userWallet) throw new BadRequestException('User wallet not found');
+  //   return userWallet.creditBalance;
+  // }
 
   async addCredit(payload: AddCreditDto) {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -113,9 +113,9 @@ export class CreditService {
       await queryRunner.rollbackTransaction();
 
       if (error instanceof BadRequestException) {
-        return new BadRequestException(error.message);
+        throw new BadRequestException(error.message);
       } else {
-        return new BadRequestException('Failed to add credit');
+        throw new BadRequestException('Failed to add credit');
       }
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
@@ -132,19 +132,22 @@ export class CreditService {
         where: { userId },
       });
       if (!userWallet) throw new BadRequestException('User wallet not found');
-      const [creditWalletTx, total] =
-        await this.creditWalletTxRepository.findAndCount({
-          where: { walletId: userWallet.id },
-          relations: ['userWallet'],
-          order: { createdDate: 'DESC' },
-          skip: (page - 1) * limit,
-          take: limit,
-        });
+      const [creditWalletTx, total] = await this.creditWalletTxRepository
+        .createQueryBuilder('creditWalletTx')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('creditWalletTx.gameUsdTx', 'gameUsdTx')
+        .orderBy('creditWalletTx.createdDate', 'DESC')
+        .where('creditWalletTx.walletId = :walletId', {
+          walletId: userWallet.id,
+        })
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getManyAndCount();
 
       const data = creditWalletTx.map((tx: CreditWalletTx) => {
         return {
           id: tx.id,
-          amount: tx.amount.toFixed(2),
+          amount: Number(tx.amount).toFixed(2),
           txType: tx.txType,
           status: tx.status,
           gameUsdTxStatus: tx.gameUsdTx[0]?.status,
@@ -202,6 +205,26 @@ export class CreditService {
       console.error(error);
       throw new BadRequestException('Failed to get credit wallet tx list');
     }
+  }
+
+  async getCreditBalance(userId: number): Promise<number> {
+    const userWallet = await this.userWalletRepository.findOne({
+      where: { userId },
+    });
+    if (!userWallet) throw new BadRequestException('User wallet not found');
+
+    const nonExpiredCreditWalletTx = await this.creditWalletTxRepository.find({
+      where: { walletId: userWallet.id, expirationDate: MoreThan(new Date()) },
+    });
+
+    const nonExpiredBalance = nonExpiredCreditWalletTx.reduce(
+      (acc, tx) => acc + tx.amount,
+      0,
+    );
+    return Math.min(
+      Number(userWallet.creditBalance),
+      Number(nonExpiredBalance),
+    );
   }
 
   private async getSigner(chainId: number, address: string): Promise<Wallet> {

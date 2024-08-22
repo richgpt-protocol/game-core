@@ -54,6 +54,7 @@ import { UserService } from 'src/user/user.service';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { MPC } from 'src/shared/mpc';
 import { Mutex } from 'async-mutex';
+import { CreditService } from 'src/wallet/services/credit.service';
 
 dotenv.config();
 
@@ -87,6 +88,7 @@ export class BetService {
     private eventEmitter: EventEmitter2,
     private readonly pointService: PointService,
     private readonly userService: UserService,
+    private readonly creditService: CreditService,
   ) {}
 
   maskingIntervalInSeconds = 120; //seconds before endTime of currentEpoch after which masking will start
@@ -239,7 +241,7 @@ export class BetService {
       } = this.validateCreditAndBalance(userInfo, payload, betOrders);
 
       await queryRunner.manager.save(creditWalletTxns);
-      walletTx.txAmount = walletBalanceUsed;
+      walletTx.txAmount = walletBalanceUsed + creditBalanceUsed;
       walletTx.betOrders = betOrders;
       await queryRunner.manager.save(walletTx);
       await queryRunner.manager.save(betOrders);
@@ -409,7 +411,7 @@ export class BetService {
     creditBalanceUsed: number;
     creditWalletTxns: CreditWalletTx[];
   } {
-    console.log(userInfo);
+    // console.log(userInfo);
     const totalCredits = userInfo.wallet.creditBalance;
     const walletBalance = userInfo.wallet.walletBalance;
 
@@ -696,8 +698,6 @@ export class BetService {
       const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
       const coreContract = Core__factory.connect(coreContractAddr, provider);
 
-      console.log(`bet without credit`);
-
       let totalAmount = 0;
       const bets = [];
       payload.map((bet) => {
@@ -958,7 +958,8 @@ export class BetService {
       //Update Points
       const xpPoints = await this.pointService.getBetPoints(
         user.id,
-        payload.gameUsdTx.amount,
+        payload.walletTx.txAmount,
+        payload.walletTx.id,
       );
       const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
         where: {
@@ -992,6 +993,7 @@ export class BetService {
         user.id,
         payload.walletTx.txAmount,
         payload.gameUsdTx.txHash,
+        payload.walletTx.id,
       );
 
       await queryRunner.commitTransaction();
@@ -1016,6 +1018,7 @@ export class BetService {
     userId: number,
     betAmount: number,
     betTxHash: string,
+    betWalletTxId: number,
   ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -1084,7 +1087,7 @@ export class BetService {
         this.configService.get('HELPER_CONTRACT_ADDRESS'),
         new Wallet(
           await MPC.retrievePrivateKey(
-            this.configService.get('DEPOSIT_BOT_ADDRESS'),
+            this.configService.get('COMMISION_DISTRIBUTOR_BOT_ADDRESS'),
           ),
           new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL')),
         ),
@@ -1097,7 +1100,6 @@ export class BetService {
         );
 
       await referralRewardOnchainTx.wait();
-
       const gameUsdTxInsertResult = await queryRunner.manager.insert(
         GameUsdTx,
         {
@@ -1184,6 +1186,7 @@ export class BetService {
     const referrerXPAmount = await this.pointService.getBetPointsReferrer(
       user,
       betAmount,
+      walletTx.id,
     );
     referrerWallet.pointBalance =
       Number(referrerWallet.pointBalance) + referrerXPAmount;

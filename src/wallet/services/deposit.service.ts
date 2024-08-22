@@ -109,7 +109,7 @@ export class DepositService {
 
       if (!userWallet) return;
 
-      if (payload.amount <= 1) {
+      if (payload.amount < 1) {
         await this.adminNotificationService.setAdminNotification(
           `Error processing deposit for wallet: ${payload.walletAddress} \n
           Minimum Deposit Amount not met. \n
@@ -325,6 +325,8 @@ export class DepositService {
         .where('user.id = :id', { id: userId })
         .getOne();
 
+      // console.log('userInfo', userInfo);
+
       if (!userInfo || userInfo.referralUserId == null) return;
 
       // const commisionAmount =
@@ -419,6 +421,7 @@ export class DepositService {
     walletTx: WalletTx,
     queryRunner: QueryRunner,
   ) {
+    console.log('handle referral deposit xp');
     // console.log('referral walletTx', walletTx)
     const referrerXp = this.pointService.getReferralDepositXp(
       Number(depositAmount),
@@ -683,7 +686,7 @@ export class DepositService {
 
       for (const tx of pendingGameUsdTx) {
         try {
-          console.log('Processing gameUSD tx', tx.id);
+          console.log('Processing gameUSD tx', tx.id, tx);
 
           if (tx.retryCount >= 5) {
             await this.updateGameUsdTxToFailed(tx);

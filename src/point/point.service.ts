@@ -35,7 +35,7 @@ export class PointService {
   ) {}
 
   getDepositPoints(depositAmount: number): { xp: number; bonusPerc: number } {
-    const baseXPPerUsd = 10;
+    const baseXPPerUsd = 1000;
     return { xp: depositAmount * baseXPPerUsd, bonusPerc: 0 }; //TODO
     // switch (depositAmount) {
     //   case 5:
@@ -75,12 +75,20 @@ export class PointService {
   async getBetPointsReferrer(
     userId: number,
     betAmount: number,
+    currentBetWalletTxId: number,
   ): Promise<number> {
-    const baseBetPointsPerUSD = 1;
-    const pointPer10s = 10;
-    const pointPer100s = 100;
-    const pointPer1000s = 1000;
-    const pointPer10000s = 10000;
+    const baseBetPointsPerUSD = 200;
+    const pointPer10s = 2_000;
+    const pointPer100s = 20_000;
+    const pointPer1000s = 200_000;
+    const pointPer10000s = 2_000_000;
+
+    const threshold = [
+      { amount: 10000, points: pointPer10000s },
+      { amount: 1000, points: pointPer1000s },
+      { amount: 100, points: pointPer100s },
+      { amount: 10, points: pointPer10s },
+    ];
 
     let betPoints = betAmount * baseBetPointsPerUSD;
 
@@ -98,47 +106,78 @@ export class PointService {
           1,
         ),
       })
+      .andWhere('betOrder.walletTxId != :currentBetWalletTxId', {
+        currentBetWalletTxId,
+      })
       .getMany();
 
-    const totalBetAmount = pastBets.reduce(
+    const currentBetOrders = await this.betOrderRepository.find({
+      where: {
+        walletTxId: currentBetWalletTxId,
+      },
+    });
+
+    const currentBetAmount = currentBetOrders.reduce(
       (acc, bet) => acc + +bet.bigForecastAmount + +bet.smallForecastAmount,
       0,
     );
 
-    if (totalBetAmount >= 10000) {
-      const noOfTenThousands = Math.floor(totalBetAmount / 10000);
+    const pastBetAmount = pastBets.reduce(
+      (acc, bet) => acc + +bet.bigForecastAmount + +bet.smallForecastAmount,
+      0,
+    );
 
-      // Add 10000 points for every 10000 USD bet.
-      // For example, if the user bet 20000 USD, he will get 20000 points.
-      // if the user bet 19999 USD, he will get 10000 points.
-      betPoints += noOfTenThousands * pointPer10000s;
-    } else if (totalBetAmount >= 1000) {
-      const noOfThousands = Math.floor(totalBetAmount / 1000);
-
-      // Add 1000 points for every 1000 USD bet.
-      // For example, if the user bet 2000 USD, he will get 2000 points.
-      // if the user bet 1999 USD, he will get 1000 points.
-      betPoints += noOfThousands * pointPer1000s;
-    } else if (totalBetAmount >= 100) {
-      const noOfHundreds = Math.floor(totalBetAmount / 100);
-
-      // Add 100 points for every 100 USD bet.
-      // For example, if the user bet 200 USD, he will get 200 points.
-      // if the user bet 199 USD, he will get 100 points.
-      betPoints += noOfHundreds * pointPer100s;
-    } else if (totalBetAmount >= 10) {
-      const noOfTens = Math.floor(totalBetAmount / 10);
-
-      // Add 10 points for every 10 USD bet.
-      // For example, if the user bet 50 USD, he will get 50 points.
-      // if the user bet 11 USD, he will get 10 points.
-      betPoints += noOfTens * pointPer10s;
+    const totalBetAmount = pastBetAmount + currentBetAmount;
+    for (const { amount, points } of threshold) {
+      if (
+        pastBetAmount < amount &&
+        currentBetAmount + pastBetAmount >= amount
+      ) {
+        //no of 10s, 100s, 1000s, 10000s
+        const noOfAmounts = Math.floor(totalBetAmount / amount);
+        betPoints += noOfAmounts * points;
+        break;
+      }
     }
+
+    // if (totalBetAmount >= 10000) {
+    //   const noOfTenThousands = Math.floor(totalBetAmount / 10000);
+
+    //   // Add 10000 points for every 10000 USD bet.
+    //   // For example, if the user bet 20000 USD, he will get 20000 points.
+    //   // if the user bet 19999 USD, he will get 10000 points.
+    //   betPoints += noOfTenThousands * pointPer10000s;
+    // } else if (totalBetAmount >= 1000) {
+    //   const noOfThousands = Math.floor(totalBetAmount / 1000);
+
+    //   // Add 1000 points for every 1000 USD bet.
+    //   // For example, if the user bet 2000 USD, he will get 2000 points.
+    //   // if the user bet 1999 USD, he will get 1000 points.
+    //   betPoints += noOfThousands * pointPer1000s;
+    // } else if (totalBetAmount >= 100) {
+    //   const noOfHundreds = Math.floor(totalBetAmount / 100);
+
+    //   // Add 100 points for every 100 USD bet.
+    //   // For example, if the user bet 200 USD, he will get 200 points.
+    //   // if the user bet 199 USD, he will get 100 points.
+    //   betPoints += noOfHundreds * pointPer100s;
+    // } else if (totalBetAmount >= 10) {
+    //   const noOfTens = Math.floor(totalBetAmount / 10);
+
+    //   // Add 10 points for every 10 USD bet.
+    //   // For example, if the user bet 50 USD, he will get 50 points.
+    //   // if the user bet 11 USD, he will get 10 points.
+    //   betPoints += noOfTens * pointPer10s;
+    // }
 
     return betPoints;
   }
 
-  async getBetPoints(userId: number, betAmount: number): Promise<number> {
+  async getBetPoints(
+    userId: number,
+    betAmount: number,
+    currentBetWalletTxId: number,
+  ): Promise<number> {
     const baseBetPointsPerUSD = 1000;
     const pointPer10s = 10_000;
     const pointPer100s = 100_000;
@@ -168,15 +207,34 @@ export class PointService {
           1,
         ),
       })
+      .andWhere('betOrder.walletTxId != :currentBetWalletTxId', {
+        currentBetWalletTxId,
+      })
       .getMany();
 
-    const totalBetAmount = pastBets.reduce(
+    const currentBets = await this.betOrderRepository.find({
+      where: {
+        walletTxId: currentBetWalletTxId,
+      },
+    });
+
+    const currentBetAmount = currentBets.reduce(
       (acc, bet) => acc + +bet.bigForecastAmount + +bet.smallForecastAmount,
       0,
     );
 
+    const pastBetAmount = pastBets.reduce(
+      (acc, bet) => acc + +bet.bigForecastAmount + +bet.smallForecastAmount,
+      0,
+    );
+
+    const totalBetAmount = pastBetAmount + currentBetAmount;
+
     for (const { amount, points } of threshold) {
-      if (totalBetAmount >= amount) {
+      if (
+        pastBetAmount < amount &&
+        currentBetAmount + pastBetAmount >= amount
+      ) {
         //no of 10s, 100s, 1000s, 10000s
         const noOfAmounts = Math.floor(totalBetAmount / amount);
         betPoints += noOfAmounts * points;
@@ -222,54 +280,71 @@ export class PointService {
   }
 
   getReferralDepositXp(depositAmount: number): number {
-    const percentage = 0.2; //20%
-    return depositAmount * percentage;
+    // const percentage = 0.2; //20%
+    // let amount = depositAmount * percentage;
+    const baseXpPerUsdDeposit = 200;
+    const amount = depositAmount * baseXpPerUsdDeposit;
+    return amount;
   }
 
-  async getReferralBetXp(
-    referrerId: number,
-    betAmount: number,
-  ): Promise<number> {
-    const baseReferralBetXpPerUSD = 200;
-    const totalXp = betAmount * baseReferralBetXpPerUSD;
+  // async getReferralBetXp(
+  //   referrerId: number,
+  //   betAmount: number,
+  //   currentBetWalletTxId: number,
+  // ): Promise<number> {
+  //   const baseReferralBetXpPerUSD = 200;
+  //   const totalXp = betAmount * baseReferralBetXpPerUSD;
 
-    const refferedusers = await this.userRepository
-      .createQueryBuilder('user')
-      .select('user.id')
-      .leftJoin('user.referralUser', 'referralUser')
-      .where('referralUser.id = :referrerId', { referrerId })
-      .getMany();
+  //   const refferedusers = await this.userRepository
+  //     .createQueryBuilder('user')
+  //     .select('user.id')
+  //     .leftJoin('user.referralUser', 'referralUser')
+  //     .where('referralUser.id = :referrerId', { referrerId })
+  //     .getMany();
 
-    const pastBetsOfReferredUsers = await this.betOrderRepository
-      .createQueryBuilder('betOrder')
-      .innerJoin('betOrder.walletTx', 'walletTx')
-      .innerJoin('walletTx.userWallet', 'userWallet')
-      .where('userWallet.userId IN (:...userIds)', {
-        userIds: refferedusers.map((user) => user.id),
-      })
-      .andWhere('walletTx.status = :status', { status: 'S' })
-      .andWhere('betOrder.createdDate >= :date', {
-        date: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
-      })
-      .getMany();
+  //   const pastBetsOfReferredUsers = await this.betOrderRepository
+  //     .createQueryBuilder('betOrder')
+  //     .innerJoin('betOrder.walletTx', 'walletTx')
+  //     .innerJoin('walletTx.userWallet', 'userWallet')
+  //     .where('userWallet.userId IN (:...userIds)', {
+  //       userIds: refferedusers.map((user) => user.id),
+  //     })
+  //     .andWhere('walletTx.status = :status', { status: 'S' })
+  //     .andWhere('betOrder.createdDate >= :date', {
+  //       date: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
+  //     })
+  //     .andWhere('betOrder.walletTxId != :currentBetWalletTxId', {
+  //       currentBetWalletTxId,
+  //     })
+  //     .getMany();
 
-    const totalBetAmount = pastBetsOfReferredUsers.reduce(
-      (acc, bet) => acc + +bet.bigForecastAmount + +bet.smallForecastAmount,
-      0,
-    );
+  //   const currentBetOder = await this.betOrderRepository.find({
+  //     where: {
+  //       walletTxId: currentBetWalletTxId,
+  //     },
+  //   });
+  //   const currentBetAmount = currentBetOder.reduce(
+  //     (acc, bet) => acc + +bet.bigForecastAmount + +bet.smallForecastAmount,
+  //     0,
+  //   );
 
-    if (totalBetAmount >= 10000) {
-      return totalXp + 20_000_000;
-    } else if (totalBetAmount >= 1000) {
-      return totalXp + 200_000;
-    } else if (totalBetAmount >= 100) {
-      return totalXp + 20_000;
-    } else if (totalBetAmount >= 10) {
-      return totalXp + 2000;
-    }
+  //   const totalBetAmount = pastBetsOfReferredUsers.reduce(
+  //     (acc, bet) => acc + +bet.bigForecastAmount + +bet.smallForecastAmount,
+  //     0,
+  //   );
 
-    return totalXp;
-  }
+  //   if (totalBetAmount >= 10000) {
+  //     return totalXp + 20_000_000;
+  //   } else if (totalBetAmount >= 1000) {
+  //     return totalXp + 200_000;
+  //   } else if (totalBetAmount >= 100) {
+  //     return totalXp + 20_000;
+  //   } else if (totalBetAmount >= 10) {
+  //     return totalXp + 2000;
+  //   }
+
+  //   return totalXp;
+  // }
 
   async setReferralPrizeBonus(data: SetReferralPrizeBonusDto): Promise<void> {
     await this.settingRepository.upsert(
