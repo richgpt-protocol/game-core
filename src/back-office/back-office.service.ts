@@ -4,6 +4,7 @@ import { Admin } from 'src/admin/entities/admin.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { Game } from 'src/game/entities/game.entity';
+import { PrizeAlgo } from 'src/game/entities/prize-algo.entity';
 import { User } from 'src/user/entities/user.entity';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
@@ -38,6 +39,8 @@ export class BackOfficeService {
     private gameRepository: Repository<Game>,
     @InjectRepository(DrawResult)
     private drawResultRepository: Repository<DrawResult>,
+    @InjectRepository(PrizeAlgo)
+    private prizeAlgoRepository: Repository<PrizeAlgo>,
   ) {}
 
   async getUsers(page: number = 1, limit: number = 10): Promise<any> {
@@ -549,5 +552,35 @@ export class BackOfficeService {
     return {
       data: resultByDate,
     };
+  }
+
+  async getCurrentPrizeAlgo() {
+    const prizeAlgo = await this.prizeAlgoRepository.findOne({
+      where: { id: 1 }
+    });
+
+    const game = await this.gameRepository.findOne({
+      where: { isClosed: false },
+    })
+
+    return {
+      data: prizeAlgo,
+      currentEpoch: game.epoch,
+    };
+  }
+
+  async updatePrizeAlgo(prizeAlgo: PrizeAlgo) {
+    const currentPrizeAlgo = await this.prizeAlgoRepository.findOne({
+      where: { id: 1 },
+    });
+
+    if (!currentPrizeAlgo) {
+      throw new InternalServerErrorException('Prize Algo not found');
+    }
+
+    await this.prizeAlgoRepository.save({
+      ...currentPrizeAlgo,
+      ...prizeAlgo,
+    });
   }
 }

@@ -15,6 +15,7 @@ import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { Game } from 'src/game/entities/game.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
+import { PrizeAlgo } from 'src/game/entities/prize-algo.entity';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { DrawResult } from 'src/game/entities/draw-result.entity';
       BetOrder,
       Game,
       DrawResult,
+      PrizeAlgo,
     ]),
     ConfigModule,
     PermissionModule,
