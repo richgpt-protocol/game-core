@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Back Office | FUYO</title>
+    <link href="https://fonts.googleapis.com/css?family=Inter" rel="stylesheet">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="title" content="Back Office | FUYO"/>
+    <meta name="description" content="Back Office | FUYO"/>
+    <meta property="og:title" content="Back Office | FUYO">
+    <meta content="Back Office | FUYO" property="og:description">
+    <meta content="Back Office | FUYO" property="twitter:description">
+    <meta content="https://gateway.pinata.cloud/ipfs/QmT6YbMJ7bnW2p5QYWNbNDujNSGtNceqqFrxH12mW4bGDa?_gl=1*1iy25mi*_ga*MTU0MzIwMDk3MC4xNjc3NjIxMDYx*_ga_5RMPXG14TE*MTY3NzYyMTA2MS4xLjEuMTY3NzYyMTMzOS4zOS4wLjA." property="twitter:image">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://gateway.pinata.cloud/ipfs/QmT6YbMJ7bnW2p5QYWNbNDujNSGtNceqqFrxH12mW4bGDa?_gl=1*1iy25mi*_ga*MTU0MzIwMDk3MC4xNjc3NjIxMDYx*_ga_5RMPXG14TE*MTY3NzYyMTA2MS4xLjEuMTY3NzYyMTMzOS4zOS4wLjA.">
+    <meta name="twitter:title" content="Back Office | FUYO">
+    
+    <link rel="icon" type="image/x-icon" href="/images/favicon.ico">
+    <link rel="manifest" href="/images/manifest.json" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/logo192.png">
+  </head>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+        color: #101828;
+        font-family: 'Inter', seif;
+        font-style: normal;
+        height: 100%;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: cover;
+        position: relative;
+        display: block;
+        margin: 0;
+        padding: 0;
+        /* Rectangle 38 */
+    }
+
+    .title {
+        color: #0C9383;
+        font-weight: 600;
+        font-size: 16px;
+        line-height: 24px;
+    }
+
+    .img {
+        width: 80px;
+        margin: auto;
+        display: block;
+    }
+
+    .container {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    .child-container {
+        width: 500px;
+        padding: 15px;
+        /* backdrop-filter: blur(20px); */
+        border-radius: 32px;
+        text-align: center;
+    }
+
+    .header-1 {
+        font-weight: 700;
+        font-size: 20px;
+        text-align: center;
+        letter-spacing: -0.02em;
+        color: #667085;
+    }
+
+    .content {
+        font-style: normal;
+        font-weight: 400;
+        font-size: 20px;
+        line-height: 30px;
+        text-align: center;
+        color: #667085;
+        width: 480px;
+        display: block;
+        margin: auto;
+    }
+
+    a {
+        color: #43D9BB;
+        text-decoration: none;
+    }
+
+    #footer {
+        backdrop-filter: brightness(0.1);
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+    }
+
+    #footer p {
+        font-style: normal;
+        font-weight: 400;
+        font-size: 16px;
+        text-align: center;
+        color: #98A2B3;
+    }
+
+    main {
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .table-area {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      max-width: 700px;
+    }
+    .table-area .wrapper {
+      border-radius: 8px;
+      border: 1px solid #000;
+      background: #F0EEEE;
+      padding: 6px;
+    }
+    .table-area table {
+      width: 100%;
+      border-radius: 8px;
+      background: #F0EEEE;
+      border-collapse: collapse;
+    }
+    .table-area thead {
+      background-color: #000;
+      border: 1px solid #000;
+      color: #fff;
+    }
+    .table-area tbody {
+      background-color: #fff;
+    }
+    .table-area th, td {
+      padding: 12px 6px;
+      text-align: center;
+    }
+
+    .content-wrapper {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #FEEE5B;
+      padding-top: 26px;
+      padding-bottom: 26px;
+    }
+
+    @media screen and (max-width: 500px) {
+        body {
+            background-image: url('/images/app.bg.svg');
+            -webkit-background-size: cover;
+            -moz-background-size: cover;
+            -o-background-size: cover;
+            background-size: cover;
+            position: relative;
+            
+            margin: 0;
+            padding: 0;
+            
+        }
+
+        .bg {
+            width: 100%;
+            height: 100%;
+            bottom: 0;
+            position: absolute;
+            background: url('/images/not-found-background-mobile.png') no-repeat center bottom fixed;
+                        -webkit-background-size: contain;
+            -moz-background-size: contain;
+            -o-background-size: contain;
+            background-size: contain;
+        }
+
+        .content {
+            width: 90%;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            font-size: 16px;
+            line-height: 24px;
+        }
+
+        .container {
+            margin-top: 10%;
+            backdrop-filter: blur(20px);
+        }
+
+        .child-container {
+            width: unset;
+        }
+
+        .header-1 {
+          font-size: 16px;
+        }
+
+        #footer {
+            backdrop-filter: brightness(0.1);
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            height: auto;
+        }
+
+        .content-wrapper {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+
+    }
+  </style>
+<body>
+  <div class="container">
+    <%- include('sidebar') %>
+    <div class="content-wrapper">
+
+      <div>
+        <span>last updated date:</span>
+        <span><%- data.currentPa.updatedDate %></span>
+      </div>
+      <div>
+        <span>last updated by:</span>
+        <span><%- data.currentPa.updatedBy %></span>
+      </div>
+      <div>
+        <span>current epoch:</span>
+        <span><%- data.currentPa.ce %></span>
+      </div>
+      <br />
+
+      <form id="updateForm" method="post" action="/back-office/update-pa">
+
+        <div>
+          <span>mtp</span>
+          <input name="mtp" type="text" value="<%- data.currentPa.mtp %>" />
+        </div>
+        <div>
+          <span>mtfpc</span>
+          <input name="mtfpc" type="text" value="<%- data.currentPa.mtfpc %>" />
+        </div>
+        <div>
+          <span>mtspc</span>
+          <input name="mtspc" type="text" value="<%- data.currentPa.mtspc %>" />
+        </div>
+        <div>
+          <span>mttpc</span>
+          <input name="mttpc" type="text" value="<%- data.currentPa.mttpc %>" />
+        </div>
+        <div>
+          <span>mtsppc</span>
+          <input name="mtsppc" type="text" value="<%- data.currentPa.mtsppc %>" />
+        </div>
+        <div>
+          <span>mtcpc</span>
+          <input name="mtcpc" type="text" value="<%- data.currentPa.mtcpc %>" />
+        </div>
+        <div>
+          <span>mtsc</span>
+          <input name="mtsc" type="text" value="<%- data.currentPa.mtsc %>" />
+        </div>
+        <div>
+          <span>mtee</span>
+          <input name="mtee" type="text" value="<%- data.currentPa.mtee %>" />
+        </div>
+        <br />
+
+        <div>
+          <span>lfp</span>
+          <input name="lfp" type="text" value="<%- data.currentPa.lfp %>" />
+        </div>
+        <div>
+          <span>lfrl</span>
+          <input name="lfrl" type="text" value="<%- data.currentPa.lfrl %>" />
+        </div>
+        <div>
+          <span>lfse</span>
+          <input name="lfse" type="text" value="<%- data.currentPa.lfse %>" />
+        </div>
+        <div>
+          <span>lfee</span>
+          <input name="lfee" type="text" value="<%- data.currentPa.lfee %>" />
+        </div>
+        <br />
+
+        <div>
+          <span>fnp</span>
+          <input name="fnp" type="text" value="<%- data.currentPa.fnp %>" />
+        </div>
+        <div>
+          <span>fnnp</span>
+          <input name="fnnp" type="text" value="<%- data.currentPa.fnnp %>" />
+        </div>
+        <div>
+          <span>fni</span>
+          <input name="fni" type="text" value="<%- data.currentPa.fni %>" />
+        </div>
+        <div>
+          <span>fnse</span>
+          <input name="fnse" type="text" value="<%- data.currentPa.fnse %>" />
+        </div>
+        <div>
+          <span>fnee</span>
+          <input name="fnee" type="text" value="<%- data.currentPa.fnee %>" />
+        </div>
+        <br />
+
+        <div>
+          <span>app</span>
+          <input name="app" type="text" value="<%- data.currentPa.app %>" />
+        </div>
+        <div>
+          <span>afp</span>
+          <input name="afp" type="text" value="<%- data.currentPa.afp %>" />
+        </div>
+        <div>
+          <span>asp</span>
+          <input name="asp" type="text" value="<%- data.currentPa.asp %>" />
+        </div>
+        <div>
+          <span>atp</span>
+          <input name="atp" type="text" value="<%- data.currentPa.atp %>" />
+        </div>
+        <div>
+          <span>aspp</span>
+          <input name="aspp" type="text" value="<%- data.currentPa.aspp %>" />
+        </div>
+        <div>
+          <span>asppc</span>
+          <input name="asppc" type="text" value="<%- data.currentPa.asppc %>" />
+        </div>
+        <div>
+          <span>acp</span>
+          <input name="acp" type="text" value="<%- data.currentPa.acp %>" />
+        </div>
+        <div>
+          <span>acpc</span>
+          <input name="acpc" type="text" value="<%- data.currentPa.acpc %>" />
+        </div>
+        <div>
+          <span>apse</span>
+          <input name="apse" type="text" value="<%- data.currentPa.apse %>" />
+        </div>
+        <div>
+          <span>apee</span>
+          <input name="apee" type="text" value="<%- data.currentPa.apee %>" />
+        </div>
+        <br />
+        
+        <button>update</button>
+      </form>
+      
+    </div>
+    </div>
+  </div>
+
+  <div class="bg"></div>
+  <div class="bg"></div>
+  <div id="footer">
+    <p>&#169; FUYO 2024. All Rights Reserved.</p>
+  </div>
+</body>
+</html>
