@@ -734,22 +734,22 @@ export class BetService {
       parseUnits(totalBetAmount.toString(), 18),
     );
 
-    const gasLimit = await helperContract
-      .connect(userSigner)
-      .betWithCredit.estimateGas(betWithCreditParams);
-    const tx = await helperContract
-      .connect(userSigner)
-      .betWithCredit(betWithCreditParams, {
-        gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
-      });
+    // const gasLimit = await helperContract
+    //   .connect(userSigner)
+    //   .betWithCredit.estimateGas(betWithCreditParams);
+    // const tx = await helperContract
+    //   .connect(userSigner)
+    //   .betWithCredit(betWithCreditParams, {
+    //     gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
+    //   });
 
-    this.eventEmitter.emit(
-      'gas.service.reload',
-      await helperSigner.getAddress(),
-      Number(tx.chainId),
-    );
+    // this.eventEmitter.emit(
+    //   'gas.service.reload',
+    //   await helperSigner.getAddress(),
+    //   Number(tx.chainId),
+    // );
 
-    return tx;
+    // return tx;
   }
 
   private async _betWithoutCredit(payload: BetOrder[], userSigner, provider) {
