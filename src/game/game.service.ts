@@ -123,9 +123,17 @@ export class GameService {
           });
         }
       }
+      const walletTx = await this.walletTxRepository
+        .createQueryBuilder('walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .where('walletTx.id = :id', { id: betOrders[0].walletTxId })
+        .getOne();
       const params: IHelper.BetLastMinuteParamsStruct[] = [];
-      for (let userAddress in userBets) {
+      for (const userAddress in userBets) {
         params.push({
+          uid: walletTx.userWallet.user.uid,
+          ticketId: betOrders[0].walletTxId,
           user: userAddress,
           bets: userBets[userAddress],
         })
