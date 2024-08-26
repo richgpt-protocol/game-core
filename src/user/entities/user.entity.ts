@@ -25,8 +25,20 @@ export class User {
   })
   uid: string;
 
-  @Column()
+  @Column({
+    nullable: true,
+  })
   phoneNumber: string;
+
+  @Column({
+    nullable: true,
+  })
+  tgUsername: string;
+
+  @Column({
+    nullable: true,
+  })
+  tgId: number;
 
   @Column({ nullable: true })
   referralCode: string;
@@ -36,7 +48,7 @@ export class User {
       'A - active, I - inactive, S - Suspended, T - Terminated, U - Unverified, P - Pending',
   })
   // active - active account
-  // inactive - 
+  // inactive -
   // suspended - 3 times wrong otp input
   // terminated -
   // unverified - sign up but not yet verified via otp
@@ -78,6 +90,7 @@ export class User {
 
   @Column({
     comment: 'SMS, TELEGRAM, WHATSAPP',
+    nullable: true,
   })
   otpMethod: string;
 

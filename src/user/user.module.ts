@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -15,6 +15,8 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
+import { AuthService } from 'src/auth/auth.service';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
   imports: [
@@ -24,16 +26,17 @@ import { Notification } from 'src/notification/entities/notification.entity';
       ReferralTx,
       WalletTx,
       Notification,
-      UserNotification
+      UserNotification,
     ]),
     AuditLogModule,
+    forwardRef(() => AuthModule),
     PermissionModule,
     SharedModule,
     AdminModule,
     SseModule,
     CacheModule.register(),
   ],
-  providers: [UserService, WalletService],
+  providers: [UserService, WalletService, AuthService],
   controllers: [UserController],
   exports: [UserService],
 })
