@@ -1,11 +1,15 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import {Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
-import { GetUsersDto, RegisterUserDto, SignInDto } from './dto/register-user.dto';
+import {
+  GetUsersDto,
+  RegisterUserDto,
+  SignInDto,
+} from './dto/register-user.dto';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto'
+import * as crypto from 'crypto';
 import { RandomUtil } from 'src/shared/utils/random.util';
 import { UserStatus } from 'src/shared/enum/status.enum';
 import { Provider } from 'src/shared/enum/provider.enum';
@@ -78,7 +82,8 @@ export class UserService {
   }
 
   async findOneWithoutHiddenFields(id) {
-    if (!id) throw new Error('UserService.findOneWithoutHiddenFields() - id is null');
+    if (!id)
+      throw new Error('UserService.findOneWithoutHiddenFields() - id is null');
     return await this.userRepository.findOneBy({
       id,
     });
@@ -172,11 +177,11 @@ export class UserService {
       where: { id: userId },
       relations: {
         wallet: true,
-      }
+      },
     });
 
     {
-      const {id, updatedDate, userId, ...wallet} = result.wallet;
+      const { id, updatedDate, userId, ...wallet } = result.wallet;
       result.wallet = wallet as UserWallet;
     }
 
@@ -185,7 +190,9 @@ export class UserService {
 
   async register(payload: RegisterUserDto) {
     // check if phone exist
-    let user = await this.userRepository.findOneBy({ phoneNumber: payload.phoneNumber });
+    let user = await this.userRepository.findOneBy({
+      phoneNumber: payload.phoneNumber,
+    });
     if (user && user.isMobileVerified) {
       // user && !user.isMobileVerified means user register but never success verified via otp
       return { error: 'phone number exist', data: null };
@@ -237,7 +244,6 @@ export class UserService {
           wallet: null,
         });
         await this.userRepository.save(user);
-
       } else {
         // user register but never success verified via otp
         // update user otpMethod & referralUserId
@@ -248,11 +254,13 @@ export class UserService {
       }
 
       // pass to handleGenerateOtpEvent() to generate otp and send to user
-      this.eventEmitter.emit('user.service.otp', { userId: user.id, phoneNumber: user.phoneNumber });
+      this.eventEmitter.emit('user.service.otp', {
+        userId: user.id,
+        phoneNumber: user.phoneNumber,
+      });
 
       // return user record
       return { error: null, data: user };
-
     } catch (err) {
       return { error: err.message, data: null };
     }
@@ -260,7 +268,9 @@ export class UserService {
 
   async signIn(payload: SignInDto) {
     // check if user exist
-    const user = await this.userRepository.findOneBy({ phoneNumber: payload.phoneNumber });
+    const user = await this.userRepository.findOneBy({
+      phoneNumber: payload.phoneNumber,
+    });
     if (!user) {
       return { error: 'user.WRONG_PHONE_NUMBER', data: null };
     }
@@ -307,7 +317,10 @@ export class UserService {
     await this.userRepository.save(user);
 
     // pass to handleGenerateOtpEvent() to generate and send otp
-    this.eventEmitter.emit('user.service.otp', { userId: user.id, phoneNumber: user.phoneNumber });
+    this.eventEmitter.emit('user.service.otp', {
+      userId: user.id,
+      phoneNumber: user.phoneNumber,
+    });
 
     return { error: null, data: user };
   }
@@ -322,8 +335,11 @@ export class UserService {
     try {
       // generate otp, update user record & send otp to user
       // const code = RandomUtil.generateRandomNumber(6);
-      let code = ''
-      if (process.env.APP_ENV === 'dev' && payload.phoneNumber === '+6587654321') {
+      let code = '';
+      if (
+        process.env.APP_ENV === 'dev' &&
+        payload.phoneNumber === '+6587654321'
+      ) {
         // temporarily for testing purpose
         code = '123456';
       } else {
@@ -335,13 +351,19 @@ export class UserService {
       });
       const phoneNumber = payload.phoneNumber ?? user.phoneNumber;
       // await this.smsService.sendUserRegistrationOTP(phoneNumber, user.otpMethod, code);
-      if (process.env.APP_ENV === 'dev' && payload.phoneNumber === '+6587654321') {
+      if (
+        process.env.APP_ENV === 'dev' &&
+        payload.phoneNumber === '+6587654321'
+      ) {
         // temporarily for testing purpose
         // do nothing
       } else {
-        await this.smsService.sendUserRegistrationOTP(phoneNumber, user.otpMethod, code);
+        await this.smsService.sendUserRegistrationOTP(
+          phoneNumber,
+          user.otpMethod,
+          code,
+        );
       }
-
     } catch (err) {
       // inform admin for failed transaction
       await this.adminNotificationService.setAdminNotification(
@@ -465,16 +487,14 @@ export class UserService {
       await queryRunner.connect();
       await queryRunner.startTransaction();
       try {
-
         // generate on-chain wallet
-        const walletAddress = await MPC.createWallet()
+        const walletAddress = await MPC.createWallet();
 
         // create userWallet record
         const userWallet = this.userWalletRepository.create({
           walletBalance: 0,
           creditBalance: 0,
           walletAddress,
-          redeemableBalance: 0,
           pointBalance: 0,
           userId: user.id,
         });
@@ -483,9 +503,9 @@ export class UserService {
         // update user
         user.wallet = userWallet;
         // generate user own referral code
-        user.referralCode = this.generateReferralCode(user.id)
+        user.referralCode = this.generateReferralCode(user.id);
         // create unique uid for user
-        user.uid = this.generateNumericUID()
+        user.uid = this.generateNumericUID();
         user.status = UserStatus.ACTIVE;
         user.isMobileVerified = true;
         user.updatedBy = UtilConstant.SELF;
@@ -519,8 +539,6 @@ export class UserService {
           },
         );
 
-        
-
         // // Temporary hide
         // await this.emailService.sendWelcomeEmail(
         //   UserRole.USER,
@@ -530,10 +548,9 @@ export class UserService {
         // );
 
         await queryRunner.commitTransaction();
-          
       } catch (err) {
         await queryRunner.rollbackTransaction();
-        
+
         // update user record
         user.status = UserStatus.PENDING;
         user.updatedBy = UtilConstant.SELF;
@@ -550,7 +567,6 @@ export class UserService {
           true,
         );
         return { error: err.message, data: null };
-
       } finally {
         await queryRunner.release();
       }
@@ -647,26 +663,29 @@ export class UserService {
       type: _notification.type,
       title: _notification.title,
       message: _notification.message,
-    })
+    });
     if (_notification.walletTxId) {
-      notification.walletTx = await this.walletTxRepository.findOneBy({ id: _notification.walletTxId });
+      notification.walletTx = await this.walletTxRepository.findOneBy({
+        id: _notification.walletTxId,
+      });
     }
     await this.notificationRepository.save(notification);
 
     const userNotification = this.userNotificationRepository.create({
       user: await this.userRepository.findOneBy({ id: userId }),
       notification: notification,
-    })
+    });
     await this.userNotificationRepository.save(userNotification);
   }
 
   async updateUserNotification(userId: number) {
-    await this.userNotificationRepository.createQueryBuilder()
+    await this.userNotificationRepository
+      .createQueryBuilder()
       .update()
       .set({ isRead: true, readDateTime: new Date() })
-      .where("user = :userId", { userId: userId })
-      .andWhere("isRead = :isRead", { isRead: false })
-      .execute()
+      .where('user = :userId', { userId: userId })
+      .andWhere('isRead = :isRead', { isRead: false })
+      .execute();
   }
 
   async updateOtpMethod(userId: number, otpMethod: string) {
@@ -690,11 +709,11 @@ export class UserService {
       take: count,
     });
 
-    return referralTxs.map(referralTx => {
+    return referralTxs.map((referralTx) => {
       return {
         uid: referralTx.user.uid,
         rewardAmount: referralTx.rewardAmount,
-      }
+      };
     });
   }
 
@@ -714,23 +733,23 @@ export class UserService {
       referralUserId,
       ...referrer
     } = await this.userRepository.findOneBy({ referralCode: code });
-    return referrer
+    return referrer;
   }
 
   generateNumericUID(): string {
     // Generate a random number and a timestamp
-    let randomComponent = crypto.randomBytes(4).readUInt32BE(0);  // 4 bytes to uint
-    let timeComponent = Math.floor(Date.now() / 1000);  // Current timestamp in seconds
+    const randomComponent = crypto.randomBytes(4).readUInt32BE(0); // 4 bytes to uint
+    const timeComponent = Math.floor(Date.now() / 1000); // Current timestamp in seconds
 
     // Combine components
-    let combined = `${timeComponent}${randomComponent}`;
+    const combined = `${timeComponent}${randomComponent}`;
 
     // Convert to a large number and slice to ensure specific length
-    let hash = crypto.createHash('sha256').update(combined).digest('hex');
-    let bigIntHash = BigInt('0x' + hash);
+    const hash = crypto.createHash('sha256').update(combined).digest('hex');
+    const bigIntHash = BigInt('0x' + hash);
 
     // Convert to string and take the last 10 digits for the UID
-    let uid = bigIntHash.toString().slice(-10);
+    const uid = bigIntHash.toString().slice(-10);
 
     return uid;
   }
