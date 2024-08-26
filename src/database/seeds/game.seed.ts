@@ -47,5 +47,46 @@ export default class CreateGames implements Seeder {
       // end date is 1 hour to whole hour(endHour:00:00) after startDate
       endDate.setUTCHours(startDate.getUTCHours() + 1, 0, 0, 0);
     }
+
+    // set default prize algo
+    await dataSource
+        .createQueryBuilder()
+        .insert()
+        .into('prize_algo')
+        .values([{
+          updatedBy: 'seeder',
+          // max ticket
+          maxTicketPriority: null,
+          maxTicketFirstPrizeCount: null,
+          maxTicketSecondPrizeCount: null,
+          maxTicketThirdPrizeCount: null,
+          maxTicketSpecialPrizeCount: null,
+          maxTicketConsolationPrizeCount: null,
+          maxTicketStartEpoch: null,
+          maxTicketEndEpoch: null,
+          // least first
+          leastFirstPriority: 1,
+          leastFirstRandomLevel: 2,
+          leastFirstStartEpoch: null,
+          leastFirstEndEpoch: null,
+          // fixed number
+          fixedNumberPriority: null,
+          fixedNumberNumberPair: '8888',
+          fixedNumberIndex: 0,
+          fixedNumberStartEpoch: null,
+          fixedNumberEndEpoch: null,
+          // allow prize
+          allowPrizePriority: null,
+          allowFirstPrize: true,
+          allowSecondPrize: true,
+          allowThirdPrize: true,
+          allowSpecialPrize: true,
+          allowSpecialPrizeCount: null,
+          allowConsolationPrize: true,
+          allowConsolationPrizeCount: null,
+          allowPrizeStartEpoch: null,
+          allowPrizeEndEpoch: null,
+        }])
+        .execute();
   }
 }
