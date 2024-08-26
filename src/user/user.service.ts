@@ -4,6 +4,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
 import {
   GetUsersDto,
+<<<<<<< HEAD
+=======
+  LoginWithTelegramDTO,
+>>>>>>> 89b2420 (add login with telegram flow)
   RegisterUserDto,
   SignInDto,
 } from './dto/register-user.dto';
@@ -266,6 +270,243 @@ export class UserService {
     }
   }
 
+  async validateSignInWithTelegram(tgId: number, hash: string) {
+    //TODO validate telegram hash
+
+    const user = await this.userRepository.findOneBy({ tgId });
+    if (!user) {
+      return { error: 'ACCOUNT_DOESNT_EXISTS', data: null };
+    }
+
+    // check user status
+    switch (user.status) {
+      case UserStatus.INACTIVE:
+        return {
+          error: 'user.ACCOUNT_INACTIVE',
+        };
+      case UserStatus.SUSPENDED:
+        return {
+          error: 'user.ACCOUNT_SUSPEND',
+          args: {
+            id: 1,
+            supportEmail: this.cacheSettingService.get(
+              SettingEnum.SUPPORT_CONTACT_EMAIL,
+            ),
+          },
+        };
+      case UserStatus.TERMINATED:
+        return {
+          error: 'user.ACCOUNT_TERMINATED',
+        };
+      case UserStatus.UNVERIFIED:
+        return {
+          error: 'user.ACCOUNT_UNVERIFIED',
+        };
+      case UserStatus.PENDING:
+        return {
+          error: 'user.ACCOUNT_PENDING',
+        };
+    }
+
+    return { error: null, data: user };
+  }
+
+  async signInWithTelegram(tgId: number) {
+    // fetch user record
+    const user = await this.userRepository
+      .createQueryBuilder('row')
+      .select('row')
+      .addSelect('row.verificationCode')
+      .addSelect('row.referralUser')
+      .addSelect('row.wallet')
+      .addSelect('row.loginAttempt')
+      .where({
+        tgId: tgId,
+      })
+      .getOne();
+
+    // check if user exist
+    if (!user) {
+      return { error: 'invalid phone number', data: null };
+    }
+    // check if user login attempt exceed 3 times
+    if (user.loginAttempt >= 3) {
+      await this.update(user.id, {
+        status: UserStatus.SUSPENDED,
+      });
+      return {
+        error: 'user.EXCEED_LOGIN_ATTEMPT',
+      };
+    }
+
+    // update user
+    user.verificationCode = null;
+    user.otpGenerateTime = null;
+    user.updatedBy = UtilConstant.SELF;
+    await this.userRepository.save(user);
+
+    // for first success otp verification (first success account creation)
+    if (user.status == UserStatus.UNVERIFIED) {
+      // start queryRunner
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      try {
+        // generate on-chain wallet
+        const walletAddress = await MPC.createWallet();
+
+        // create userWallet record
+        const userWallet = this.userWalletRepository.create({
+          walletBalance: 0,
+          creditBalance: 0,
+          walletAddress,
+          pointBalance: 0,
+          userId: user.id,
+        });
+        await queryRunner.manager.save(userWallet);
+
+        // update user
+        user.wallet = userWallet;
+        // generate user own referral code
+        user.referralCode = this.generateReferralCode(user.id);
+        // create unique uid for user
+        user.uid = this.generateNumericUID();
+        user.status = UserStatus.ACTIVE;
+        user.isMobileVerified = true;
+        user.updatedBy = UtilConstant.SELF;
+        await queryRunner.manager.save(user);
+
+        // referral section
+        if (user.referralUserId) {
+          // create referralTx
+          const referralTx = this.referralTxRepository.create({
+            rewardAmount: 0,
+            referralType: 'SET_REFERRER',
+            bonusAmount: 0,
+            bonusCurrency: 'USDT',
+            status: 'S',
+            txHash: null,
+            userId: user.id,
+            referralUserId: user.referralUserId,
+          });
+          await queryRunner.manager.save(referralTx);
+        }
+        //Add new address to Deposit Bot
+        await axios.post(
+          depositBotAddAddress,
+          {
+            address: walletAddress,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+
+        // // Temporary hide
+        // await this.emailService.sendWelcomeEmail(
+        //   UserRole.USER,
+        //   result.emailAddress,
+        //   result.id.toString(),
+        //   result.firstName,
+        // );
+
+        await queryRunner.commitTransaction();
+      } catch (err) {
+        await queryRunner.rollbackTransaction();
+
+        // update user record
+        user.status = UserStatus.PENDING;
+        user.updatedBy = UtilConstant.SELF;
+        await this.userRepository.update(user, {
+          status: UserStatus.PENDING,
+          updatedBy: UtilConstant.SELF,
+        });
+
+        // inform admin for rollback transaction
+        await this.adminNotificationService.setAdminNotification(
+          `Transaction in user.service.verifyOtp had been rollback, error: ${err}, userId: ${user.id}`,
+          'rollbackTxError',
+          'Transaction Rollbacked',
+          true,
+        );
+        return { error: err.message, data: null };
+      } finally {
+        await queryRunner.release();
+      }
+    }
+
+    return { error: null, data: user };
+  }
+
+  async registerWithTelegram(payload: LoginWithTelegramDTO) {
+    // check if phone exist
+    let user = await this.userRepository.findOneBy({
+      tgId: payload.telegramId,
+    });
+    if (user) {
+      // user && !user.isMobileVerified means user register but never success verified via otp
+      return { error: 'phone number exist', data: null };
+    }
+
+    // check if referralCode valid
+    let referralUserId = null;
+    if (payload.referralCode !== null) {
+      const referralUser = await this.userRepository.findOne({
+        where: { referralCode: payload.referralCode },
+        relations: { wallet: true },
+      });
+      if (!referralUser) {
+        return { error: 'invalid referral code', data: null };
+      }
+      referralUserId = referralUser.id;
+    }
+
+    try {
+      // create user record if not exist
+      if (!user) {
+        user = this.userRepository.create({
+          ...payload, // phoneNumber, otpMethod
+          uid: '',
+          referralCode: null,
+          status: UserStatus.UNVERIFIED,
+          isReset: false,
+          verificationCode: null,
+          loginAttempt: 0,
+          isMobileVerified: false,
+          otpGenerateTime: null,
+          referralRank: 1,
+          emailAddress: null,
+          isEmailVerified: false,
+          emailVerificationCode: null,
+          emailOtpGenerateTime: null,
+          updatedBy: null,
+          referralUserId,
+          referralTx: null,
+          referredTx: null,
+          wallet: null,
+          tgId: payload.telegramId,
+          tgUsername: payload.username,
+        });
+        await this.userRepository.save(user);
+      } else {
+        // user register but never success verified via otp
+        // update user otpMethod & referralUserId
+        // other user attribute should same as above
+
+        // TODO CHECK - probably won't need this
+        user.referralUserId = referralUserId;
+        await this.userRepository.save(user);
+      }
+
+      // return user record
+      return { error: null, data: user };
+    } catch (err) {
+      return { error: err.message, data: null };
+    }
+  }
+
   async signIn(payload: SignInDto) {
     // check if user exist
     const user = await this.userRepository.findOneBy({
@@ -321,7 +562,6 @@ export class UserService {
       userId: user.id,
       phoneNumber: user.phoneNumber,
     });
-
     return { error: null, data: user };
   }
 

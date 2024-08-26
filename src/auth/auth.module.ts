@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { AdminModule } from 'src/admin/admin.module';
 import { AuthService } from './auth.service';
@@ -16,7 +16,7 @@ import { CookieStrategy } from './cookie.strategy';
 @Module({
   imports: [
     AdminModule,
-    UserModule,
+    forwardRef(() => UserModule),
     ConfigModule,
     AuditLogModule,
     PermissionModule,
