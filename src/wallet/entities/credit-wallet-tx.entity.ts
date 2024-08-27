@@ -4,7 +4,6 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
-  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -12,7 +11,6 @@ import {
 import { UserWallet } from './user-wallet.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
-import { GameUsdTx } from './game-usd-tx.entity';
 
 @Entity()
 export class CreditWalletTx {
@@ -74,10 +72,11 @@ export class CreditWalletTx {
   @JoinColumn()
   betOrder: BetOrder;
 
+  @Column({
+    nullable: true,
+  })
+  campaignId: number;
+
   @ManyToOne(() => Campaign, (campaign) => campaign.creditWalletTx)
   campaign: Campaign;
-
-  @OneToMany(() => GameUsdTx, (gameUsdTx) => gameUsdTx.creditWalletTx)
-  // @JoinColumn()
-  gameUsdTx: GameUsdTx[];
 }

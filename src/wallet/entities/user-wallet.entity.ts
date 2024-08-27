@@ -38,13 +38,13 @@ export class UserWallet {
   })
   walletAddress: string;
 
-  // @Column({
-  //   type: 'decimal',
-  //   precision: 30,
-  //   scale: 18,
-  //   default: 0,
-  // })
-  // redeemableBalance: number;
+  @Column({
+    type: 'decimal',
+    precision: 30,
+    scale: 18,
+    default: 0,
+  })
+  redeemableBalance: number;
 
   @Column({
     type: 'decimal',

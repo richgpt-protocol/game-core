@@ -2,8 +2,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { DataSource, Repository } from 'typeorm';
-import { InternalTransfer } from '../entities/internal-transfer.entity';
-import { TransferGameUSDDto, SendMode } from '../dto/InternalTransferDto';
+import { InternalTransfer } from './entities/internal-transfer.entity';
+import { TransferGameUSDDto, SendMode } from './dto/InternalTransferDto';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
@@ -72,12 +72,10 @@ export class InternalTransferService {
       await this.validateLevel(senderWallet);
       const pendingTransferAmount = await this.getPendingAmount(senderWallet);
       const availableBalance =
-        senderWallet.walletBalance > pendingTransferAmount
-          ? senderWallet.walletBalance - pendingTransferAmount
-          : 0;
+        senderWallet.redeemableBalance - pendingTransferAmount;
 
       if (
-        senderWallet.walletBalance == 0 ||
+        senderWallet.redeemableBalance == 0 ||
         availableBalance < payload.amount
       ) {
         throw new BadRequestException('Insufficient balance');
@@ -268,13 +266,11 @@ export class InternalTransferService {
         },
       });
 
-      const provider = new JsonRpcProvider(
-        this.configService.get('OPBNB_PROVIDER_RPC_URL'),
-      );
+      const provider = new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL'));
 
       const userSigner = new Wallet(
         await MPC.retrievePrivateKey(senderWalletTx.userWallet.walletAddress),
-        provider,
+        provider
       );
 
       const gameUSDContract = GameUSD__factory.connect(
@@ -327,15 +323,15 @@ export class InternalTransferService {
             Number(receiverWalletTx.startingBalance) +
             Number(senderWalletTx.txAmount);
 
-          senderUserWallet.walletBalance =
-            Number(senderUserWallet.walletBalance) -
+          senderUserWallet.redeemableBalance =
+            Number(senderUserWallet.redeemableBalance) -
             Number(senderWalletTx.txAmount);
           senderUserWallet.walletBalance =
             Number(senderUserWallet.walletBalance) -
             Number(senderWalletTx.txAmount);
 
-          receiverUserWallet.walletBalance =
-            Number(receiverUserWallet.walletBalance) +
+          receiverUserWallet.redeemableBalance =
+            Number(receiverUserWallet.redeemableBalance) +
             Number(senderWalletTx.txAmount);
           receiverUserWallet.walletBalance =
             Number(receiverUserWallet.walletBalance) +
@@ -395,9 +391,7 @@ export class InternalTransferService {
     chainId: number,
   ): Promise<boolean> {
     try {
-      const provider = new JsonRpcProvider(
-        this.configService.get('OPBNB_PROVIDER_RPC_URL'),
-      );
+      const provider = new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL'));
 
       const nativeBalance = await provider.getBalance(userWallet.walletAddress);
 

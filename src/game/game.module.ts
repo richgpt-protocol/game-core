@@ -25,8 +25,6 @@ import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { SharedModule } from 'src/shared/shared.module';
 import { UserModule } from 'src/user/user.module';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
-import { CreditService } from 'src/wallet/services/credit.service';
-import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 
 @Module({
   imports: [
@@ -45,7 +43,6 @@ import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
       GameUsdTx,
       ReferralTx,
       ReloadTx,
-      CreditWalletTx,
     ]),
     PermissionModule,
     ConfigModule,
@@ -59,7 +56,6 @@ import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
     GameGateway,
     CacheSettingService,
     BetService,
-    CreditService,
   ],
   controllers: [GameController],
   exports: [GameService],

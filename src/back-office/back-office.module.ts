@@ -16,14 +16,6 @@ import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { Game } from 'src/game/entities/game.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { PrizeAlgo } from 'src/game/entities/prize-algo.entity';
-import { CampaignService } from 'src/campaign/campaign.service';
-import { Campaign } from 'src/campaign/entities/campaign.entity';
-import { CampaignModule } from 'src/campaign/campaign.module';
-import { WalletService } from 'src/wallet/wallet.service';
-import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
-import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
-import { WalletModule } from 'src/wallet/wallet.module';
-import { PointModule } from 'src/point/point.module';
 
 @Module({
   imports: [
@@ -38,20 +30,14 @@ import { PointModule } from 'src/point/point.module';
       Game,
       DrawResult,
       PrizeAlgo,
-      Campaign,
-      CreditWalletTx,
-      ReloadTx,
     ]),
-    CampaignModule,
     ConfigModule,
     PermissionModule,
     SharedModule,
     AdminModule,
-    WalletModule,
-    PointModule,
   ],
   controllers: [BackOfficeController],
-  providers: [BackOfficeService, CampaignService, WalletService],
+  providers: [BackOfficeService],
   exports: [BackOfficeService],
 })
 export class BackOfficeModule {}

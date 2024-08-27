@@ -22,7 +22,6 @@ export class User {
 
   @Column({
     unique: true,
-    nullable: true,
   })
   uid: string;
 
