@@ -32,6 +32,7 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
 import { NotificationDto } from './dto/notification.dto';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
+import { ConfigService } from 'src/config/config.service';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -47,6 +48,7 @@ type GenerateOtpEvent = {
 
 @Injectable()
 export class UserService {
+  TG_LOGIN_WIDGET_BOT_TOKEN: string;
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -65,7 +67,12 @@ export class UserService {
     private adminNotificationService: AdminNotificationService,
     private smsService: SMSService,
     private cacheSettingService: CacheSettingService,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    this.TG_LOGIN_WIDGET_BOT_TOKEN = this.configService.get(
+      'TG_LOGIN_WIDGET_BOT_TOKEN',
+    );
+  }
 
   async findOne(id: number) {
     return await this.userRepository
@@ -266,8 +273,24 @@ export class UserService {
     }
   }
 
-  async validateSignInWithTelegram(tgId: number, hash: string) {
-    //TODO validate telegram hash
+  async validateSignInWithTelegram(tgId: number, hash: string, data: any) {
+    const dataCheckString = Object.keys(data)
+      .sort()
+      .map((key) => `${key}=${data[key]}`)
+      .join('\n');
+
+    const secret = crypto
+      .createHash('sha256')
+      .update(this.TG_LOGIN_WIDGET_BOT_TOKEN)
+      .digest();
+    const hmac = crypto
+      .createHmac('sha256', secret)
+      .update(dataCheckString)
+      .digest('hex');
+
+    if (hmac !== hash) {
+      return { error: 'INVALID_HASH', data: null };
+    }
 
     const user = await this.userRepository.findOneBy({ tgId });
     if (!user) {
@@ -439,7 +462,7 @@ export class UserService {
   async registerWithTelegram(payload: LoginWithTelegramDTO) {
     // check if phone exist
     let user = await this.userRepository.findOneBy({
-      tgId: payload.telegramId,
+      tgId: payload.id,
     });
     if (user) {
       // user && !user.isMobileVerified means user register but never success verified via otp
@@ -482,7 +505,7 @@ export class UserService {
           referralTx: null,
           referredTx: null,
           wallet: null,
-          tgId: payload.telegramId,
+          tgId: payload.id,
           tgUsername: payload.username,
         });
         await this.userRepository.save(user);

@@ -151,23 +151,22 @@ export class AuthController {
     @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { referralCode, hash, ...dataToVerify } = payload;
       const result = await this.userService.validateSignInWithTelegram(
-        payload.telegramId,
-        payload.hash,
+        payload.id,
+        hash,
+        dataToVerify,
       );
       let userData: { error: string; data?: User };
       if (result.data || result.error == 'user.ACCOUNT_UNVERIFIED') {
         // follow sign-in process
-        userData = await this.userService.signInWithTelegram(
-          payload.telegramId,
-        );
+        userData = await this.userService.signInWithTelegram(payload.id);
       } else if (result.error == 'ACCOUNT_DOESNT_EXISTS') {
         // register process
 
         await this.userService.registerWithTelegram(payload);
-        userData = await this.userService.signInWithTelegram(
-          payload.telegramId,
-        );
+        userData = await this.userService.signInWithTelegram(payload.id);
 
         if (userData.data) {
           await this.auditLogService.userInsert({
