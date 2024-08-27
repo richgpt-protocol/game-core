@@ -56,89 +56,6 @@ export class UserController {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
-  // @Get('login-with-telegram')
-  // async loginWithTelegram(
-  //   @IpAddress() ipAddress,
-  //   @HandlerClass() classInfo: IHandlerClass,
-  //   @Body() payload: LoginWithTelegramDTO,
-  //   @I18n() i18n: I18nContext,
-  // ): Promise<ResponseVo<any>> {
-  //   try {
-  //     const result = await this.userService.validateSignInWithTelegram(
-  //       payload.telegramId,
-  //       payload.hash,
-  //     );
-  //     let userData: { error: string; data?: User };
-  //     if (result.data) {
-  //       // follow sign-in process
-  //       userData = await this.userService.signInWithTelegram(
-  //         payload.telegramId,
-  //       );
-  //     } else if (result.error == 'ACCOUNT_DOESNT_EXISTS') {
-  //       // register process
-
-  //       userData = await this.userService.registerWithTelegram(payload);
-  //       if (userData.data) {
-  //         await this.auditLogService.userInsert({
-  //           module: classInfo.class,
-  //           actions: classInfo.method,
-  //           userId: userData.data.id.toString(),
-  //           content:
-  //             'Registered User Account Successful: ' +
-  //             JSON.stringify(userData.data),
-  //           ipAddress,
-  //         });
-  //       }
-  //     } else {
-  //       return {
-  //         statusCode: HttpStatus.BAD_REQUEST,
-  //         data: {},
-  //         message: await i18n.translate(result.error),
-  //       };
-  //     }
-
-  //     if (!userData.data || userData.error) {
-  //       return {
-  //         statusCode: HttpStatus.BAD_REQUEST,
-  //         data: {},
-  //         message: await i18n.translate(userData.error),
-  //       };
-  //     }
-
-  //     await this.auditLogService.userInsert({
-  //       module: classInfo.class,
-  //       actions: classInfo.method,
-  //       userId: userData.data.id.toString(),
-  //       content: `Login Successful with ${userData.data.tgId} `,
-  //       ipAddress,
-  //     });
-
-  //     const response = {
-  //       id: userData.data.id,
-  //       status: userData.data.status,
-  //       phoneNumber: userData.data.phoneNumber,
-  //       referralCode: userData.data.referralCode,
-  //       isMobileVerified: userData.data.isMobileVerified,
-  //     };
-
-  //     const loginResult = await this.authService.createToken(
-  //       response,
-  //       UserRole.USER,
-  //     );
-  //     return {
-  //       statusCode: HttpStatus.OK,
-  //       message: 'Login Successful',
-  //       data: loginResult,
-  //     };
-  //   } catch (ex) {
-  //     return {
-  //       statusCode: HttpStatus.BAD_REQUEST,
-  //       data: {},
-  //       message: 'error occurred',
-  //     };
-  //   }
-  // }
-
   @Post('sign-up')
   @ApiHeader({
     name: 'x-custom-lang',
@@ -345,7 +262,7 @@ export class UserController {
     }
   }
 
-  // @Secure(null, UserRole.USER)
+  @Secure(null, UserRole.USER)
   @Get('get-profile')
   @ApiHeader({
     name: 'x-custom-lang',
@@ -362,9 +279,7 @@ export class UserController {
     @HandlerClass() classInfo: IHandlerClass,
     @I18n() i18n: I18nContext,
   ) {
-    const user = (await this.userService.getUserInfo(
-      1 /* req.user.userId */,
-    )) as any;
+    const user = (await this.userService.getUserInfo(req.user.userId)) as any;
     if (user) {
       await this.auditLogService.addAuditLog(
         classInfo,

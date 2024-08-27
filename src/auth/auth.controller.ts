@@ -156,7 +156,7 @@ export class AuthController {
         payload.hash,
       );
       let userData: { error: string; data?: User };
-      if (result.data) {
+      if (result.data || result.error == 'user.ACCOUNT_UNVERIFIED') {
         // follow sign-in process
         userData = await this.userService.signInWithTelegram(
           payload.telegramId,
@@ -164,7 +164,11 @@ export class AuthController {
       } else if (result.error == 'ACCOUNT_DOESNT_EXISTS') {
         // register process
 
-        userData = await this.userService.registerWithTelegram(payload);
+        await this.userService.registerWithTelegram(payload);
+        userData = await this.userService.signInWithTelegram(
+          payload.telegramId,
+        );
+
         if (userData.data) {
           await this.auditLogService.userInsert({
             module: classInfo.class,
