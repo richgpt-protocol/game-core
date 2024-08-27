@@ -17,7 +17,7 @@ import { RedeemTx } from './redeem-tx.entity';
 import { GameUsdTx } from './game-usd-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
-import { InternalTransfer } from 'src/internal-transfer/entities/internal-transfer.entity';
+import { InternalTransfer } from './internal-transfer.entity';
 
 @Entity()
 export class WalletTx {

@@ -79,6 +79,7 @@ RESULT_BOT_ADDRESS=
 POINT_REWARD_BOT_ADDRESS=
 HELPER_BOT_ADDRESS=
 SUPPLY_ACCOUNT_ADDRESS=
+COMMISION_DISTRIBUTOR_BOT_ADDRESS= #Address which can call distributeReferralFee()
 
 # escrow multisig address
 ESCROW_ADDRESS_BNB=
@@ -95,8 +96,15 @@ TG_SESSION_STRING=
 TG_API_ID=
 TG_API_HASH=
 
+TG_ADMIN_NOTIFIER_BOT_TOKEN= # Bot token for tg notifier bot
+ADMIN_TG_CHAT_ID= # Chat id of admin group where notification will be sent
+
 # live bet
 EXPLORER_BASE_URL=
 
 # others
 GAMEUSD_CHAIN_ID=
+
+# SLACK
+SLACK_TOKEN=
+SLACK_CHANNEL_ID=

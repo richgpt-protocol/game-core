@@ -2,10 +2,13 @@ import { BadRequestException, Body, Controller, Get, Post, Query, Render, Reques
 import { BackOfficeService } from './back-office.service';
 import { ApiExcludeEndpoint, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from 'src/config/config.service';
-import { Secure, SecureEJS } from 'src/shared/decorators/secure.decorator';
+import { SecureEJS } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { PrizeAlgo } from 'src/game/entities/prize-algo.entity';
+import { CampaignService } from 'src/campaign/campaign.service';
+import { CreditService } from 'src/wallet/services/credit.service';
+import { PointService } from 'src/point/point.service';
 
 @ApiTags('back-office')
 @Controller('back-office')
@@ -13,8 +16,11 @@ export class BackOfficeController {
   constructor(
     private backOfficeService: BackOfficeService,
     private configService: ConfigService,
+    private campaignService: CampaignService,
+    private creditService: CreditService,
+    private pointService: PointService,
   ) {}
-  
+
   @Get('admin-login')
   @ApiExcludeEndpoint()
   @Render('admin-login')
@@ -54,7 +60,7 @@ export class BackOfficeController {
     };
   }
 
-  // @SecureEJS(null, UserRole.ADMIN)
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('staffs')
   @ApiExcludeEndpoint()
   @Render('staff-listing')
@@ -63,6 +69,53 @@ export class BackOfficeController {
     return {
       data: {
         staffs: data.data,
+        currentPage: data.currentPage,
+        totalPages: data.totalPages,
+      },
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('campaigns')
+  @ApiExcludeEndpoint()
+  @Render('campaign-listing')
+  async campaigns(@Query('page') page: number) {
+    const data = await this.campaignService.findAll(page);
+    return {
+      data: {
+        campaigns: data.data,
+        currentPage: data.currentPage,
+        totalPages: data.totalPages,
+      },
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('points')
+  @ApiExcludeEndpoint()
+  @Render('point-listing')
+  async points(@Query('page') page: number) {
+    const data = await this.backOfficeService.getUserPoints(page);
+    return {
+      data: {
+        points: data.data,
+        currentPage: data.currentPage,
+        totalPages: data.totalPages,
+      },
+    };
+  }
+
+  @Get('pending-withdraw')
+  @ApiExcludeEndpoint()
+  @Render('pending-withdraw')
+  async pendingWithdraw(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const data = await this.backOfficeService.getPendingWithdraw(page, limit);
+    return {
+      data: {
+        transactions: data.data,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
       },
@@ -121,6 +174,16 @@ export class BackOfficeController {
     };
   }
 
+  @SecureEJS(PermissionEnum.UPDATE_SITE_SETTING, UserRole.ADMIN)
+  @Get('create-campaign')
+  @ApiExcludeEndpoint()
+  @Render('create-campaign')
+  async createCampaign() {
+    return {
+      data: {},
+    };
+  }
+
   @Get('not-found')
   @ApiExcludeEndpoint()
   @Render('error-404')
@@ -170,7 +233,8 @@ export class BackOfficeController {
   }
 
   @SecureEJS(null, UserRole.ADMIN)
-  @Get('salesReport')
+  @Get('sales-report')
+  @Render('sales-report')
   async salesReport(
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
@@ -181,7 +245,25 @@ export class BackOfficeController {
     );
     return {
       data: {
-        bets: result.data
+        bets: result.data,
+      },
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('credit-txns-listing')
+  @Render('credit-txns-listing')
+  async creditTxns(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const { data, currentPage, total } =
+      await this.creditService.getAllCreditWalletTxList(page, limit);
+    return {
+      data: {
+        transactions: data,
+        currentPage: currentPage,
+        totalPages: total,
       },
     };
   }
@@ -343,6 +425,37 @@ export class BackOfficeController {
           apee: res.data.allowPrizeEndEpoch,
         },
       },
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('add-credit')
+  @Render('add-credit')
+  async addCredit() {
+    try {
+      const campaigns = await this.campaignService.findActiveCampaigns();
+      return {
+        data: {
+          campaigns,
+        },
+      };
+    } catch (error) {
+      return {
+        data: {
+          campaigns: [],
+        },
+      };
+    }
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('set-referral-prize-bonus')
+  @Render('set-referral-prize-bonus')
+  async setReferralPrizeBonus() {
+    const data = await this.pointService.getAllReferralPrizeBonus();
+    console.log(data);
+    return {
+      data,
     };
   }
 }

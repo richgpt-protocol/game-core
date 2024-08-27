@@ -12,6 +12,7 @@ import { PointTx } from 'src/point/entities/point-tx.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { Admin } from 'src/admin/entities/admin.entity';
 import { UserModule } from 'src/user/user.module';
+import { ConfigService } from 'src/config/config.service';
 
 @Module({
   imports: [
@@ -27,7 +28,7 @@ import { UserModule } from 'src/user/user.module';
     UserModule,
     CacheModule.register()
   ],
-  providers: [ChatbotService, AdminNotificationService],
+  providers: [ChatbotService, AdminNotificationService, ConfigService],
   controllers: [ChatbotController],
   exports: [],
 })
