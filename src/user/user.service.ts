@@ -4,10 +4,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
 import {
   GetUsersDto,
-<<<<<<< HEAD
-=======
-  LoginWithTelegramDTO,
->>>>>>> 89b2420 (add login with telegram flow)
   RegisterUserDto,
   SignInDto,
 } from './dto/register-user.dto';
@@ -29,7 +25,7 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { SMSService } from 'src/shared/services/sms.service';
-import { UserLoginDto } from 'src/auth/dto/login.dto';
+import { LoginWithTelegramDTO, UserLoginDto } from 'src/auth/dto/login.dto';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
