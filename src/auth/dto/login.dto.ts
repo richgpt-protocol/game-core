@@ -5,6 +5,8 @@ import {
   IsString,
   MinLength,
   MaxLength,
+  IsNumber,
+  IsOptional,
 } from 'class-validator';
 
 export class LoginDto {
@@ -47,4 +49,31 @@ export class OAuthDto {
   @IsString()
   @IsNotEmpty()
   token: string;
+}
+
+export class LoginWithTelegramDTO {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  username: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  firstname: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  hash: string;
+
+  @ApiProperty()
+  @IsNumber()
+  @IsNotEmpty()
+  telegramId: number;
+
+  @ApiProperty()
+  @IsString()
+  @IsOptional()
+  referralCode: string;
 }

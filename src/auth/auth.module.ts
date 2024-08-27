@@ -12,6 +12,14 @@ import { PermissionModule } from 'src/permission/permission.module';
 import { UserModule } from 'src/user/user.module';
 import { SharedModule } from 'src/shared/shared.module';
 import { CookieStrategy } from './cookie.strategy';
+import { UserService } from 'src/user/user.service';
+import { User } from 'src/user/entities/user.entity';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
+import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
+import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { Notification } from 'src/notification/entities/notification.entity';
+import { UserNotification } from 'src/notification/entities/user-notification.entity';
 
 @Module({
   imports: [
@@ -22,6 +30,14 @@ import { CookieStrategy } from './cookie.strategy';
     PermissionModule,
     SharedModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
+    TypeOrmModule.forFeature([
+      User,
+      UserWallet,
+      WalletTx,
+      ReferralTx,
+      Notification,
+      UserNotification,
+    ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -37,7 +53,7 @@ import { CookieStrategy } from './cookie.strategy';
       },
     }),
   ],
-  providers: [AuthService, JwtStrategy, CookieStrategy],
+  providers: [AuthService, JwtStrategy, CookieStrategy, UserService],
   controllers: [AuthController],
   exports: [PassportModule.register({ defaultStrategy: 'jwt' })],
 })
