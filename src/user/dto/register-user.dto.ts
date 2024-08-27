@@ -131,30 +131,3 @@ export class UpdateUserByAdminDto {
   @IsNotEmpty()
   status: string;
 }
-
-export class LoginWithTelegramDTO {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  username: string;
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  firstname: string;
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  hash: string;
-
-  @ApiProperty()
-  @IsNumber()
-  @IsNotEmpty()
-  telegramId: number;
-
-  @ApiProperty()
-  @IsString()
-  @IsOptional()
-  referralCode: string;
-}
