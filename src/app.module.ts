@@ -32,6 +32,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { DepositModule } from './deposit/deposit.module';
 import { PointModule } from './point/point.module';
 import { InternalTransferModule } from './internal-transfer/internal-transfer.module';
+import { PublicModule } from './public/public.module';
 
 @Module({
   imports: [
@@ -102,6 +103,7 @@ import { InternalTransferModule } from './internal-transfer/internal-transfer.mo
     BackOfficeModule,
     ScheduleModule.forRoot(),
     PointModule,
+    PublicModule,
   ],
   controllers: [AppController],
   providers: [

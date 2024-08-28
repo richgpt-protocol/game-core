@@ -118,6 +118,11 @@ export class User {
   })
   referralUserId: number;
 
+  @Column({
+    nullable: true,
+  })
+  telegramId: string;
+
   @ManyToOne(() => User, (user) => user.id)
   @JoinColumn({ name: 'referralUserId' })
   referralUser: User;
