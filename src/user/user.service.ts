@@ -32,6 +32,9 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
 import { NotificationDto } from './dto/notification.dto';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
+import { Telegraf } from 'telegraf';
+import { ConfigService } from 'src/config/config.service';
+import { Update } from 'telegraf/typings/core/types/typegram';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -47,6 +50,8 @@ type GenerateOtpEvent = {
 
 @Injectable()
 export class UserService {
+  telegramOTPBot: Telegraf;
+  telegramOTPBotUserName: string;
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -65,7 +70,97 @@ export class UserService {
     private adminNotificationService: AdminNotificationService,
     private smsService: SMSService,
     private cacheSettingService: CacheSettingService,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    const telegramOTPBotToken = this.configService.get(
+      'TELEGRAM_OTP_BOT_TOKEN',
+    );
+    this.telegramOTPBotUserName = this.configService.get(
+      'TELEGRAM_OTP_BOT_USERNAME',
+    );
+
+    this.telegramOTPBot = new Telegraf(telegramOTPBotToken);
+    this.telegramOTPBot.start((ctx) => this.handleStartCommand(ctx));
+    this.telegramOTPBot.launch();
+  }
+
+  private async handleStartCommand(ctx) {
+    try {
+      const { payload } = ctx;
+      const { id, username } = ctx.update.message.from;
+
+      if (!payload || payload == '') {
+        return await ctx.reply('Invalid request: payload is missing');
+      }
+
+      const user = await this.userRepository.findOne({
+        where: {
+          uid: payload,
+        },
+        select: [
+          'id',
+          'verificationCode',
+          'tgUsername',
+          'tgId',
+          'status',
+          'isReset',
+        ],
+      });
+
+      if (!user) {
+        return await ctx.reply('Invalid request');
+      }
+
+      if (user.tgId && user.tgUsername) {
+        //Login OTP
+        if (user.tgUsername != username) {
+          return await ctx.reply('Invalid Username');
+        }
+
+        return await ctx.reply(
+          `Please use the code - ${user.verificationCode} to verify your mobile number for logging into ${this.configService.get(
+            'APP_NAME',
+          )}`,
+        );
+      } else {
+        //registeration otp
+
+        const existing = await this.userRepository.findOne({
+          where: [
+            {
+              tgId: id,
+            },
+            {
+              tgUsername: username,
+            },
+          ],
+        });
+
+        if (existing) {
+          return await ctx.reply('Telegram already linked to an account');
+        }
+
+        user.tgId = id;
+        user.tgUsername = username;
+
+        await this.userRepository.save(user);
+
+        await ctx.reply(
+          `Please use the code - ${user.verificationCode} to verify your mobile number for ${this.configService.get(
+            'APP_NAME',
+          )} user registration.`,
+        );
+      }
+    } catch (error) {
+      console.log('error', error);
+      this.adminNotificationService.setAdminNotification(
+        `Error in telegram bot: ${error}`,
+        'telegramBotError',
+        'Telegram Bot Error',
+        true,
+      );
+    }
+  }
 
   async findOne(id: number) {
     return await this.userRepository
@@ -223,7 +318,7 @@ export class UserService {
       if (!user) {
         user = this.userRepository.create({
           ...payload, // phoneNumber, otpMethod
-          uid: '',
+          uid: this.generateNumericUID(),
           referralCode: null,
           status: UserStatus.UNVERIFIED,
           isReset: false,
@@ -253,11 +348,23 @@ export class UserService {
         await this.userRepository.save(user);
       }
 
-      // pass to handleGenerateOtpEvent() to generate otp and send to user
-      this.eventEmitter.emit('user.service.otp', {
-        userId: user.id,
-        phoneNumber: user.phoneNumber,
-      });
+      if (payload.otpMethod == 'TELEGRAM') {
+        const code = RandomUtil.generateRandomNumber(6);
+        await this.update(user.id, {
+          verificationCode: code,
+          otpGenerateTime: new Date(),
+        });
+
+        const tgUrl = `https://t.me/${this.telegramOTPBotUserName}?start=${user.uid}`;
+
+        return { error: null, data: { tgUrl, ...user } };
+      } else {
+        // pass to handleGenerateOtpEvent() to generate otp and send to user
+        this.eventEmitter.emit('user.service.otp', {
+          userId: user.id,
+          phoneNumber: user.phoneNumber,
+        });
+      }
 
       // return user record
       return { error: null, data: user };
@@ -316,11 +423,23 @@ export class UserService {
     user.otpMethod = payload.otpMethod;
     await this.userRepository.save(user);
 
-    // pass to handleGenerateOtpEvent() to generate and send otp
-    this.eventEmitter.emit('user.service.otp', {
-      userId: user.id,
-      phoneNumber: user.phoneNumber,
-    });
+    if (payload.otpMethod == 'TELEGRAM') {
+      const code = RandomUtil.generateRandomNumber(6);
+      await this.update(user.id, {
+        verificationCode: code,
+        otpGenerateTime: new Date(),
+      });
+
+      const tgUrl = `https://t.me/${this.telegramOTPBotUserName}?start=${user.uid}`;
+
+      return { error: null, data: { tgUrl, ...user } };
+    } else {
+      // pass to handleGenerateOtpEvent() to generate and send otp
+      this.eventEmitter.emit('user.service.otp', {
+        userId: user.id,
+        phoneNumber: user.phoneNumber,
+      });
+    }
 
     return { error: null, data: user };
   }
@@ -505,7 +624,7 @@ export class UserService {
         // generate user own referral code
         user.referralCode = this.generateReferralCode(user.id);
         // create unique uid for user
-        user.uid = this.generateNumericUID();
+        // user.uid = this.generateNumericUID(); //Generated during singup
         user.status = UserStatus.ACTIVE;
         user.isMobileVerified = true;
         user.updatedBy = UtilConstant.SELF;

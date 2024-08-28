@@ -99,6 +99,8 @@ TG_API_HASH=
 TG_ADMIN_NOTIFIER_BOT_TOKEN= # Bot token for tg notifier bot
 ADMIN_TG_CHAT_ID= # Chat id of admin group where notification will be sent
 
+TELEGRAM_OTP_BOT_TOKEN= #token of Bot that sends telegram OTP
+TELEGRAM_OTP_BOT_USERNAME= #Bot's Username that sends telegram OTP
 # live bet
 EXPLORER_BASE_URL=
 
