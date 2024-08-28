@@ -53,14 +53,14 @@ export class OAuthDto {
 
 export class LoginWithTelegramDTO {
   @ApiProperty()
-  @IsString()
+  @IsNumber()
   @IsNotEmpty()
-  username: string;
+  auth_date: number;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  firstname: string;
+  first_name: string;
 
   @ApiProperty()
   @IsString()
@@ -70,7 +70,17 @@ export class LoginWithTelegramDTO {
   @ApiProperty()
   @IsNumber()
   @IsNotEmpty()
-  telegramId: number;
+  id: number;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  photo_url: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  username: string;
 
   @ApiProperty()
   @IsString()
