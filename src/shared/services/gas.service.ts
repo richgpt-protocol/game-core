@@ -9,6 +9,7 @@ import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { catchError, firstValueFrom } from 'rxjs';
 import { MPC } from '../mpc';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class GasService {
@@ -25,112 +26,131 @@ export class GasService {
 
   @OnEvent('gas.service.reload', { async: true })
   async handleGasReloadEvent(userAddress: string, chainId: number): Promise<void> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    const provider_rpc_url = chainId === Number(process.env.OPBNB_CHAIN_ID)
+      ? process.env.OPBNB_PROVIDER_RPC_URL
+      : process.env.BNB_PROVIDER_RPC_URL;
+    const provider = new ethers.JsonRpcProvider(provider_rpc_url);
+    const balance = await provider.getBalance(userAddress);
 
-    try {
-      const provider_rpc_url = chainId === Number(process.env.OPBNB_CHAIN_ID)
-        ? process.env.OPBNB_PROVIDER_RPC_URL
-        : process.env.BNB_PROVIDER_RPC_URL;
-      const provider = new ethers.JsonRpcProvider(provider_rpc_url);
-      const balance = await provider.getBalance(userAddress);
+    if (balance < ethers.parseEther('0.001')) {
+      let amount = '';
+      if (!this._isAdmin(userAddress)) {
+        amount = '0.001'
 
-      if (balance < ethers.parseEther('0.001')) {
-        let amount = '';
-        let reloadTx: ReloadTx = null;
-        if (!this._isAdmin(userAddress)) {
-          amount = '0.001'
+        // find userWallet through userAddress
+        const userWallet = await this.userWalletRepository.findOne({
+          where: {
+            walletAddress: userAddress,
+          },
+        });
 
-          // find userWallet through userAddress
-          const userWallet = await queryRunner.manager.findOne(UserWallet, {
-            where: {
-              walletAddress: userAddress,
-            },
-          });
+        // create reload tx
+        await this.reloadTxRepository.save(
+          this.reloadTxRepository.create({
+            amount: Number(amount),
+            status: 'P',
+            chainId,
+            currency: 'BNB',
+            amountInUSD: await this._getAmountInUSD(amount),
+            txHash: null,
+            retryCount: 0,
+            userWallet,
+            userWalletId: userWallet.id,
+          })
+        );
 
-          // create reload tx
-          reloadTx = new ReloadTx();
-          reloadTx.amount = Number(amount);
-          reloadTx.status = 'P';
-          reloadTx.chainId = chainId;
-          reloadTx.currency = 'BNB';
-          reloadTx.amountInUSD = 0;
-          reloadTx.txHash = null;
-          reloadTx.retryCount = 0;
-          reloadTx.userWallet = userWallet;
-          reloadTx.userWalletId = userWallet.id;
-
-          reloadTx = await queryRunner.manager.save(reloadTx);
-        } else {
-          // reload 0.01 BNB for admin wallet
-          amount = '0.01'
-          // no reloadTx for admin reload because
-          // no userWallet for admin (userWalletId is compulsory)
-        }
-
-        // reload native token through wallet creation bot
+      } else {
+        // no reloadTx for admin reload because
+        // no userWallet for admin (userWalletId is compulsory)
+        // just simply reload admin wallet
+        const provider_rpc_url = chainId === Number(process.env.OPBNB_CHAIN_ID)
+          ? process.env.OPBNB_PROVIDER_RPC_URL
+          : process.env.BNB_PROVIDER_RPC_URL;
+        const provider = new ethers.JsonRpcProvider(provider_rpc_url);
+        
         const supplyAccount = new ethers.Wallet(
           await MPC.retrievePrivateKey(process.env.SUPPLY_ACCOUNT_ADDRESS),
           provider
         );
-        const txResponse = await supplyAccount.sendTransaction({
-          to: userAddress,
-          value: ethers.parseEther(amount)
-        });
 
-        const txReceipt = await txResponse.wait();
-        if (reloadTx) {
-          reloadTx.txHash = txReceipt.hash;
+        await supplyAccount.sendTransaction({
+          to: userAddress,
+          // reload 0.01 BNB for admin wallet
+          value: ethers.parseEther('0.01')
+        });
+      }
+    }
+  }
+
+  isHandlePendingReloadTxInProgress = false;
+
+  @Cron(CronExpression.EVERY_SECOND)
+  async handlePendingReloadTx(): Promise<void> {
+    if (!this.isHandlePendingReloadTxInProgress) {
+      this.isHandlePendingReloadTxInProgress = true;
+
+      const pendingReloadTx = await this.reloadTxRepository.find({
+        where: {
+          status: 'P',
+        },
+        relations: { userWallet: true },
+      });
+
+      for (const reloadTx of pendingReloadTx) {
+        while (reloadTx.retryCount < 5) {
+          try {
+            const provider_rpc_url = reloadTx.chainId === Number(process.env.OPBNB_CHAIN_ID)
+              ? process.env.OPBNB_PROVIDER_RPC_URL
+              : process.env.BNB_PROVIDER_RPC_URL;
+            const provider = new ethers.JsonRpcProvider(provider_rpc_url);
+            
+            const supplyAccount = new ethers.Wallet(
+              await MPC.retrievePrivateKey(process.env.SUPPLY_ACCOUNT_ADDRESS),
+              provider
+            );
+
+            const txResponse = await supplyAccount.sendTransaction({
+              to: reloadTx.userWallet.walletAddress,
+              value: ethers.parseEther(reloadTx.amount.toString())
+            });
+            const txReceipt = await txResponse.wait();
+            reloadTx.txHash = txReceipt.hash;
+            
+            if (txReceipt.status === 1) {
+              reloadTx.status = 'S';
+              break;
+
+            } else {
+              reloadTx.status = 'F';
+              reloadTx.retryCount++;
+            }
+
+          } catch (error) {
+            reloadTx.status = 'F';
+            reloadTx.retryCount++;
+          }
         }
 
-        if (txReceipt.status === 0) {
-          if (reloadTx) {
-            reloadTx.status = 'F';
-          }
+        this.reloadTxRepository.save(reloadTx);
 
+        if (reloadTx.status === 'F') {
           // native token transfer failed, inform admin
           await this.adminNotificationService.setAdminNotification(
-            `On-chain transaction failed in GasService.handleGasReloadEvent, txHash: ${txReceipt.hash}`,
+            `On-chain transaction failed in GasService.handlePendingReloadTx, txHash: ${reloadTx.txHash}`,
             'onChainTxError',
-            'On-chain Transaction Failed in GasService.handleGasReloadEvent',
+            'On-chain Transaction Failed in GasService.handlePendingReloadTx',
             true,
           );
-        } else {
-          // update reloadTx for non-admin wallet
-          if (reloadTx) {
-            reloadTx.status = 'S';
-            reloadTx.amountInUSD = await this._getAmountInUSD(amount);
-          }
         }
+      }
 
-        if (reloadTx) {
-          await queryRunner.manager.save(reloadTx);
-          await queryRunner.commitTransaction();
-        }
-      }
-    } catch (error) {
-      console.error('Error in GasService.handleGasReloadEvent', error);
-      // inform admin
-      await this.adminNotificationService.setAdminNotification(
-        `Error occur in GasService.handleGasReloadEvent, error: ${error}`,
-        'error',
-        'Error in GasService.handleGasReloadEvent',
-        true,
-      );
-      await queryRunner.rollbackTransaction();
-    } finally {
-      if (!queryRunner.isReleased) {
-        await queryRunner.release();
-      }
+      this.isHandlePendingReloadTxInProgress = false;
     }
   }
 
   private _isAdmin(userAddress: string): boolean {
     const adminAddress = [
-      // wallet creation bot is the one which supply native token
-      // so need to monitor & reload wallet creation bot manually if needed
-      // process.env.WALLET_CREATION_BOT_ADDRESS,
+      process.env.WALLET_CREATION_BOT_ADDRESS,
       process.env.DEPOSIT_BOT_ADDRESS,
       process.env.PAYOUT_BOT_ADDRESS,
       process.env.RESULT_BOT_ADDRESS,

@@ -154,24 +154,11 @@ export class DepositService {
       depositTx.walletTxId = walletTxResult.id;
       depositTx.retryCount = 0;
       depositTx.status = 'P';
-
-      // const nativeBalance = await this.getNativeBalance(
-      //   payload.walletAddress,
-      //   payload.chainId,
-      // );
-      // const minimumNativeBalance = this.configService.get(
-      //   `MINIMUM_NATIVE_BALANCE_${payload.chainId}`,
-      // );
+      await queryRunner.manager.save(depositTx);
 
       await this.reloadWallet(payload.walletAddress);
-      // const reloadTx = await this.reloadWallet(payload, +minimumNativeBalance);
-      // reloadTx.userWallet = userWallet;
-      // reloadTx.userWalletId = userWallet.id;
-
-      // await queryRunner.manager.save(reloadTx);
-
-      await queryRunner.manager.save(depositTx);
       queryRunner.commitTransaction();
+
     } catch (error) {
       console.log(error);
       await queryRunner.rollbackTransaction();
@@ -184,8 +171,9 @@ export class DepositService {
       );
 
       throw new InternalServerErrorException('Error processing deposit');
+
     } finally {
-      // if (!queryRunner.isReleased) await queryRunner.release();
+      await queryRunner.release();
     }
   }
 
