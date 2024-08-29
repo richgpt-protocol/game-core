@@ -416,6 +416,9 @@ export class PointService {
     return setting ? +setting.value : 0;
   }
 
+  /**
+   * Setup user push notification when user level up
+   */
   @Cron('* * * * * *', { utcOffset: 0 }) // every hour UTC time
   async checkLevelUp(): Promise<void> {
     // start queryRunner
