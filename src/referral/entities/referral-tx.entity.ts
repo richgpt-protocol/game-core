@@ -12,6 +12,10 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
+/**
+ * used for record transaction of referral fee
+ */
+
 @Entity()
 export class ReferralTx {
   @PrimaryGeneratedColumn()
