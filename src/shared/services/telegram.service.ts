@@ -22,15 +22,19 @@ export class TelegramService {
 
   constructor(private readonly configService: ConfigService) {
     // Need to update this, use .env
-    this.stringSession; /* = new StringSession(
+    this.stringSession = new StringSession(
       this.configService.get('TG_SESSION_STRING'),
-    ); */
+    );
     const api_id = this.configService.get('TG_API_ID');
     const api_hash = this.configService.get('TG_API_HASH');
-    this
-      .client; /* = new TG.TelegramClient(this.stringSession, Number(api_id), api_hash, {
-      connectionRetries: 5,
-    }) */
+    this.client = new TG.TelegramClient(
+      this.stringSession,
+      Number(api_id),
+      api_hash,
+      {
+        connectionRetries: 5,
+      },
+    );
   }
 
   // private generateMessage(otp: any) {
