@@ -13,17 +13,17 @@ export class PublicService {
 
   async findUser(payload: GetProfileDto) {
     let field = '';
-    let property: string;
+    let value: any;
 
     if (payload.tgId) {
-      field = 'telegramId';
-      property = payload.tgId;
+      field = 'tgId';
+      value = Number(payload.tgId);
     } else if (payload.uid) {
       field = 'uid';
-      property = payload.uid;
+      value = payload.uid;
     }
 
-    const user = await this.userService.findByCriteria(field, property);
+    const user = await this.userService.findByCriteria(field, value);
     if (!user) {
       return null;
     }
@@ -35,7 +35,7 @@ export class PublicService {
 
     return {
       uid: user.uid,
-      tgId: user.telegramId,
+      tgId: user.tgId,
       xp: userWallet.pointBalance,
       walletBalance: userWallet.walletBalance,
       creditBalance: userWallet.creditBalance,

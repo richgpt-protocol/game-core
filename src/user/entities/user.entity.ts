@@ -25,8 +25,20 @@ export class User {
   })
   uid: string;
 
-  @Column()
+  @Column({
+    nullable: true,
+  })
+  tgUsername: string;
+
+  @Column({
+    nullable: true,
+  })
   phoneNumber: string;
+
+  @Column({
+    nullable: true,
+  })
+  tgId: number;
 
   @Column({ nullable: true })
   referralCode: string;
@@ -78,6 +90,7 @@ export class User {
 
   @Column({
     comment: 'SMS, TELEGRAM, WHATSAPP',
+    nullable: true,
   })
   otpMethod: string;
 
@@ -117,11 +130,6 @@ export class User {
     nullable: true,
   })
   referralUserId: number;
-
-  @Column({
-    nullable: true,
-  })
-  telegramId: string;
 
   @ManyToOne(() => User, (user) => user.id)
   @JoinColumn({ name: 'referralUserId' })
