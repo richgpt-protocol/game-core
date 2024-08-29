@@ -16,12 +16,14 @@ import { AdminNotificationService } from './services/admin-notification.service'
 import { GasService } from './services/gas.service';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
+import { User } from 'src/user/entities/user.entity';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
     TypeOrmModule.forFeature([
+      User,
       EmailLogs,
       Admin,
       Notification,
@@ -39,7 +41,18 @@ import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
       inject: [ConfigService],
     }),
   ],
-  providers: [GasService, SMSService, CacheSettingService, AdminNotificationService, TelegramService],
-  exports: [SMSService, CacheSettingService, AdminNotificationService, TelegramService],
+  providers: [
+    GasService,
+    SMSService,
+    CacheSettingService,
+    AdminNotificationService,
+    TelegramService,
+  ],
+  exports: [
+    SMSService,
+    CacheSettingService,
+    AdminNotificationService,
+    TelegramService,
+  ],
 })
 export class SharedModule {}
