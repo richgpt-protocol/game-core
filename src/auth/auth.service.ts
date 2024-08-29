@@ -92,8 +92,6 @@ export class AuthService {
 
   async createToken(user: any, role: string) {
     const payload = {
-      tgId: user.tgId,
-      phoneNumber: user.phoneNumber,
       sub: user.id,
       role,
       exp:
