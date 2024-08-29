@@ -84,7 +84,7 @@ export class GasService {
 
   isHandlePendingReloadTxInProgress = false;
 
-  @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_5_SECONDS)
   async handlePendingReloadTx(): Promise<void> {
     if (!this.isHandlePendingReloadTxInProgress) {
       this.isHandlePendingReloadTxInProgress = true;
