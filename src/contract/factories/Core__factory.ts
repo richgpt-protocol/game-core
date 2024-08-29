@@ -24,6 +24,16 @@ const _abi = [
     name: "bet",
     inputs: [
       {
+        name: "uid",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "ticketId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
         name: "_bets",
         type: "tuple[]",
         internalType: "struct ICore.BetParams[]",
@@ -62,6 +72,16 @@ const _abi = [
         name: "user",
         type: "address",
         internalType: "address",
+      },
+      {
+        name: "uid",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "ticketId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
         name: "_bets",
@@ -324,16 +344,6 @@ const _abi = [
         internalType: "address",
       },
       {
-        name: "_redeem",
-        type: "address",
-        internalType: "address",
-      },
-      {
-        name: "_pointReward",
-        type: "address",
-        internalType: "address",
-      },
-      {
         name: "_maxBet",
         type: "uint256",
         internalType: "uint256",
@@ -351,6 +361,19 @@ const _abi = [
         name: "",
         type: "bool",
         internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "jackpotHash",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "contract IJackpotHash",
       },
     ],
     stateMutability: "view",
@@ -383,13 +406,13 @@ const _abi = [
   },
   {
     type: "function",
-    name: "pointReward",
+    name: "paused",
     inputs: [],
     outputs: [
       {
         name: "",
-        type: "address",
-        internalType: "contract IPointReward",
+        type: "bool",
+        internalType: "bool",
       },
     ],
     stateMutability: "view",
@@ -403,19 +426,6 @@ const _abi = [
         name: "",
         type: "bytes32",
         internalType: "bytes32",
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
-    name: "redeem",
-    inputs: [],
-    outputs: [
-      {
-        name: "",
-        type: "address",
-        internalType: "contract IRedeem",
       },
     ],
     stateMutability: "view",
@@ -516,10 +526,10 @@ const _abi = [
   },
   {
     type: "function",
-    name: "setPointRewardContract",
+    name: "setJackpotHashContract",
     inputs: [
       {
-        name: "_pointReward",
+        name: "_jackpotHash",
         type: "address",
         internalType: "address",
       },
@@ -529,12 +539,12 @@ const _abi = [
   },
   {
     type: "function",
-    name: "setRedeemContract",
+    name: "setPause",
     inputs: [
       {
-        name: "_redeem",
-        type: "address",
-        internalType: "address",
+        name: "pause",
+        type: "bool",
+        internalType: "bool",
       },
     ],
     outputs: [],
@@ -880,6 +890,19 @@ const _abi = [
   },
   {
     type: "event",
+    name: "JackpotHashContractSet",
+    inputs: [
+      {
+        name: "jackpotHash",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "OwnershipTransferred",
     inputs: [
       {
@@ -899,10 +922,10 @@ const _abi = [
   },
   {
     type: "event",
-    name: "PointRewardContractSet",
+    name: "Paused",
     inputs: [
       {
-        name: "pointReward",
+        name: "account",
         type: "address",
         indexed: false,
         internalType: "address",
@@ -912,10 +935,10 @@ const _abi = [
   },
   {
     type: "event",
-    name: "RedeemContractSet",
+    name: "Unpaused",
     inputs: [
       {
-        name: "redeem",
+        name: "account",
         type: "address",
         indexed: false,
         internalType: "address",
@@ -1005,6 +1028,16 @@ const _abi = [
   {
     type: "error",
     name: "ERC1967NonPayable",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "EnforcedPause",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ExpectedPause",
     inputs: [],
   },
   {

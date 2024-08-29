@@ -42,25 +42,22 @@ export declare namespace ICore {
 export declare namespace IHelper {
   export type BetLastMinuteParamsStruct = {
     user: AddressLike;
+    uid: BigNumberish;
+    ticketId: BigNumberish;
     bets: ICore.BetParamsStruct[];
   };
 
   export type BetLastMinuteParamsStructOutput = [
     user: string,
+    uid: bigint,
+    ticketId: bigint,
     bets: ICore.BetParamsStructOutput[]
-  ] & { user: string; bets: ICore.BetParamsStructOutput[] };
-
-  export type BetWithCreditParamsStruct = {
-    user: AddressLike;
-    bets: ICore.BetParamsStruct[];
-    credit: BigNumberish;
+  ] & {
+    user: string;
+    uid: bigint;
+    ticketId: bigint;
+    bets: ICore.BetParamsStructOutput[];
   };
-
-  export type BetWithCreditParamsStructOutput = [
-    user: string,
-    bets: ICore.BetParamsStructOutput[],
-    credit: bigint
-  ] & { user: string; bets: ICore.BetParamsStructOutput[]; credit: bigint };
 }
 
 export interface HelperInterface extends Interface {
@@ -68,7 +65,6 @@ export interface HelperInterface extends Interface {
     nameOrSignature:
       | "UPGRADE_INTERFACE_VERSION"
       | "betLastMinutes"
-      | "betWithCredit"
       | "core"
       | "deposit"
       | "gameUSD"
@@ -79,10 +75,7 @@ export interface HelperInterface extends Interface {
       | "multicall"
       | "owner"
       | "payoutPool"
-      | "pointReward"
       | "proxiableUUID"
-      | "redeem"
-      | "referral"
       | "renounceOwnership"
       | "setContracts"
       | "setMultipleWhitelist"
@@ -94,16 +87,12 @@ export interface HelperInterface extends Interface {
   getEvent(
     nameOrSignatureOrTopic:
       | "BetLastMinutes"
-      | "BetWithCredit"
       | "CoreContractSet"
       | "DepositContractSet"
       | "GameUSDPoolContractSet"
       | "Initialized"
       | "OwnershipTransferred"
       | "PayoutPoolContractSet"
-      | "PointRewardContractSet"
-      | "RedeemContractSet"
-      | "ReferralContractSet"
       | "Upgraded"
       | "WhitelistSet"
   ): EventFragment;
@@ -115,10 +104,6 @@ export interface HelperInterface extends Interface {
   encodeFunctionData(
     functionFragment: "betLastMinutes",
     values: [IHelper.BetLastMinuteParamsStruct[]]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "betWithCredit",
-    values: [IHelper.BetWithCreditParamsStruct]
   ): string;
   encodeFunctionData(functionFragment: "core", values?: undefined): string;
   encodeFunctionData(functionFragment: "deposit", values?: undefined): string;
@@ -149,30 +134,16 @@ export interface HelperInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "pointReward",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "proxiableUUID",
     values?: undefined
   ): string;
-  encodeFunctionData(functionFragment: "redeem", values?: undefined): string;
-  encodeFunctionData(functionFragment: "referral", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "renounceOwnership",
     values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "setContracts",
-    values: [
-      AddressLike,
-      AddressLike,
-      AddressLike,
-      AddressLike,
-      AddressLike,
-      AddressLike,
-      AddressLike
-    ]
+    values: [AddressLike, AddressLike, AddressLike, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "setMultipleWhitelist",
@@ -199,10 +170,6 @@ export interface HelperInterface extends Interface {
     functionFragment: "betLastMinutes",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "betWithCredit",
-    data: BytesLike
-  ): Result;
   decodeFunctionResult(functionFragment: "core", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "deposit", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "gameUSD", data: BytesLike): Result;
@@ -223,15 +190,9 @@ export interface HelperInterface extends Interface {
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "payoutPool", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "pointReward",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "proxiableUUID",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "redeem", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "referral", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceOwnership",
     data: BytesLike
@@ -262,18 +223,6 @@ export namespace BetLastMinutesEvent {
   export type InputTuple = [];
   export type OutputTuple = [];
   export interface OutputObject {}
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace BetWithCreditEvent {
-  export type InputTuple = [params: IHelper.BetWithCreditParamsStruct];
-  export type OutputTuple = [params: IHelper.BetWithCreditParamsStructOutput];
-  export interface OutputObject {
-    params: IHelper.BetWithCreditParamsStructOutput;
-  }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
   export type Log = TypedEventLog<Event>;
@@ -346,42 +295,6 @@ export namespace PayoutPoolContractSetEvent {
   export type OutputTuple = [payoutPool: string];
   export interface OutputObject {
     payoutPool: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace PointRewardContractSetEvent {
-  export type InputTuple = [pointReward: AddressLike];
-  export type OutputTuple = [pointReward: string];
-  export interface OutputObject {
-    pointReward: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace RedeemContractSetEvent {
-  export type InputTuple = [redeem: AddressLike];
-  export type OutputTuple = [redeem: string];
-  export interface OutputObject {
-    redeem: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace ReferralContractSetEvent {
-  export type InputTuple = [referral: AddressLike];
-  export type OutputTuple = [referral: string];
-  export interface OutputObject {
-    referral: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -465,12 +378,6 @@ export interface Helper extends BaseContract {
     "nonpayable"
   >;
 
-  betWithCredit: TypedContractMethod<
-    [params: IHelper.BetWithCreditParamsStruct],
-    [void],
-    "nonpayable"
-  >;
-
   core: TypedContractMethod<[], [string], "view">;
 
   deposit: TypedContractMethod<[], [string], "view">;
@@ -499,13 +406,7 @@ export interface Helper extends BaseContract {
 
   payoutPool: TypedContractMethod<[], [string], "view">;
 
-  pointReward: TypedContractMethod<[], [string], "view">;
-
   proxiableUUID: TypedContractMethod<[], [string], "view">;
-
-  redeem: TypedContractMethod<[], [string], "view">;
-
-  referral: TypedContractMethod<[], [string], "view">;
 
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
@@ -514,10 +415,7 @@ export interface Helper extends BaseContract {
       _core: AddressLike,
       _deposit: AddressLike,
       _gameUSDPool: AddressLike,
-      _referral: AddressLike,
-      _payoutPool: AddressLike,
-      _redeem: AddressLike,
-      _pointReward: AddressLike
+      _payoutPool: AddressLike
     ],
     [void],
     "nonpayable"
@@ -562,13 +460,6 @@ export interface Helper extends BaseContract {
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "betWithCredit"
-  ): TypedContractMethod<
-    [params: IHelper.BetWithCreditParamsStruct],
-    [void],
-    "nonpayable"
-  >;
-  getFunction(
     nameOrSignature: "core"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
@@ -607,16 +498,7 @@ export interface Helper extends BaseContract {
     nameOrSignature: "payoutPool"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "pointReward"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
     nameOrSignature: "proxiableUUID"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "redeem"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "referral"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "renounceOwnership"
@@ -628,10 +510,7 @@ export interface Helper extends BaseContract {
       _core: AddressLike,
       _deposit: AddressLike,
       _gameUSDPool: AddressLike,
-      _referral: AddressLike,
-      _payoutPool: AddressLike,
-      _redeem: AddressLike,
-      _pointReward: AddressLike
+      _payoutPool: AddressLike
     ],
     [void],
     "nonpayable"
@@ -667,13 +546,6 @@ export interface Helper extends BaseContract {
     BetLastMinutesEvent.InputTuple,
     BetLastMinutesEvent.OutputTuple,
     BetLastMinutesEvent.OutputObject
-  >;
-  getEvent(
-    key: "BetWithCredit"
-  ): TypedContractEvent<
-    BetWithCreditEvent.InputTuple,
-    BetWithCreditEvent.OutputTuple,
-    BetWithCreditEvent.OutputObject
   >;
   getEvent(
     key: "CoreContractSet"
@@ -718,27 +590,6 @@ export interface Helper extends BaseContract {
     PayoutPoolContractSetEvent.OutputObject
   >;
   getEvent(
-    key: "PointRewardContractSet"
-  ): TypedContractEvent<
-    PointRewardContractSetEvent.InputTuple,
-    PointRewardContractSetEvent.OutputTuple,
-    PointRewardContractSetEvent.OutputObject
-  >;
-  getEvent(
-    key: "RedeemContractSet"
-  ): TypedContractEvent<
-    RedeemContractSetEvent.InputTuple,
-    RedeemContractSetEvent.OutputTuple,
-    RedeemContractSetEvent.OutputObject
-  >;
-  getEvent(
-    key: "ReferralContractSet"
-  ): TypedContractEvent<
-    ReferralContractSetEvent.InputTuple,
-    ReferralContractSetEvent.OutputTuple,
-    ReferralContractSetEvent.OutputObject
-  >;
-  getEvent(
     key: "Upgraded"
   ): TypedContractEvent<
     UpgradedEvent.InputTuple,
@@ -763,17 +614,6 @@ export interface Helper extends BaseContract {
       BetLastMinutesEvent.InputTuple,
       BetLastMinutesEvent.OutputTuple,
       BetLastMinutesEvent.OutputObject
-    >;
-
-    "BetWithCredit(tuple)": TypedContractEvent<
-      BetWithCreditEvent.InputTuple,
-      BetWithCreditEvent.OutputTuple,
-      BetWithCreditEvent.OutputObject
-    >;
-    BetWithCredit: TypedContractEvent<
-      BetWithCreditEvent.InputTuple,
-      BetWithCreditEvent.OutputTuple,
-      BetWithCreditEvent.OutputObject
     >;
 
     "CoreContractSet(address)": TypedContractEvent<
@@ -840,39 +680,6 @@ export interface Helper extends BaseContract {
       PayoutPoolContractSetEvent.InputTuple,
       PayoutPoolContractSetEvent.OutputTuple,
       PayoutPoolContractSetEvent.OutputObject
-    >;
-
-    "PointRewardContractSet(address)": TypedContractEvent<
-      PointRewardContractSetEvent.InputTuple,
-      PointRewardContractSetEvent.OutputTuple,
-      PointRewardContractSetEvent.OutputObject
-    >;
-    PointRewardContractSet: TypedContractEvent<
-      PointRewardContractSetEvent.InputTuple,
-      PointRewardContractSetEvent.OutputTuple,
-      PointRewardContractSetEvent.OutputObject
-    >;
-
-    "RedeemContractSet(address)": TypedContractEvent<
-      RedeemContractSetEvent.InputTuple,
-      RedeemContractSetEvent.OutputTuple,
-      RedeemContractSetEvent.OutputObject
-    >;
-    RedeemContractSet: TypedContractEvent<
-      RedeemContractSetEvent.InputTuple,
-      RedeemContractSetEvent.OutputTuple,
-      RedeemContractSetEvent.OutputObject
-    >;
-
-    "ReferralContractSet(address)": TypedContractEvent<
-      ReferralContractSetEvent.InputTuple,
-      ReferralContractSetEvent.OutputTuple,
-      ReferralContractSetEvent.OutputObject
-    >;
-    ReferralContractSet: TypedContractEvent<
-      ReferralContractSetEvent.InputTuple,
-      ReferralContractSetEvent.OutputTuple,
-      ReferralContractSetEvent.OutputObject
     >;
 
     "Upgraded(address)": TypedContractEvent<

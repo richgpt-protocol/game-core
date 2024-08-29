@@ -6,7 +6,5 @@ export { Deposit__factory } from "./Deposit__factory";
 export { GameUSD__factory } from "./GameUSD__factory";
 export { GameUSDPool__factory } from "./GameUSDPool__factory";
 export { Helper__factory } from "./Helper__factory";
+export { JackpotHash__factory } from "./JackpotHash__factory";
 export { Payout__factory } from "./Payout__factory";
-export { PointReward__factory } from "./PointReward__factory";
-export { Redeem__factory } from "./Redeem__factory";
-export { Referral__factory } from "./Referral__factory";

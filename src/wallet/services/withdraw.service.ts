@@ -4,7 +4,7 @@ import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { UserWallet } from '../entities/user-wallet.entity';
 import { WalletTx } from '../entities/wallet-tx.entity';
 import { ethers } from 'ethers';
-import { GameUSD__factory, Payout__factory, Redeem__factory } from 'src/contract';
+import { GameUSD__factory, Payout__factory } from 'src/contract';
 import { RedeemDto } from '../dto/redeem.dto';
 import { RedeemTx } from '../entities/redeem-tx.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
@@ -37,7 +37,7 @@ type RequestRedeemEvent = {
 };
 
 @Injectable()
-export class RedeemService {
+export class WithdrawService {
   provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
 
   constructor(
@@ -73,11 +73,21 @@ export class RedeemService {
   // generate signature for the redeem request & update directly through backend database
   // 4. payout() run every 5 minutes to execute payout if any
 
-  async requestRedeem(userId: number, payload: RedeemDto): Promise<RedeemResponse> {
+  async requestRedeem(
+    userId: number,
+    payload: RedeemDto,
+  ): Promise<RedeemResponse> {
     const userWallet = await this.userWalletRepository.findOneBy({ userId });
 
+    if (payload.amount <= 1) {
+      return {
+        error: 'Minimum withdrawable amount is $1',
+        data: null,
+      };
+    }
+
     // check if user has sufficient amount for redeem
-    if (userWallet.redeemableBalance < payload.amount) {
+    if (userWallet.walletBalance < payload.amount) {
       return {
         error: 'Insufficient redeemable balance',
         data: null,
@@ -85,7 +95,9 @@ export class RedeemService {
     }
 
     // check if user has sufficient level to redeem
-    const userLevel = this.walletService.calculateLevel(userWallet.pointBalance);
+    const userLevel = this.walletService.calculateLevel(
+      userWallet.pointBalance,
+    );
     if (userLevel < 10) {
       return {
         error: 'Insufficient level to redeem',
@@ -99,28 +111,28 @@ export class RedeemService {
         {
           txType: 'REDEEM',
           userWalletId: userId,
-          status: 'P'
+          status: 'P',
         },
         {
           txType: 'REDEEM',
           userWalletId: userId,
-          status: 'PD'
+          status: 'PD',
         },
         {
           txType: 'REDEEM',
           userWalletId: userId,
-          status: 'PA'
+          status: 'PA',
         },
-      ]
-    })
+      ],
+    });
     if (lastRedeemWalletTx) {
       return { error: 'Redeem is in pending', data: null };
     }
 
     // create redeemTx
-    const setting = await this.settingRepository.findOneBy(
-      { key: `WITHDRAWAL_FEES_${payload.chainId}` }
-    );
+    const setting = await this.settingRepository.findOneBy({
+      key: `WITHDRAWAL_FEES_${payload.chainId}`,
+    });
     const redeemTx = this.redeemTxRepository.create({
       payoutNote: null,
       payoutCanProceed: null,
@@ -132,7 +144,7 @@ export class RedeemService {
       receiverAddress: payload.receiverAddress,
       isPayoutTransferred: false,
       chainId: payload.chainId,
-      fees: Number(setting.value),
+      fees: (Number(payload.amount) * Number(setting.value)) / 100,
       tokenSymbol: payload.tokenSymbol,
       tokenAddress: payload.tokenAddress,
       amount: payload.amount,
@@ -158,7 +170,7 @@ export class RedeemService {
 
     // update redeemTx with walletTx
     redeemTx.walletTx = walletTx;
-    await this.redeemTxRepository.save(redeemTx)
+    await this.redeemTxRepository.save(redeemTx);
 
     // create gameUsdTx
     const gameUsdTx = this.gameUsdTxRepository.create({
@@ -182,34 +194,40 @@ export class RedeemService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-
       // check if Payout contract has sufficient USDT to payout for requested amount based on the chainId
       let usdt_balance: bigint;
       if (payload.chainId === 56) {
-        const _provider = new ethers.JsonRpcProvider(process.env.BNB_PROVIDER_RPC_URL);
+        const _provider = new ethers.JsonRpcProvider(
+          process.env.BNB_PROVIDER_RPC_URL,
+        );
         const usdt_token_contract = GameUSD__factory.connect(
           // borrow interface from GameUSD token contract
           process.env.BNB_USDT_TOKEN_ADDRESS,
-          _provider
+          _provider,
         );
-        usdt_balance = await usdt_token_contract.balanceOf(process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS);
-
+        usdt_balance = await usdt_token_contract.balanceOf(
+          process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS,
+        );
       } else {
-        const _provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
+        const _provider = new ethers.JsonRpcProvider(
+          process.env.OPBNB_PROVIDER_RPC_URL,
+        );
         const usdt_token_contract = GameUSD__factory.connect(
           process.env.OPBNB_USDT_TOKEN_ADDRESS,
-          _provider
+          _provider,
         );
-        usdt_balance = await usdt_token_contract.balanceOf(process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS);
+        usdt_balance = await usdt_token_contract.balanceOf(
+          process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS,
+        );
       }
 
       if (Number(usdt_balance) < payload.amount) {
         // send notification to admin for reload payout pool
-        this.adminNotificationService.setAdminNotification(
+        await this.adminNotificationService.setAdminNotification(
           `Payout contract has insufficient USDT to payout for amount $${payload.amount}. Please reload payout pool.`,
           'error',
           'Payout Pool Reload',
-          true
+          true,
         );
       }
 
@@ -223,13 +241,12 @@ export class RedeemService {
         order: { updatedDate: 'DESC' },
       });
       if (
-        payload.amount < 100
-          && (
-            lastRedeemWalletTx === null || // first redeem
-            lastRedeemWalletTx.updatedDate < new Date(Date.now() - 24 * 60 * 60 * 1000)
-          )
-          // proceed for bot payout only if usdt_balance is sufficient
-          && usdt_balance > payload.amount
+        payload.amount < 100 &&
+        (lastRedeemWalletTx === null || // first redeem
+          lastRedeemWalletTx.updatedDate <
+            new Date(Date.now() - 24 * 60 * 60 * 1000)) &&
+        // proceed for bot payout only if usdt_balance is sufficient
+        usdt_balance > payload.amount
       ) {
         const adminId = 999; // means this request redeem is done automatically(criteria met)
         const payload: ReviewRedeemDto = {
@@ -238,7 +255,6 @@ export class RedeemService {
           payoutNote: 'This request redeem proceed automatically(criteria met)',
         };
         this.reviewRedeem(adminId, payload);
-
       } else {
         // requested amount > $100 or last payout < 24 hours
         walletTx.status = 'PA'; // pending for admin review
@@ -249,12 +265,11 @@ export class RedeemService {
           `User ${userId} has requested redeem for amount $${payload.amount}, please review. redeemTxId: ${redeemTx.id}`,
           'info',
           'Redeem Request',
-          true
+          true,
         );
       }
 
       await queryRunner.commitTransaction();
-
     } catch (err) {
       // rollback queryRunner
       await queryRunner.rollbackTransaction();
@@ -263,28 +278,24 @@ export class RedeemService {
         `Transaction in redeem.service.requestRedeem had been rollback, error: ${err}`,
         'rollbackTxError',
         'Transaction Rollbacked',
-        true
+        true,
       );
       return { error: err, data: null };
-
     } finally {
       // finalize queryRunner
       await queryRunner.release();
 
       // update userWallet
       userWallet.walletBalance -= walletTx.txAmount;
-      userWallet.redeemableBalance -= walletTx.txAmount;
+      // userWallet.redeemableBalance -= walletTx.txAmount;
       await this.userWalletRepository.save(userWallet);
 
-      await this.userService.setUserNotification(
-        userId,
-        {
-          type: 'redeem',
-          title: 'Redeem Processed Successfully',
-          message: `Your redeem of $${payload.amount} has been successfully processed and pending for review.`,
-          walletTxId: walletTx.id,
-        }
-      );
+      await this.userService.setUserNotification(userId, {
+        type: 'redeem',
+        title: 'Redeem Processed Successfully',
+        message: `Your redeem of $${payload.amount} has been successfully processed and pending for review.`,
+        walletTxId: walletTx.id,
+      });
     }
 
     return { error: null, data: redeemTx };
@@ -294,22 +305,28 @@ export class RedeemService {
     // fetch redeemTx from redeemTxId
     const redeemTx = await this.redeemTxRepository.findOne({
       where: { id: payload.redeemTxId },
-      relations: { walletTx: true }
+      relations: { walletTx: true },
     });
 
     // check if redeemTx exists
     if (redeemTx === null) {
-      return { error: `redeemTxId: ${payload.redeemTxId} not found`, data: null };
+      return {
+        error: `redeemTxId: ${payload.redeemTxId} not found`,
+        data: null,
+      };
     }
 
     const walletTx = await this.walletTxRepository.findOne({
       where: { id: redeemTx.walletTx.id },
-      relations: { userWallet: true }
+      relations: { userWallet: true },
     });
 
     // check if this redeemTx is already reviewed
     if (redeemTx.reviewedBy !== null) {
-      return { error: `This redeem request is already reviewed by admin id: ${redeemTx.reviewedBy}`, data: null };
+      return {
+        error: `This redeem request is already reviewed by admin id: ${redeemTx.reviewedBy}`,
+        data: null,
+      };
     }
 
     // start queryRunner
@@ -317,14 +334,14 @@ export class RedeemService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-
       // update redeemTx
       redeemTx.payoutNote = payload.payoutNote;
       redeemTx.payoutCheckedAt = new Date();
       redeemTx.reviewedBy = adminId;
-      redeemTx.admin = adminId === 999 // system auto payout
-        ? null
-        : await this.adminRepository.findOneBy({ id: adminId });
+      redeemTx.admin =
+        adminId === 999 // system auto payout
+          ? null
+          : await this.adminRepository.findOneBy({ id: adminId });
       await queryRunner.manager.save(redeemTx);
 
       if (payload.payoutCanProceed) {
@@ -336,16 +353,19 @@ export class RedeemService {
         const userWallet = walletTx.userWallet;
         const signer = new ethers.Wallet(
           await MPC.retrievePrivateKey(userWallet.walletAddress),
-          this.provider
+          this.provider,
         );
         const redeemTxCount = await this.redeemTxRepository.count();
         if (redeemTxCount === 1) {
           // first redeem request, approve max amount to redeem contract
-          const gameUsdTokenContract = GameUSD__factory.connect(process.env.GAMEUSD_CONTRACT_ADDRESS, signer);
+          const gameUsdTokenContract = GameUSD__factory.connect(
+            process.env.GAMEUSD_CONTRACT_ADDRESS,
+            signer,
+          );
           const txResponse = await gameUsdTokenContract.approve(
             process.env.REDEEM_CONTRACT_ADDRESS,
             ethers.MaxUint256,
-            { gasLimit: 100000 } // increased by ~30% from actual gas used
+            { gasLimit: 100000 }, // increased by ~30% from actual gas used
           );
           await txResponse.wait();
 
@@ -357,54 +377,52 @@ export class RedeemService {
           );
         }
 
+        // TODO: to migrate to withdraw
         // execute redeem() on Redeem contract
-        const redeemContract = Redeem__factory.connect(process.env.REDEEM_CONTRACT_ADDRESS, signer);
-        const txResponse = await redeemContract.redeem(
-          ethers.parseEther(Number(redeemTx.amount).toString()),
-          redeemTx.receiverAddress,
-          { gasLimit: 100000 } // increased by ~30% from actual gas used
-        );
+        // const redeemContract = Redeem__factory.connect(process.env.REDEEM_CONTRACT_ADDRESS, signer);
+        // const txResponse = await redeemContract.redeem(
+        //   ethers.parseEther(Number(redeemTx.amount).toString()),
+        //   redeemTx.receiverAddress,
+        //   { gasLimit: 100000 } // increased by ~30% from actual gas used
+        // );
 
-        // check native token balance for user wallet
-        this.eventEmitter.emit(
-          'gas.service.reload',
-          userWallet.walletAddress,
-          Number(process.env.OPBNB_CHAIN_ID),
-        );
+        // // check native token balance for user wallet
+        // this.eventEmitter.emit(
+        //   'gas.service.reload',
+        //   userWallet.walletAddress,
+        //   Number(process.env.OPBNB_CHAIN_ID),
+        // );
 
-        // update txHash for walletTx & gameUsdTx
-        // this txHash might be in pending, is success, is failed, or is disappeared(in very rare case)
-        walletTx.txHash = txResponse.hash;
-        await queryRunner.manager.save(walletTx);
-        const gameUsdTx = await this.gameUsdTxRepository.findOneBy({ walletTxId: walletTx.id });
-        gameUsdTx.txHash = txResponse.hash;
-        await queryRunner.manager.save(gameUsdTx);
+        // // update txHash for walletTx & gameUsdTx
+        // // this txHash might be in pending, is success, is failed, or is disappeared(in very rare case)
+        // walletTx.txHash = txResponse.hash;
+        // await queryRunner.manager.save(walletTx);
+        // const gameUsdTx = await this.gameUsdTxRepository.findOneBy({ walletTxId: walletTx.id });
+        // gameUsdTx.txHash = txResponse.hash;
+        // await queryRunner.manager.save(gameUsdTx);
 
-        // pass to handleClaimEvent() to check & update database
-        const eventPayload: RequestRedeemEvent = {
-          userId: userWallet.userId,
-          txHash: txResponse.hash,
-          walletTxId: walletTx.id,
-          redeemTxId: redeemTx.id,
-          gameUsdTxId: gameUsdTx.id,
-        }
-        this.eventEmitter.emit('wallet.handleRedeem', eventPayload);
+        // // pass to handleClaimEvent() to check & update database
+        // const eventPayload: RequestRedeemEvent = {
+        //   userId: userWallet.userId,
+        //   txHash: txResponse.hash,
+        //   walletTxId: walletTx.id,
+        //   redeemTxId: redeemTx.id,
+        //   gameUsdTxId: gameUsdTx.id,
+        // }
+        // this.eventEmitter.emit('wallet.handleRedeem', eventPayload);
 
         // need to commit transaction before setUserNotification() to avoid deadlock(QueryFailedError)
         await queryRunner.commitTransaction();
 
         // inform user for approved redeem request (not through queryRunner)
-        await this.userService.setUserNotification(
-          walletTx.userWalletId,
-          {
-            type: 'review redeem',
-            title: 'Redeem Request Approved',
-            message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been approved. Please wait for the payout process.`,
-            walletTxId: walletTx.id,
-          }
-        );
-
-      } else { // !payload.canApprove
+        await this.userService.setUserNotification(walletTx.userWalletId, {
+          type: 'review redeem',
+          title: 'Redeem Request Approved',
+          message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been approved. Please wait for the payout process.`,
+          walletTxId: walletTx.id,
+        });
+      } else {
+        // !payload.canApprove
         // update redeemTx
         redeemTx.payoutCanProceed = false;
         await queryRunner.manager.save(redeemTx);
@@ -414,19 +432,15 @@ export class RedeemService {
         await queryRunner.manager.save(walletTx);
 
         // inform user for rejected redeem request (not through queryRunner)
-        await this.userService.setUserNotification(
-          walletTx.userWalletId,
-          {
-            type: 'review redeem',
-            title: 'Redeem Request Rejected',
-            message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
-            walletTxId: walletTx.id,
-          }
-        );
+        await this.userService.setUserNotification(walletTx.userWalletId, {
+          type: 'review redeem',
+          title: 'Redeem Request Rejected',
+          message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
+          walletTxId: walletTx.id,
+        });
 
         await queryRunner.commitTransaction();
       }
-
     } catch (err) {
       // rollback queryRunner
       await queryRunner.rollbackTransaction();
@@ -441,11 +455,11 @@ export class RedeemService {
         'rollbackTxError',
         'Transaction Rollbacked',
         true,
-        walletTx.id
+        false,
+        walletTx.id,
       );
 
       return { error: `transaction rollback, error: ${err}`, data: null };
-
     } finally {
       // finalize queryRunner
       await queryRunner.release();
@@ -454,7 +468,14 @@ export class RedeemService {
     return { error: null, data: { redeemTx: redeemTx, walletTx: walletTx } };
   }
 
-  @OnEvent('wallet.handleRedeem', {async: true})
+  async getWithdrawalFees(chainId: number): Promise<number> {
+    const setting = await this.settingRepository.findOneBy({
+      key: `WITHDRAWAL_FEES_${chainId}`,
+    });
+    return Number(setting.value);
+  }
+
+  @OnEvent('wallet.handleRedeem', { async: true })
   async handleRedeemEvent(payload: RequestRedeemEvent) {
     // fetch txResponse from hash and wait for txReceipt
     const txResponse = await this.provider.getTransaction(payload.txHash);
@@ -465,14 +486,19 @@ export class RedeemService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const redeemTx = await this.redeemTxRepository.findOneBy({ id: payload.redeemTxId });
+      const redeemTx = await this.redeemTxRepository.findOneBy({
+        id: payload.redeemTxId,
+      });
       const walletTx = await this.walletTxRepository.findOne({
         where: { id: payload.walletTxId },
-        relations: { userWallet: true }
+        relations: { userWallet: true },
       });
-      const gameUsdTx = await this.gameUsdTxRepository.findOneBy({ id: payload.gameUsdTxId });
+      const gameUsdTx = await this.gameUsdTxRepository.findOneBy({
+        id: payload.gameUsdTxId,
+      });
 
-      if (txReceipt.status === 1) { // Redeem.redeem() success
+      if (txReceipt.status === 1) {
+        // Redeem.redeem() success
         // update redeemTx
         redeemTx.payoutCanProceed = true;
         redeemTx.payoutStatus = 'P'; // pending
@@ -489,7 +515,8 @@ export class RedeemService {
         });
         // lastWalletTx never be null because there must be claim walletTx before redeem
         walletTx.startingBalance = lastWalletTx.endingBalance;
-        walletTx.endingBalance = Number(walletTx.startingBalance) - Number(walletTx.txAmount);
+        walletTx.endingBalance =
+          Number(walletTx.startingBalance) - Number(walletTx.txAmount);
         await queryRunner.manager.save(walletTx);
 
         // update gameUsdTx
@@ -500,10 +527,10 @@ export class RedeemService {
         // update wallet_tx
         walletTx.status = 'S';
         await queryRunner.manager.save(walletTx);
-        
-        await queryRunner.commitTransaction();
 
-      } else { // txReceipt.status === 0, Redeem.redeem() failed
+        await queryRunner.commitTransaction();
+      } else {
+        // txReceipt.status === 0, Redeem.redeem() failed
         // update walletTx
         walletTx.status = 'PD';
         await queryRunner.manager.save(walletTx);
@@ -519,16 +546,18 @@ export class RedeemService {
           'onChainTxError',
           'Redeem Failed',
           true,
-          walletTx.id
+          false,
+          walletTx.id,
         );
       }
-
     } catch (err) {
       // rollback queryRunner
       await queryRunner.rollbackTransaction();
 
       // update walletTx
-      const walletTx = await this.walletTxRepository.findOneBy({ id: payload.walletTxId });
+      const walletTx = await this.walletTxRepository.findOneBy({
+        id: payload.walletTxId,
+      });
       walletTx.status = 'PD';
       await queryRunner.manager.save(walletTx);
 
@@ -538,9 +567,9 @@ export class RedeemService {
         'rollbackTxError',
         'Transaction Rollbacked',
         true,
-        payload.walletTxId
+        false,
+        payload.walletTxId,
       );
-
     } finally {
       // finalize queryRunner
       await queryRunner.release();
@@ -558,7 +587,7 @@ export class RedeemService {
         isPayoutTransferred: false,
         reviewedBy: Not(IsNull()),
       },
-      relations: { walletTx: true }
+      relations: { walletTx: true },
     });
 
     for (const redeemTx of redeemTxs) {
@@ -571,28 +600,32 @@ export class RedeemService {
       await queryRunner.connect();
       await queryRunner.startTransaction();
       try {
-        
         const amountAfterFees = Number(redeemTx.amount) - Number(redeemTx.fees);
         const destinationAddress = redeemTx.receiverAddress;
 
         // interact with Payout Pool contract
-        const chain_provider_url = redeemTx.chainId === 56
-          ? process.env.BNB_PROVIDER_RPC_URL
-          : process.env.OPBNB_PROVIDER_RPC_URL;
-        const chain_provider = new ethers.JsonRpcProvider(chain_provider_url)
+        const chain_provider_url =
+          redeemTx.chainId === 56
+            ? process.env.BNB_PROVIDER_RPC_URL
+            : process.env.OPBNB_PROVIDER_RPC_URL;
+        const chain_provider = new ethers.JsonRpcProvider(chain_provider_url);
         const payoutBot = new ethers.Wallet(
           await MPC.retrievePrivateKey(process.env.PAYOUT_BOT_ADDRESS),
-          chain_provider
+          chain_provider,
         );
-        const payoutPoolContractAddress = redeemTx.chainId === 56
-          ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
-          : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
-        const payoutPoolContract = Payout__factory.connect(payoutPoolContractAddress, payoutBot);
+        const payoutPoolContractAddress =
+          redeemTx.chainId === 56
+            ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
+            : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
+        const payoutPoolContract = Payout__factory.connect(
+          payoutPoolContractAddress,
+          payoutBot,
+        );
         const txResponse = await payoutPoolContract.payout(
           ethers.parseEther(amountAfterFees.toString()),
           destinationAddress,
           redeemTx.payoutSignature,
-          { gasLimit: 120000 } // increased by ~30% from actual gas used
+          { gasLimit: 120000 }, // increased by ~30% from actual gas used
         );
         const txReceipt = await txResponse.wait();
 
@@ -608,7 +641,8 @@ export class RedeemService {
         redeemTx.fromAddress = payoutBot.address;
         await queryRunner.manager.save(redeemTx);
 
-        if (txReceipt.status === 1) { // on-chain transaction success
+        if (txReceipt.status === 1) {
+          // on-chain transaction success
           // update redeemTx
           redeemTx.isPayoutTransferred = true;
           redeemTx.payoutStatus = 'S';
@@ -619,17 +653,14 @@ export class RedeemService {
           await queryRunner.manager.save(walletTx);
 
           // send notification to user for successful payout (not through queryRunner)
-          await this.userService.setUserNotification(
-            walletTx.userWalletId,
-            {
-              type: 'payout',
-              title: 'Payout Successfully',
-              message: `Your payout for amount $${Number(redeemTx.amount)} has been processed successfully.`,
-              walletTxId: walletTx.id,
-            }
-          );
-
-        } else { // txReceipt.status === 0, on-chain transaction failed
+          await this.userService.setUserNotification(walletTx.userWalletId, {
+            type: 'payout',
+            title: 'Payout Successfully',
+            message: `Your payout for amount $${Number(redeemTx.amount)} has been processed successfully.`,
+            walletTxId: walletTx.id,
+          });
+        } else {
+          // txReceipt.status === 0, on-chain transaction failed
           // update redeemTx
           redeemTx.isPayoutTransferred = false;
           await queryRunner.manager.save(redeemTx);
@@ -645,12 +676,12 @@ export class RedeemService {
             'error',
             'Payout Failed',
             true,
-            walletTx.id
+            false,
+            walletTx.id,
           );
         }
 
         await queryRunner.commitTransaction();
-
       } catch (err) {
         // rollback queryRunner
         await queryRunner.rollbackTransaction();
@@ -665,9 +696,9 @@ export class RedeemService {
           'rollbackTxError',
           'Transaction Rollbacked',
           true,
-          walletTx.id
+          false,
+          walletTx.id,
         );
-
       } finally {
         // finalize queryRunner
         await queryRunner.release();

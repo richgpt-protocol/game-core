@@ -15,6 +15,8 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
+import { ConfigService } from 'src/config/config.service';
+import { ConfigModule } from 'src/config/config.module';
 
 @Module({
   imports: [
@@ -24,16 +26,17 @@ import { Notification } from 'src/notification/entities/notification.entity';
       ReferralTx,
       WalletTx,
       Notification,
-      UserNotification
+      UserNotification,
     ]),
     AuditLogModule,
     PermissionModule,
     SharedModule,
     AdminModule,
     SseModule,
+    ConfigModule,
     CacheModule.register(),
   ],
-  providers: [UserService, WalletService],
+  providers: [UserService, WalletService, ConfigService],
   controllers: [UserController],
   exports: [UserService],
 })

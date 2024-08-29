@@ -33,11 +33,9 @@ export interface GameUSDPoolInterface extends Interface {
       | "isWhitelisted"
       | "owner"
       | "proxiableUUID"
-      | "referral"
       | "renounceOwnership"
       | "setCoreContract"
       | "setMultipleWhitelist"
-      | "setReferralContract"
       | "setWhitelist"
       | "supply"
       | "transferOwnership"
@@ -49,7 +47,6 @@ export interface GameUSDPoolInterface extends Interface {
       | "CoreContractSet"
       | "Initialized"
       | "OwnershipTransferred"
-      | "ReferralContractSet"
       | "Supply"
       | "Upgraded"
       | "WhitelistSet"
@@ -74,7 +71,6 @@ export interface GameUSDPoolInterface extends Interface {
     functionFragment: "proxiableUUID",
     values?: undefined
   ): string;
-  encodeFunctionData(functionFragment: "referral", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "renounceOwnership",
     values?: undefined
@@ -86,10 +82,6 @@ export interface GameUSDPoolInterface extends Interface {
   encodeFunctionData(
     functionFragment: "setMultipleWhitelist",
     values: [AddressLike[], boolean[]]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setReferralContract",
-    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "setWhitelist",
@@ -124,7 +116,6 @@ export interface GameUSDPoolInterface extends Interface {
     functionFragment: "proxiableUUID",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "referral", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceOwnership",
     data: BytesLike
@@ -135,10 +126,6 @@ export interface GameUSDPoolInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "setMultipleWhitelist",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "setReferralContract",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -186,18 +173,6 @@ export namespace OwnershipTransferredEvent {
   export interface OutputObject {
     previousOwner: string;
     newOwner: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace ReferralContractSetEvent {
-  export type InputTuple = [referrer: AddressLike];
-  export type OutputTuple = [referrer: string];
-  export interface OutputObject {
-    referrer: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -304,8 +279,6 @@ export interface GameUSDPool extends BaseContract {
 
   proxiableUUID: TypedContractMethod<[], [string], "view">;
 
-  referral: TypedContractMethod<[], [string], "view">;
-
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
   setCoreContract: TypedContractMethod<
@@ -316,12 +289,6 @@ export interface GameUSDPool extends BaseContract {
 
   setMultipleWhitelist: TypedContractMethod<
     [addr: AddressLike[], status: boolean[]],
-    [void],
-    "nonpayable"
-  >;
-
-  setReferralContract: TypedContractMethod<
-    [_referral: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -380,9 +347,6 @@ export interface GameUSDPool extends BaseContract {
     nameOrSignature: "proxiableUUID"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "referral"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
     nameOrSignature: "renounceOwnership"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
@@ -395,9 +359,6 @@ export interface GameUSDPool extends BaseContract {
     [void],
     "nonpayable"
   >;
-  getFunction(
-    nameOrSignature: "setReferralContract"
-  ): TypedContractMethod<[_referral: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setWhitelist"
   ): TypedContractMethod<
@@ -443,13 +404,6 @@ export interface GameUSDPool extends BaseContract {
     OwnershipTransferredEvent.InputTuple,
     OwnershipTransferredEvent.OutputTuple,
     OwnershipTransferredEvent.OutputObject
-  >;
-  getEvent(
-    key: "ReferralContractSet"
-  ): TypedContractEvent<
-    ReferralContractSetEvent.InputTuple,
-    ReferralContractSetEvent.OutputTuple,
-    ReferralContractSetEvent.OutputObject
   >;
   getEvent(
     key: "Supply"
@@ -505,17 +459,6 @@ export interface GameUSDPool extends BaseContract {
       OwnershipTransferredEvent.InputTuple,
       OwnershipTransferredEvent.OutputTuple,
       OwnershipTransferredEvent.OutputObject
-    >;
-
-    "ReferralContractSet(address)": TypedContractEvent<
-      ReferralContractSetEvent.InputTuple,
-      ReferralContractSetEvent.OutputTuple,
-      ReferralContractSetEvent.OutputObject
-    >;
-    ReferralContractSet: TypedContractEvent<
-      ReferralContractSetEvent.InputTuple,
-      ReferralContractSetEvent.OutputTuple,
-      ReferralContractSetEvent.OutputObject
     >;
 
     "Supply(address,uint256)": TypedContractEvent<

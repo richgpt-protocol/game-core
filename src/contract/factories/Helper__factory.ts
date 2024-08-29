@@ -34,83 +34,41 @@ const _abi = [
             internalType: "address",
           },
           {
-            name: "bets",
-            type: "tuple[]",
-            internalType: "struct ICore.BetParams[]",
-            components: [
-              {
-                name: "epoch",
-                type: "uint256",
-                internalType: "uint256",
-              },
-              {
-                name: "number",
-                type: "uint256",
-                internalType: "uint256",
-              },
-              {
-                name: "amount",
-                type: "uint256",
-                internalType: "uint256",
-              },
-              {
-                name: "forecast",
-                type: "uint8",
-                internalType: "enum ICore.Forecast",
-              },
-            ],
-          },
-        ],
-      },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "betWithCredit",
-    inputs: [
-      {
-        name: "params",
-        type: "tuple",
-        internalType: "struct IHelper.BetWithCreditParams",
-        components: [
-          {
-            name: "user",
-            type: "address",
-            internalType: "address",
-          },
-          {
-            name: "bets",
-            type: "tuple[]",
-            internalType: "struct ICore.BetParams[]",
-            components: [
-              {
-                name: "epoch",
-                type: "uint256",
-                internalType: "uint256",
-              },
-              {
-                name: "number",
-                type: "uint256",
-                internalType: "uint256",
-              },
-              {
-                name: "amount",
-                type: "uint256",
-                internalType: "uint256",
-              },
-              {
-                name: "forecast",
-                type: "uint8",
-                internalType: "enum ICore.Forecast",
-              },
-            ],
-          },
-          {
-            name: "credit",
+            name: "uid",
             type: "uint256",
             internalType: "uint256",
+          },
+          {
+            name: "ticketId",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "bets",
+            type: "tuple[]",
+            internalType: "struct ICore.BetParams[]",
+            components: [
+              {
+                name: "epoch",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "number",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "amount",
+                type: "uint256",
+                internalType: "uint256",
+              },
+              {
+                name: "forecast",
+                type: "uint8",
+                internalType: "enum ICore.Forecast",
+              },
+            ],
           },
         ],
       },
@@ -278,19 +236,6 @@ const _abi = [
   },
   {
     type: "function",
-    name: "pointReward",
-    inputs: [],
-    outputs: [
-      {
-        name: "",
-        type: "address",
-        internalType: "contract IPointReward",
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
     name: "proxiableUUID",
     inputs: [],
     outputs: [
@@ -298,32 +243,6 @@ const _abi = [
         name: "",
         type: "bytes32",
         internalType: "bytes32",
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
-    name: "redeem",
-    inputs: [],
-    outputs: [
-      {
-        name: "",
-        type: "address",
-        internalType: "contract IRedeem",
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
-    name: "referral",
-    inputs: [],
-    outputs: [
-      {
-        name: "",
-        type: "address",
-        internalType: "contract IReferral",
       },
     ],
     stateMutability: "view",
@@ -355,22 +274,7 @@ const _abi = [
         internalType: "address",
       },
       {
-        name: "_referral",
-        type: "address",
-        internalType: "address",
-      },
-      {
         name: "_payoutPool",
-        type: "address",
-        internalType: "address",
-      },
-      {
-        name: "_redeem",
-        type: "address",
-        internalType: "address",
-      },
-      {
-        name: "_pointReward",
         type: "address",
         internalType: "address",
       },
@@ -453,58 +357,6 @@ const _abi = [
   },
   {
     type: "event",
-    name: "BetWithCredit",
-    inputs: [
-      {
-        name: "params",
-        type: "tuple",
-        indexed: false,
-        internalType: "struct IHelper.BetWithCreditParams",
-        components: [
-          {
-            name: "user",
-            type: "address",
-            internalType: "address",
-          },
-          {
-            name: "bets",
-            type: "tuple[]",
-            internalType: "struct ICore.BetParams[]",
-            components: [
-              {
-                name: "epoch",
-                type: "uint256",
-                internalType: "uint256",
-              },
-              {
-                name: "number",
-                type: "uint256",
-                internalType: "uint256",
-              },
-              {
-                name: "amount",
-                type: "uint256",
-                internalType: "uint256",
-              },
-              {
-                name: "forecast",
-                type: "uint8",
-                internalType: "enum ICore.Forecast",
-              },
-            ],
-          },
-          {
-            name: "credit",
-            type: "uint256",
-            internalType: "uint256",
-          },
-        ],
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: "event",
     name: "CoreContractSet",
     inputs: [
       {
@@ -580,45 +432,6 @@ const _abi = [
     inputs: [
       {
         name: "payoutPool",
-        type: "address",
-        indexed: false,
-        internalType: "address",
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: "event",
-    name: "PointRewardContractSet",
-    inputs: [
-      {
-        name: "pointReward",
-        type: "address",
-        indexed: false,
-        internalType: "address",
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: "event",
-    name: "RedeemContractSet",
-    inputs: [
-      {
-        name: "redeem",
-        type: "address",
-        indexed: false,
-        internalType: "address",
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: "event",
-    name: "ReferralContractSet",
-    inputs: [
-      {
-        name: "referral",
         type: "address",
         indexed: false,
         internalType: "address",

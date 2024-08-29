@@ -20,6 +20,7 @@ export class TransferGameUSDDto {
     description: 'Whether to use Phone or UID',
     required: true,
   })
+  @IsNotEmpty()
   sendMode: SendMode;
 
   @ApiProperty({

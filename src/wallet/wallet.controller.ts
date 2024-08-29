@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -8,36 +9,44 @@ import {
   Req,
   Request,
 } from '@nestjs/common';
-import { ApiHeader, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Secure } from 'src/shared/decorators/secure.decorator';
+import {
+  ApiBody,
+  ApiHeader,
+  ApiHeaders,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { Secure, SecureEJS } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { ErrorResponseVo, ResponseVo } from 'src/shared/vo/response.vo';
 import { WalletService } from './wallet.service';
 import { ClaimService } from './services/claim.service';
-import { RedeemService } from './services/redeem.service';
+import { WithdrawService } from './services/withdraw.service';
 import { RedeemDto } from 'src/wallet/dto/redeem.dto';
 import { ReviewRedeemDto } from './dto/ReviewRedeem.dto';
 import { CalculateLevelDto } from './dto/calculateLevel.dto';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
+import { TransferGameUSDDto } from './dto/InternalTransferDto';
+import { InternalTransferService } from './services/internal-transfer.service';
+import { DepositDTO } from './dto/deposit.dto';
+import { DepositService } from './services/deposit.service';
+import { ConfigService } from 'src/config/config.service';
+import { PermissionEnum } from 'src/shared/enum/permission.enum';
+import { CreditService } from './services/credit.service';
+import { AddCreditDto } from './dto/credit.dto';
 
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
 export class WalletController {
   constructor(
     private walletService: WalletService,
-    private redeemService: RedeemService,
+    private withdrawService: WithdrawService,
     private claimService: ClaimService,
+    private internalTransferService: InternalTransferService,
+    private depositService: DepositService,
+    private configService: ConfigService,
+    private creditService: CreditService,
   ) {}
-
-  // TODO
-  @Secure(null, UserRole.USER)
-  @Post('deposit')
-  async deposit() {}
-
-  // TODO: transfer GameUSD to other wallet that registered with us, update balance in database
-  @Secure(null, UserRole.USER)
-  @Post('transfer')
-  async transfer() {}
 
   // TODO: supply free credit to wallet. Here is not a good place for this API.
   @Secure(null, UserRole.ADMIN)
@@ -61,9 +70,7 @@ export class WalletController {
     // @HandlerClass() classInfo: IHandlerClass,
     // @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const userInfo = await this.walletService.getWalletInfo(
-      req.user.userId,
-    );
+    const userInfo = await this.walletService.getWalletInfo(req.user.userId);
     return {
       statusCode: HttpStatus.OK,
       data: userInfo,
@@ -87,9 +94,7 @@ export class WalletController {
     description: 'Bad Request',
     type: ErrorResponseVo,
   })
-  async claim(
-    @Req() req: any,
-  ): Promise<ResponseVo<any>> {
+  async claim(@Req() req: any): Promise<ResponseVo<any>> {
     try {
       const res = await this.claimService.claim(Number(req.user.userId));
       if (!res.error || res.data) {
@@ -98,7 +103,6 @@ export class WalletController {
           data: res.data,
           message: 'claim success',
         };
-
       } else {
         return {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -106,7 +110,6 @@ export class WalletController {
           message: res.error,
         };
       }
-    
     } catch (error) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
@@ -137,9 +140,9 @@ export class WalletController {
     @Body() payload: RedeemDto,
   ): Promise<ResponseVo<any>> {
     try {
-      const res = await this.redeemService.requestRedeem(
+      const res = await this.withdrawService.requestRedeem(
         Number(req.user.userId),
-        payload
+        payload,
       );
       if (!res.error || res.data) {
         return {
@@ -147,7 +150,6 @@ export class WalletController {
           data: res.data,
           message: 'request redeem success',
         };
-
       } else {
         return {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -155,7 +157,6 @@ export class WalletController {
           message: res.error,
         };
       }
-    
     } catch (error) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
@@ -165,7 +166,8 @@ export class WalletController {
     }
   }
 
-  @Secure(null, UserRole.ADMIN)
+  // @Secure(null, UserRole.ADMIN)
+  @SecureEJS(PermissionEnum.PAYOUT, UserRole.ADMIN)
   @Post('review-redeem')
   @ApiHeader({
     name: 'x-custom-lang',
@@ -186,9 +188,9 @@ export class WalletController {
     @Body() payload: ReviewRedeemDto,
   ): Promise<ResponseVo<any>> {
     try {
-      const res = await this.redeemService.reviewRedeem(
+      const res = await this.withdrawService.reviewRedeem(
         Number(req.user.userId),
-        payload
+        payload,
       );
       if (!res.error || res.data) {
         return {
@@ -196,7 +198,6 @@ export class WalletController {
           data: res.data,
           message: 'review redeem success',
         };
-
       } else {
         return {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -204,7 +205,6 @@ export class WalletController {
           message: res.error,
         };
       }
-    
     } catch (error) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
@@ -214,6 +214,19 @@ export class WalletController {
     }
   }
 
+  @Secure(null, UserRole.USER)
+  @Get('get-withdrawl-fee')
+  async getWithdrawlFee(
+    @Query('chainId') chainId: number,
+  ): Promise<ResponseVo<any>> {
+    const fee = await this.withdrawService.getWithdrawalFees(chainId);
+
+    return {
+      statusCode: HttpStatus.OK,
+      data: fee,
+      message: '',
+    };
+  }
   // TODO
   @Secure(null, UserRole.USER)
   @Get('get-redeem-status')
@@ -255,7 +268,7 @@ export class WalletController {
   ): Promise<ResponseVo<any>> {
     const walletTxs = await this.walletService.getWalletTx(
       req.user.userId,
-      count
+      count,
     );
     return {
       statusCode: HttpStatus.OK,
@@ -281,9 +294,7 @@ export class WalletController {
     // @HandlerClass() classInfo: IHandlerClass,
     // @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const betWalletTxs = await this.walletService.getTicket(
-      req.user.userId,
-    );
+    const betWalletTxs = await this.walletService.getTicket(req.user.userId);
 
     // final result after code below
     // {
@@ -400,12 +411,13 @@ export class WalletController {
                     isBigForecastWin: betOrder.isBigForecastWin,
                     isSmallForecastWin: betOrder.isSmallForecastWin,
                   };
-              })
-            }
-          })
-        }
-      })
-    }
+                },
+              ),
+            };
+          }),
+        };
+      }),
+    };
 
     return {
       statusCode: HttpStatus.OK,
@@ -434,12 +446,135 @@ export class WalletController {
   ): Promise<ResponseVo<any>> {
     const pointTxs = await this.walletService.getPointHistory(
       req.user.userId,
-      count
+      count,
     );
     return {
       statusCode: HttpStatus.OK,
       data: pointTxs,
       message: '',
     };
+  }
+
+  @Secure(null, UserRole.USER)
+  @ApiBody({
+    type: TransferGameUSDDto,
+    required: true,
+  })
+  @Post('transfer')
+  async transfer(
+    @Request() req,
+    @Body() payload: TransferGameUSDDto,
+  ): Promise<ResponseVo<any>> {
+    const userId = req.user.id;
+    // const userId = 1;
+    try {
+      await this.internalTransferService.transferGameUSD(userId, payload);
+      return {
+        statusCode: HttpStatus.OK,
+        data: {},
+        message: 'Transfer success',
+      };
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Post('deposit')
+  @ApiHeaders([
+    {
+      name: 'x-secret',
+      description: 'Deposit bot secret',
+    },
+  ])
+  @ApiBody({ type: DepositDTO })
+  async deposit(
+    @Req() req: Request,
+    @Body() payload: DepositDTO,
+  ): Promise<ResponseVo<any>> {
+    const headerSecret = req.headers['x-secret'];
+    if (headerSecret !== this.configService.get('DEPOSIT_BOT_SECRET')) {
+      throw new BadRequestException('Invalid secret');
+    }
+    await this.depositService.processDeposit(payload);
+
+    return {
+      statusCode: HttpStatus.OK,
+      data: {},
+      message: 'Deposit',
+    };
+  }
+
+  @Get('all-wallet-addresses')
+  async getAllWalletAddresses(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.depositService.getAllAddress(page, limit);
+
+    return {
+      statusCode: HttpStatus.OK,
+      data: data,
+      message: '',
+    };
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('credit-balance')
+  async getCreditBalance(@Request() req): Promise<ResponseVo<any>> {
+    const userId = req.user.userId;
+    const creditBalance = await this.creditService.getCreditBalance(userId);
+    return {
+      statusCode: HttpStatus.OK,
+      data: { creditBalance },
+      message: '',
+    };
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('credit-transactions')
+  async getCreditTransactions(
+    @Request() req,
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    const userId = req.user.userId;
+    const {
+      data: transactions,
+      currentPage,
+      total: totalPages,
+    } = await this.creditService.getCreditWalletTxList(userId, page, limit);
+    return {
+      statusCode: HttpStatus.OK,
+      data: {
+        transactions,
+        currentPage,
+        totalPages,
+      },
+      message: '',
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Post('add-credit')
+  async addCredit(@Body() payload: AddCreditDto): Promise<ResponseVo<any>> {
+    // try {
+    const { campaignId, ...restPayload } = payload;
+
+    await this.creditService.addCredit({
+      amount: Number(payload.amount),
+      ...restPayload,
+      campaignId: campaignId || null, // Handle empty campaignId
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'credit add process initiated',
+      data: {},
+    };
+    // } catch (error) {
+    //   console.error(error);
+    //   throw new InternalServerErrorException();
+    // }
   }
 }

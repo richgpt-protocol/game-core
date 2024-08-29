@@ -22,18 +22,19 @@ export class User {
 
   @Column({
     unique: true,
+    nullable: true,
   })
   uid: string;
 
   @Column({
     nullable: true,
   })
-  tgUsername: string;
+  phoneNumber: string;
 
   @Column({
     nullable: true,
   })
-  phoneNumber: string;
+  tgUsername: string;
 
   @Column({
     nullable: true,
@@ -48,7 +49,7 @@ export class User {
       'A - active, I - inactive, S - Suspended, T - Terminated, U - Unverified, P - Pending',
   })
   // active - active account
-  // inactive - 
+  // inactive -
   // suspended - 3 times wrong otp input
   // terminated -
   // unverified - sign up but not yet verified via otp

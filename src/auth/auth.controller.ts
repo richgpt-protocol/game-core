@@ -24,7 +24,7 @@ import { ErrorResponseVo, ResponseVo } from 'src/shared/vo/response.vo';
 import { UserService } from 'src/user/user.service';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { LoginDto, UserLoginDto } from './dto/login.dto';
+import { LoginDto, LoginWithTelegramDTO, UserLoginDto } from './dto/login.dto';
 import { ResponseAdminAuthVo } from './vo/auth.vo';
 import {
   PasswordResetDto,
@@ -34,6 +34,7 @@ import {
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { I18n, I18nContext } from 'nestjs-i18n';
 import { EnumUtil } from 'src/shared/utils/enum.util';
+import { User } from 'src/user/entities/user.entity';
 
 @ApiTags('Authentication')
 @Controller('api/v1/auth')
@@ -140,6 +141,92 @@ export class AuthController {
       success: true,
       data: {},
     };
+  }
+
+  @Post('login-with-telegram')
+  async loginWithTelegram(
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+    @Body() payload: LoginWithTelegramDTO,
+    @I18n() i18n: I18nContext,
+  ): Promise<ResponseVo<any>> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { referralCode, hash, ...dataToVerify } = payload;
+      const result = await this.userService.validateSignInWithTelegram(
+        payload.id,
+        hash,
+        dataToVerify,
+      );
+      let userData: { error: string; data?: User };
+      if (result.data || result.error == 'user.ACCOUNT_UNVERIFIED') {
+        // follow sign-in process
+        userData = await this.userService.signInWithTelegram(payload.id);
+      } else if (result.error == 'ACCOUNT_DOESNT_EXISTS') {
+        // register process
+
+        await this.userService.registerWithTelegram(payload);
+        userData = await this.userService.signInWithTelegram(payload.id);
+
+        if (userData.data) {
+          await this.auditLogService.userInsert({
+            module: classInfo.class,
+            actions: classInfo.method,
+            userId: userData.data.id.toString(),
+            content:
+              'Registered User Account Successful: ' +
+              JSON.stringify(userData.data),
+            ipAddress,
+          });
+        }
+      } else {
+        return {
+          statusCode: HttpStatus.BAD_REQUEST,
+          data: {},
+          message: await i18n.translate(result.error),
+        };
+      }
+
+      if (!userData.data || userData.error) {
+        return {
+          statusCode: HttpStatus.BAD_REQUEST,
+          data: {},
+          message: await i18n.translate(userData.error),
+        };
+      }
+
+      await this.auditLogService.userInsert({
+        module: classInfo.class,
+        actions: classInfo.method,
+        userId: userData.data.id.toString(),
+        content: `Login Successful with ${userData.data.tgId} `,
+        ipAddress,
+      });
+
+      const response = {
+        id: userData.data.id,
+        status: userData.data.status,
+        phoneNumber: userData.data.phoneNumber,
+        referralCode: userData.data.referralCode,
+        isMobileVerified: userData.data.isMobileVerified,
+      };
+
+      const loginResult = await this.authService.createToken(
+        response,
+        UserRole.USER,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Login Successful',
+        data: loginResult,
+      };
+    } catch (ex) {
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        data: {},
+        message: 'error occurred',
+      };
+    }
   }
 
   @Post('user-login')

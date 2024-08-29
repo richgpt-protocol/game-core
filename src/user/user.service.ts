@@ -1,11 +1,15 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import {Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
-import { GetUsersDto, RegisterUserDto, SignInDto } from './dto/register-user.dto';
+import {
+  GetUsersDto,
+  RegisterUserDto,
+  SignInDto,
+} from './dto/register-user.dto';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto'
+import * as crypto from 'crypto';
 import { RandomUtil } from 'src/shared/utils/random.util';
 import { UserStatus } from 'src/shared/enum/status.enum';
 import { Provider } from 'src/shared/enum/provider.enum';
@@ -14,22 +18,21 @@ import { buildFilterCriterias } from 'src/shared/utils/pagination.util';
 import { ObjectUtil } from 'src/shared/utils/object.util';
 import { DateUtil } from 'src/shared/utils/date.util';
 
-import { ethers } from 'ethers';
 import axios from 'axios';
 import { MPC } from 'src/shared/mpc';
-import { Referral__factory } from 'src/contract';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { SMSService } from 'src/shared/services/sms.service';
-import { UserLoginDto } from 'src/auth/dto/login.dto';
+import { UserLoginDto, LoginWithTelegramDTO } from 'src/auth/dto/login.dto';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { NotificationDto } from './dto/notification.dto';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
+import { ConfigService } from 'src/config/config.service';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -45,6 +48,7 @@ type GenerateOtpEvent = {
 
 @Injectable()
 export class UserService {
+  TG_LOGIN_WIDGET_BOT_TOKEN: string;
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -63,7 +67,12 @@ export class UserService {
     private adminNotificationService: AdminNotificationService,
     private smsService: SMSService,
     private cacheSettingService: CacheSettingService,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    this.TG_LOGIN_WIDGET_BOT_TOKEN = this.configService.get(
+      'TG_LOGIN_WIDGET_BOT_TOKEN',
+    );
+  }
 
   async findOne(id: number) {
     return await this.userRepository
@@ -80,7 +89,8 @@ export class UserService {
   }
 
   async findOneWithoutHiddenFields(id) {
-    if (!id) throw new Error('UserService.findOneWithoutHiddenFields() - id is null');
+    if (!id)
+      throw new Error('UserService.findOneWithoutHiddenFields() - id is null');
     return await this.userRepository.findOneBy({
       id,
     });
@@ -174,11 +184,11 @@ export class UserService {
       where: { id: userId },
       relations: {
         wallet: true,
-      }
+      },
     });
 
     {
-      const {id, updatedDate, userId, ...wallet} = result.wallet;
+      const { id, updatedDate, userId, ...wallet } = result.wallet;
       result.wallet = wallet as UserWallet;
     }
 
@@ -187,7 +197,9 @@ export class UserService {
 
   async register(payload: RegisterUserDto) {
     // check if phone exist
-    let user = await this.userRepository.findOneBy({ phoneNumber: payload.phoneNumber });
+    let user = await this.userRepository.findOneBy({
+      phoneNumber: payload.phoneNumber,
+    });
     if (user && user.isMobileVerified) {
       // user && !user.isMobileVerified means user register but never success verified via otp
       return { error: 'phone number exist', data: null };
@@ -239,7 +251,6 @@ export class UserService {
           wallet: null,
         });
         await this.userRepository.save(user);
-
       } else {
         // user register but never success verified via otp
         // update user otpMethod & referralUserId
@@ -250,11 +261,266 @@ export class UserService {
       }
 
       // pass to handleGenerateOtpEvent() to generate otp and send to user
-      this.eventEmitter.emit('user.service.otp', { userId: user.id, phoneNumber: user.phoneNumber });
+      this.eventEmitter.emit('user.service.otp', {
+        userId: user.id,
+        phoneNumber: user.phoneNumber,
+      });
 
       // return user record
       return { error: null, data: user };
+    } catch (err) {
+      return { error: err.message, data: null };
+    }
+  }
 
+  async validateSignInWithTelegram(tgId: number, hash: string, data: any) {
+    const dataCheckString = Object.keys(data)
+      .sort()
+      .map((key) => `${key}=${data[key]}`)
+      .join('\n');
+
+    const secret = crypto
+      .createHash('sha256')
+      .update(this.TG_LOGIN_WIDGET_BOT_TOKEN)
+      .digest();
+    const hmac = crypto
+      .createHmac('sha256', secret)
+      .update(dataCheckString)
+      .digest('hex');
+
+    if (hmac !== hash) {
+      return { error: 'INVALID_HASH', data: null };
+    }
+
+    const user = await this.userRepository.findOneBy({ tgId });
+    if (!user) {
+      return { error: 'ACCOUNT_DOESNT_EXISTS', data: null };
+    }
+
+    // check user status
+    switch (user.status) {
+      case UserStatus.INACTIVE:
+        return {
+          error: 'user.ACCOUNT_INACTIVE',
+        };
+      case UserStatus.SUSPENDED:
+        return {
+          error: 'user.ACCOUNT_SUSPEND',
+          args: {
+            id: 1,
+            supportEmail: this.cacheSettingService.get(
+              SettingEnum.SUPPORT_CONTACT_EMAIL,
+            ),
+          },
+        };
+      case UserStatus.TERMINATED:
+        return {
+          error: 'user.ACCOUNT_TERMINATED',
+        };
+      case UserStatus.UNVERIFIED:
+        return {
+          error: 'user.ACCOUNT_UNVERIFIED',
+        };
+      case UserStatus.PENDING:
+        return {
+          error: 'user.ACCOUNT_PENDING',
+        };
+    }
+
+    return { error: null, data: user };
+  }
+
+  async signInWithTelegram(tgId: number) {
+    // fetch user record
+    const user = await this.userRepository
+      .createQueryBuilder('row')
+      .select('row')
+      .addSelect('row.verificationCode')
+      .addSelect('row.referralUser')
+      .addSelect('row.wallet')
+      .addSelect('row.loginAttempt')
+      .where({
+        tgId: tgId,
+      })
+      .getOne();
+
+    // check if user exist
+    if (!user) {
+      return { error: 'invalid phone number', data: null };
+    }
+    // check if user login attempt exceed 3 times
+    if (user.loginAttempt >= 3) {
+      await this.update(user.id, {
+        status: UserStatus.SUSPENDED,
+      });
+      return {
+        error: 'user.EXCEED_LOGIN_ATTEMPT',
+      };
+    }
+
+    // update user
+    user.verificationCode = null;
+    user.otpGenerateTime = null;
+    user.updatedBy = UtilConstant.SELF;
+    await this.userRepository.save(user);
+
+    // for first success otp verification (first success account creation)
+    if (user.status == UserStatus.UNVERIFIED) {
+      // start queryRunner
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      try {
+        // generate on-chain wallet
+        const walletAddress = await MPC.createWallet();
+
+        // create userWallet record
+        const userWallet = this.userWalletRepository.create({
+          walletBalance: 0,
+          creditBalance: 0,
+          walletAddress,
+          pointBalance: 0,
+          userId: user.id,
+        });
+        await queryRunner.manager.save(userWallet);
+
+        // update user
+        user.wallet = userWallet;
+        // generate user own referral code
+        user.referralCode = this.generateReferralCode(user.id);
+        // create unique uid for user
+        user.uid = this.generateNumericUID();
+        user.status = UserStatus.ACTIVE;
+        user.isMobileVerified = true;
+        user.updatedBy = UtilConstant.SELF;
+        await queryRunner.manager.save(user);
+
+        // referral section
+        if (user.referralUserId) {
+          // create referralTx
+          const referralTx = this.referralTxRepository.create({
+            rewardAmount: 0,
+            referralType: 'SET_REFERRER',
+            bonusAmount: 0,
+            bonusCurrency: 'USDT',
+            status: 'S',
+            txHash: null,
+            userId: user.id,
+            referralUserId: user.referralUserId,
+          });
+          await queryRunner.manager.save(referralTx);
+        }
+        //Add new address to Deposit Bot
+        await axios.post(
+          depositBotAddAddress,
+          {
+            address: walletAddress,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+
+        // // Temporary hide
+        // await this.emailService.sendWelcomeEmail(
+        //   UserRole.USER,
+        //   result.emailAddress,
+        //   result.id.toString(),
+        //   result.firstName,
+        // );
+
+        await queryRunner.commitTransaction();
+      } catch (err) {
+        await queryRunner.rollbackTransaction();
+
+        // update user record
+        user.status = UserStatus.PENDING;
+        user.updatedBy = UtilConstant.SELF;
+        await this.userRepository.update(user, {
+          status: UserStatus.PENDING,
+          updatedBy: UtilConstant.SELF,
+        });
+
+        // inform admin for rollback transaction
+        await this.adminNotificationService.setAdminNotification(
+          `Transaction in user.service.verifyOtp had been rollback, error: ${err}, userId: ${user.id}`,
+          'rollbackTxError',
+          'Transaction Rollbacked',
+          true,
+        );
+        return { error: err.message, data: null };
+      } finally {
+        await queryRunner.release();
+      }
+    }
+
+    return { error: null, data: user };
+  }
+
+  async registerWithTelegram(payload: LoginWithTelegramDTO) {
+    // check if phone exist
+    let user = await this.userRepository.findOneBy({
+      tgId: payload.id,
+    });
+    if (user) {
+      // user && !user.isMobileVerified means user register but never success verified via otp
+      return { error: 'phone number exist', data: null };
+    }
+
+    // check if referralCode valid
+    let referralUserId = null;
+    if (payload.referralCode !== null) {
+      const referralUser = await this.userRepository.findOne({
+        where: { referralCode: payload.referralCode },
+        relations: { wallet: true },
+      });
+      if (!referralUser) {
+        return { error: 'invalid referral code', data: null };
+      }
+      referralUserId = referralUser.id;
+    }
+
+    try {
+      // create user record if not exist
+      if (!user) {
+        user = this.userRepository.create({
+          ...payload, // phoneNumber, otpMethod
+          uid: '',
+          referralCode: null,
+          status: UserStatus.UNVERIFIED,
+          isReset: false,
+          verificationCode: null,
+          loginAttempt: 0,
+          isMobileVerified: false,
+          otpGenerateTime: null,
+          referralRank: 1,
+          emailAddress: null,
+          isEmailVerified: false,
+          emailVerificationCode: null,
+          emailOtpGenerateTime: null,
+          updatedBy: null,
+          referralUserId,
+          referralTx: null,
+          referredTx: null,
+          wallet: null,
+          tgId: payload.id,
+          tgUsername: payload.username,
+        });
+        await this.userRepository.save(user);
+      } else {
+        // user register but never success verified via otp
+        // update user otpMethod & referralUserId
+        // other user attribute should same as above
+
+        // TODO CHECK - probably won't need this
+        user.referralUserId = referralUserId;
+        await this.userRepository.save(user);
+      }
+
+      // return user record
+      return { error: null, data: user };
     } catch (err) {
       return { error: err.message, data: null };
     }
@@ -262,7 +528,9 @@ export class UserService {
 
   async signIn(payload: SignInDto) {
     // check if user exist
-    const user = await this.userRepository.findOneBy({ phoneNumber: payload.phoneNumber });
+    const user = await this.userRepository.findOneBy({
+      phoneNumber: payload.phoneNumber,
+    });
     if (!user) {
       return { error: 'user.WRONG_PHONE_NUMBER', data: null };
     }
@@ -309,7 +577,10 @@ export class UserService {
     await this.userRepository.save(user);
 
     // pass to handleGenerateOtpEvent() to generate and send otp
-    this.eventEmitter.emit('user.service.otp', { userId: user.id, phoneNumber: user.phoneNumber });
+    this.eventEmitter.emit('user.service.otp', {
+      userId: user.id,
+      phoneNumber: user.phoneNumber,
+    });
 
     return { error: null, data: user };
   }
@@ -324,8 +595,11 @@ export class UserService {
     try {
       // generate otp, update user record & send otp to user
       // const code = RandomUtil.generateRandomNumber(6);
-      let code = ''
-      if (process.env.APP_ENV === 'dev' && payload.phoneNumber === '+6587654321') {
+      let code = '';
+      if (
+        process.env.APP_ENV === 'dev' &&
+        payload.phoneNumber === '+6587654321'
+      ) {
         // temporarily for testing purpose
         code = '123456';
       } else {
@@ -337,13 +611,19 @@ export class UserService {
       });
       const phoneNumber = payload.phoneNumber ?? user.phoneNumber;
       // await this.smsService.sendUserRegistrationOTP(phoneNumber, user.otpMethod, code);
-      if (process.env.APP_ENV === 'dev' && payload.phoneNumber === '+6587654321') {
+      if (
+        process.env.APP_ENV === 'dev' &&
+        payload.phoneNumber === '+6587654321'
+      ) {
         // temporarily for testing purpose
         // do nothing
       } else {
-        await this.smsService.sendUserRegistrationOTP(phoneNumber, user.otpMethod, code);
+        await this.smsService.sendUserRegistrationOTP(
+          phoneNumber,
+          user.otpMethod,
+          code,
+        );
       }
-
     } catch (err) {
       // inform admin for failed transaction
       await this.adminNotificationService.setAdminNotification(
@@ -467,16 +747,14 @@ export class UserService {
       await queryRunner.connect();
       await queryRunner.startTransaction();
       try {
-
         // generate on-chain wallet
-        const walletAddress = await MPC.createWallet()
+        const walletAddress = await MPC.createWallet();
 
         // create userWallet record
         const userWallet = this.userWalletRepository.create({
           walletBalance: 0,
           creditBalance: 0,
           walletAddress,
-          redeemableBalance: 0,
           pointBalance: 0,
           userId: user.id,
         });
@@ -485,9 +763,9 @@ export class UserService {
         // update user
         user.wallet = userWallet;
         // generate user own referral code
-        user.referralCode = this.generateReferralCode(user.id)
+        user.referralCode = this.generateReferralCode(user.id);
         // create unique uid for user
-        user.uid = this.generateNumericUID()
+        user.uid = this.generateNumericUID();
         user.status = UserStatus.ACTIVE;
         user.isMobileVerified = true;
         user.updatedBy = UtilConstant.SELF;
@@ -495,53 +773,18 @@ export class UserService {
 
         // referral section
         if (user.referralUserId) {
-          const referrerUserWallet = await this.userWalletRepository.findOneBy({ id: user.referralUserId });
-          const referrerWalletAddress = referrerUserWallet.walletAddress;
-          const userWalletAddress = user.wallet.walletAddress;
-
-          // record user's referrer on-chain
-          const provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
-          const walletCreationBot = new ethers.Wallet(
-            await MPC.retrievePrivateKey(process.env.WALLET_CREATION_BOT_ADDRESS),
-            provider
-          );
-          const referralContract = Referral__factory.connect(
-            process.env.REFERRAL_CONTRACT_ADDRESS,
-            walletCreationBot,
-          );
-          const txResponse = await referralContract.setReferrer(
-            userWalletAddress,
-            referrerWalletAddress,
-            { gasLimit: 100000 },
-          );
-          
-          // check native token balance for wallet creation bot
-          this.eventEmitter.emit(
-            'gas.service.reload',
-            walletCreationBot.address,
-            Number(process.env.OPBNB_CHAIN_ID),
-          );
-
           // create referralTx
           const referralTx = this.referralTxRepository.create({
             rewardAmount: 0,
             referralType: 'SET_REFERRER',
             bonusAmount: 0,
             bonusCurrency: 'USDT',
-            status: 'P',
-            txHash: txResponse.hash,
+            status: 'S',
+            txHash: null,
             userId: user.id,
             referralUserId: user.referralUserId,
           });
           await queryRunner.manager.save(referralTx);
-
-          // emit event to handleSetReferrerEvent() to update on-chain status
-          const referralPayload: SetReferrerEvent = {
-            txHash: txResponse.hash,
-            referralTxId: referralTx.id,
-            userId: user.id,
-          }
-          this.eventEmitter.emit('user.service.referrer', referralPayload);
         }
         //Add new address to Deposit Bot
         await axios.post(
@@ -556,8 +799,6 @@ export class UserService {
           },
         );
 
-        
-
         // // Temporary hide
         // await this.emailService.sendWelcomeEmail(
         //   UserRole.USER,
@@ -567,10 +808,9 @@ export class UserService {
         // );
 
         await queryRunner.commitTransaction();
-          
       } catch (err) {
         await queryRunner.rollbackTransaction();
-        
+
         // update user record
         user.status = UserStatus.PENDING;
         user.updatedBy = UtilConstant.SELF;
@@ -587,71 +827,12 @@ export class UserService {
           true,
         );
         return { error: err.message, data: null };
-
       } finally {
         await queryRunner.release();
       }
     }
 
     return { error: null, data: user };
-  }
-
-  @OnEvent('user.service.referrer', { async: true })
-  async handleSetReferrerEvent(payload: SetReferrerEvent): Promise<void> {
-    // fetch txResponse from hash and wait for txReceipt
-    const provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
-    const txResponse = await provider.getTransaction(payload.txHash);
-    const txReceipt = await txResponse.wait();
-
-    const referralTx = await this.referralTxRepository.findOneBy({ id: payload.referralTxId });
-
-    // start queryRunner
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    try {
-
-      if (txReceipt.status === 1) {
-        // update referralTx
-        referralTx.status = 'S';
-        await queryRunner.manager.save(referralTx);
-
-      } else { // txReceipt.status === 0
-        // update referralTx
-        referralTx.status = 'PD';
-        await queryRunner.manager.save(referralTx);
-
-        // inform admin for failed on-chain set referrer tx
-        await this.adminNotificationService.setAdminNotification(
-          `setReferrer of Referral contract failed, please check. Tx hash: ${txReceipt.hash}, referralTxId: ${payload.referralTxId}`,
-          'onChainTxError',
-          'SetReferrer Failed',
-          true,
-        );
-      }
-
-      await queryRunner.commitTransaction();
-
-    } catch (err) {
-      // rollback queryRunner
-      await queryRunner.rollbackTransaction();
-
-      // update referralTx
-      referralTx.status = 'PD';
-      await this.referralTxRepository.save(referralTx);
-
-      // inform admin for rollback transaction
-      await this.adminNotificationService.setAdminNotification(
-        `Transaction in user.service.handleSetReferrerEvent had been rollback, error: ${err}, referralTxId: ${payload.referralTxId}`,
-        'rollbackTxError',
-        'Transaction Rollbacked',
-        true,
-      );
-
-    } finally {
-      // finalize queryRunner
-      await queryRunner.release();
-    }
   }
 
   async getUsers(payload: GetUsersDto) {
@@ -742,26 +923,29 @@ export class UserService {
       type: _notification.type,
       title: _notification.title,
       message: _notification.message,
-    })
+    });
     if (_notification.walletTxId) {
-      notification.walletTx = await this.walletTxRepository.findOneBy({ id: _notification.walletTxId });
+      notification.walletTx = await this.walletTxRepository.findOneBy({
+        id: _notification.walletTxId,
+      });
     }
     await this.notificationRepository.save(notification);
 
     const userNotification = this.userNotificationRepository.create({
       user: await this.userRepository.findOneBy({ id: userId }),
       notification: notification,
-    })
+    });
     await this.userNotificationRepository.save(userNotification);
   }
 
   async updateUserNotification(userId: number) {
-    await this.userNotificationRepository.createQueryBuilder()
+    await this.userNotificationRepository
+      .createQueryBuilder()
       .update()
       .set({ isRead: true, readDateTime: new Date() })
-      .where("user = :userId", { userId: userId })
-      .andWhere("isRead = :isRead", { isRead: false })
-      .execute()
+      .where('user = :userId', { userId: userId })
+      .andWhere('isRead = :isRead', { isRead: false })
+      .execute();
   }
 
   async updateOtpMethod(userId: number, otpMethod: string) {
@@ -785,11 +969,11 @@ export class UserService {
       take: count,
     });
 
-    return referralTxs.map(referralTx => {
+    return referralTxs.map((referralTx) => {
       return {
         uid: referralTx.user.uid,
         rewardAmount: referralTx.rewardAmount,
-      }
+      };
     });
   }
 
@@ -809,23 +993,23 @@ export class UserService {
       referralUserId,
       ...referrer
     } = await this.userRepository.findOneBy({ referralCode: code });
-    return referrer
+    return referrer;
   }
 
   generateNumericUID(): string {
     // Generate a random number and a timestamp
-    let randomComponent = crypto.randomBytes(4).readUInt32BE(0);  // 4 bytes to uint
-    let timeComponent = Math.floor(Date.now() / 1000);  // Current timestamp in seconds
+    const randomComponent = crypto.randomBytes(4).readUInt32BE(0); // 4 bytes to uint
+    const timeComponent = Math.floor(Date.now() / 1000); // Current timestamp in seconds
 
     // Combine components
-    let combined = `${timeComponent}${randomComponent}`;
+    const combined = `${timeComponent}${randomComponent}`;
 
     // Convert to a large number and slice to ensure specific length
-    let hash = crypto.createHash('sha256').update(combined).digest('hex');
-    let bigIntHash = BigInt('0x' + hash);
+    const hash = crypto.createHash('sha256').update(combined).digest('hex');
+    const bigIntHash = BigInt('0x' + hash);
 
     // Convert to string and take the last 10 digits for the UID
-    let uid = bigIntHash.toString().slice(-10);
+    const uid = bigIntHash.toString().slice(-10);
 
     return uid;
   }

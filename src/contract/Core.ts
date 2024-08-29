@@ -97,8 +97,8 @@ export interface CoreInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "UPGRADE_INTERFACE_VERSION"
-      | "bet((uint256,uint256,uint256,uint8)[])"
-      | "bet(address,(uint256,uint256,uint256,uint8)[])"
+      | "bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])"
+      | "bet(address,uint256,uint256,(uint256,uint256,uint256,uint8)[])"
       | "claim"
       | "currentEpoch"
       | "currentEpochTimestamp"
@@ -110,19 +110,19 @@ export interface CoreInterface extends Interface {
       | "helper"
       | "initialize"
       | "isBetClosed"
+      | "jackpotHash"
       | "maxBet"
       | "owner"
-      | "pointReward"
+      | "paused"
       | "proxiableUUID"
-      | "redeem"
       | "renounceOwnership"
       | "setBetClose"
       | "setDrawMultipliers"
       | "setDrawResults"
       | "setGameUSDPoolContract"
       | "setHelperContract"
-      | "setPointRewardContract"
-      | "setRedeemContract"
+      | "setJackpotHashContract"
+      | "setPause"
       | "setVRFCoordinator"
       | "totalBetsForNumber"
       | "transferOwnership"
@@ -141,9 +141,10 @@ export interface CoreInterface extends Interface {
       | "GameUSDPoolContractSet"
       | "HelperContractSet"
       | "Initialized"
+      | "JackpotHashContractSet"
       | "OwnershipTransferred"
-      | "PointRewardContractSet"
-      | "RedeemContractSet"
+      | "Paused"
+      | "Unpaused"
       | "Upgraded"
       | "VRFCoordinatorSet"
   ): EventFragment;
@@ -153,12 +154,12 @@ export interface CoreInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "bet((uint256,uint256,uint256,uint8)[])",
-    values: [ICore.BetParamsStruct[]]
+    functionFragment: "bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])",
+    values: [BigNumberish, BigNumberish, ICore.BetParamsStruct[]]
   ): string;
   encodeFunctionData(
-    functionFragment: "bet(address,(uint256,uint256,uint256,uint8)[])",
-    values: [AddressLike, ICore.BetParamsStruct[]]
+    functionFragment: "bet(address,uint256,uint256,(uint256,uint256,uint256,uint8)[])",
+    values: [AddressLike, BigNumberish, BigNumberish, ICore.BetParamsStruct[]]
   ): string;
   encodeFunctionData(
     functionFragment: "claim",
@@ -192,23 +193,23 @@ export interface CoreInterface extends Interface {
   encodeFunctionData(functionFragment: "helper", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "initialize",
-    values: [AddressLike, AddressLike, AddressLike, AddressLike, BigNumberish]
+    values: [AddressLike, AddressLike, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "isBetClosed",
     values?: undefined
   ): string;
-  encodeFunctionData(functionFragment: "maxBet", values?: undefined): string;
-  encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "pointReward",
+    functionFragment: "jackpotHash",
     values?: undefined
   ): string;
+  encodeFunctionData(functionFragment: "maxBet", values?: undefined): string;
+  encodeFunctionData(functionFragment: "owner", values?: undefined): string;
+  encodeFunctionData(functionFragment: "paused", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "proxiableUUID",
     values?: undefined
   ): string;
-  encodeFunctionData(functionFragment: "redeem", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "renounceOwnership",
     values?: undefined
@@ -234,13 +235,10 @@ export interface CoreInterface extends Interface {
     values: [AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "setPointRewardContract",
+    functionFragment: "setJackpotHashContract",
     values: [AddressLike]
   ): string;
-  encodeFunctionData(
-    functionFragment: "setRedeemContract",
-    values: [AddressLike]
-  ): string;
+  encodeFunctionData(functionFragment: "setPause", values: [boolean]): string;
   encodeFunctionData(
     functionFragment: "setVRFCoordinator",
     values: [AddressLike[], boolean[]]
@@ -271,11 +269,11 @@ export interface CoreInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "bet((uint256,uint256,uint256,uint8)[])",
+    functionFragment: "bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "bet(address,(uint256,uint256,uint256,uint8)[])",
+    functionFragment: "bet(address,uint256,uint256,(uint256,uint256,uint256,uint8)[])",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "claim", data: BytesLike): Result;
@@ -307,17 +305,17 @@ export interface CoreInterface extends Interface {
     functionFragment: "isBetClosed",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "maxBet", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "pointReward",
+    functionFragment: "jackpotHash",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "maxBet", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "proxiableUUID",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "redeem", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceOwnership",
     data: BytesLike
@@ -343,13 +341,10 @@ export interface CoreInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "setPointRewardContract",
+    functionFragment: "setJackpotHashContract",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "setRedeemContract",
-    data: BytesLike
-  ): Result;
+  decodeFunctionResult(functionFragment: "setPause", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "setVRFCoordinator",
     data: BytesLike
@@ -514,6 +509,18 @@ export namespace InitializedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace JackpotHashContractSetEvent {
+  export type InputTuple = [jackpotHash: AddressLike];
+  export type OutputTuple = [jackpotHash: string];
+  export interface OutputObject {
+    jackpotHash: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace OwnershipTransferredEvent {
   export type InputTuple = [previousOwner: AddressLike, newOwner: AddressLike];
   export type OutputTuple = [previousOwner: string, newOwner: string];
@@ -527,11 +534,11 @@ export namespace OwnershipTransferredEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace PointRewardContractSetEvent {
-  export type InputTuple = [pointReward: AddressLike];
-  export type OutputTuple = [pointReward: string];
+export namespace PausedEvent {
+  export type InputTuple = [account: AddressLike];
+  export type OutputTuple = [account: string];
   export interface OutputObject {
-    pointReward: string;
+    account: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -539,11 +546,11 @@ export namespace PointRewardContractSetEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace RedeemContractSetEvent {
-  export type InputTuple = [redeem: AddressLike];
-  export type OutputTuple = [redeem: string];
+export namespace UnpausedEvent {
+  export type InputTuple = [account: AddressLike];
+  export type OutputTuple = [account: string];
   export interface OutputObject {
-    redeem: string;
+    account: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -621,14 +628,19 @@ export interface Core extends BaseContract {
 
   UPGRADE_INTERFACE_VERSION: TypedContractMethod<[], [string], "view">;
 
-  "bet((uint256,uint256,uint256,uint8)[])": TypedContractMethod<
-    [_bets: ICore.BetParamsStruct[]],
+  "bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])": TypedContractMethod<
+    [uid: BigNumberish, ticketId: BigNumberish, _bets: ICore.BetParamsStruct[]],
     [void],
     "nonpayable"
   >;
 
-  "bet(address,(uint256,uint256,uint256,uint8)[])": TypedContractMethod<
-    [user: AddressLike, _bets: ICore.BetParamsStruct[]],
+  "bet(address,uint256,uint256,(uint256,uint256,uint256,uint8)[])": TypedContractMethod<
+    [
+      user: AddressLike,
+      uid: BigNumberish,
+      ticketId: BigNumberish,
+      _bets: ICore.BetParamsStruct[]
+    ],
     [void],
     "nonpayable"
   >;
@@ -672,28 +684,22 @@ export interface Core extends BaseContract {
   helper: TypedContractMethod<[], [string], "view">;
 
   initialize: TypedContractMethod<
-    [
-      admin: AddressLike,
-      _gameUSDPool: AddressLike,
-      _redeem: AddressLike,
-      _pointReward: AddressLike,
-      _maxBet: BigNumberish
-    ],
+    [admin: AddressLike, _gameUSDPool: AddressLike, _maxBet: BigNumberish],
     [void],
     "nonpayable"
   >;
 
   isBetClosed: TypedContractMethod<[], [boolean], "view">;
 
+  jackpotHash: TypedContractMethod<[], [string], "view">;
+
   maxBet: TypedContractMethod<[], [bigint], "view">;
 
   owner: TypedContractMethod<[], [string], "view">;
 
-  pointReward: TypedContractMethod<[], [string], "view">;
+  paused: TypedContractMethod<[], [boolean], "view">;
 
   proxiableUUID: TypedContractMethod<[], [string], "view">;
-
-  redeem: TypedContractMethod<[], [string], "view">;
 
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
@@ -727,17 +733,13 @@ export interface Core extends BaseContract {
     "nonpayable"
   >;
 
-  setPointRewardContract: TypedContractMethod<
-    [_pointReward: AddressLike],
+  setJackpotHashContract: TypedContractMethod<
+    [_jackpotHash: AddressLike],
     [void],
     "nonpayable"
   >;
 
-  setRedeemContract: TypedContractMethod<
-    [_redeem: AddressLike],
-    [void],
-    "nonpayable"
-  >;
+  setPause: TypedContractMethod<[pause: boolean], [void], "nonpayable">;
 
   setVRFCoordinator: TypedContractMethod<
     [vrfCoordinators: AddressLike[], isValidated: boolean[]],
@@ -796,16 +798,21 @@ export interface Core extends BaseContract {
     nameOrSignature: "UPGRADE_INTERFACE_VERSION"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "bet((uint256,uint256,uint256,uint8)[])"
+    nameOrSignature: "bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])"
   ): TypedContractMethod<
-    [_bets: ICore.BetParamsStruct[]],
+    [uid: BigNumberish, ticketId: BigNumberish, _bets: ICore.BetParamsStruct[]],
     [void],
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "bet(address,(uint256,uint256,uint256,uint8)[])"
+    nameOrSignature: "bet(address,uint256,uint256,(uint256,uint256,uint256,uint8)[])"
   ): TypedContractMethod<
-    [user: AddressLike, _bets: ICore.BetParamsStruct[]],
+    [
+      user: AddressLike,
+      uid: BigNumberish,
+      ticketId: BigNumberish,
+      _bets: ICore.BetParamsStruct[]
+    ],
     [void],
     "nonpayable"
   >;
@@ -855,13 +862,7 @@ export interface Core extends BaseContract {
   getFunction(
     nameOrSignature: "initialize"
   ): TypedContractMethod<
-    [
-      admin: AddressLike,
-      _gameUSDPool: AddressLike,
-      _redeem: AddressLike,
-      _pointReward: AddressLike,
-      _maxBet: BigNumberish
-    ],
+    [admin: AddressLike, _gameUSDPool: AddressLike, _maxBet: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -869,19 +870,19 @@ export interface Core extends BaseContract {
     nameOrSignature: "isBetClosed"
   ): TypedContractMethod<[], [boolean], "view">;
   getFunction(
+    nameOrSignature: "jackpotHash"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "maxBet"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "pointReward"
-  ): TypedContractMethod<[], [string], "view">;
+    nameOrSignature: "paused"
+  ): TypedContractMethod<[], [boolean], "view">;
   getFunction(
     nameOrSignature: "proxiableUUID"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "redeem"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "renounceOwnership"
@@ -910,11 +911,11 @@ export interface Core extends BaseContract {
     nameOrSignature: "setHelperContract"
   ): TypedContractMethod<[_helper: AddressLike], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "setPointRewardContract"
-  ): TypedContractMethod<[_pointReward: AddressLike], [void], "nonpayable">;
+    nameOrSignature: "setJackpotHashContract"
+  ): TypedContractMethod<[_jackpotHash: AddressLike], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "setRedeemContract"
-  ): TypedContractMethod<[_redeem: AddressLike], [void], "nonpayable">;
+    nameOrSignature: "setPause"
+  ): TypedContractMethod<[pause: boolean], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setVRFCoordinator"
   ): TypedContractMethod<
@@ -1024,6 +1025,13 @@ export interface Core extends BaseContract {
     InitializedEvent.OutputObject
   >;
   getEvent(
+    key: "JackpotHashContractSet"
+  ): TypedContractEvent<
+    JackpotHashContractSetEvent.InputTuple,
+    JackpotHashContractSetEvent.OutputTuple,
+    JackpotHashContractSetEvent.OutputObject
+  >;
+  getEvent(
     key: "OwnershipTransferred"
   ): TypedContractEvent<
     OwnershipTransferredEvent.InputTuple,
@@ -1031,18 +1039,18 @@ export interface Core extends BaseContract {
     OwnershipTransferredEvent.OutputObject
   >;
   getEvent(
-    key: "PointRewardContractSet"
+    key: "Paused"
   ): TypedContractEvent<
-    PointRewardContractSetEvent.InputTuple,
-    PointRewardContractSetEvent.OutputTuple,
-    PointRewardContractSetEvent.OutputObject
+    PausedEvent.InputTuple,
+    PausedEvent.OutputTuple,
+    PausedEvent.OutputObject
   >;
   getEvent(
-    key: "RedeemContractSet"
+    key: "Unpaused"
   ): TypedContractEvent<
-    RedeemContractSetEvent.InputTuple,
-    RedeemContractSetEvent.OutputTuple,
-    RedeemContractSetEvent.OutputObject
+    UnpausedEvent.InputTuple,
+    UnpausedEvent.OutputTuple,
+    UnpausedEvent.OutputObject
   >;
   getEvent(
     key: "Upgraded"
@@ -1148,6 +1156,17 @@ export interface Core extends BaseContract {
       InitializedEvent.OutputObject
     >;
 
+    "JackpotHashContractSet(address)": TypedContractEvent<
+      JackpotHashContractSetEvent.InputTuple,
+      JackpotHashContractSetEvent.OutputTuple,
+      JackpotHashContractSetEvent.OutputObject
+    >;
+    JackpotHashContractSet: TypedContractEvent<
+      JackpotHashContractSetEvent.InputTuple,
+      JackpotHashContractSetEvent.OutputTuple,
+      JackpotHashContractSetEvent.OutputObject
+    >;
+
     "OwnershipTransferred(address,address)": TypedContractEvent<
       OwnershipTransferredEvent.InputTuple,
       OwnershipTransferredEvent.OutputTuple,
@@ -1159,26 +1178,26 @@ export interface Core extends BaseContract {
       OwnershipTransferredEvent.OutputObject
     >;
 
-    "PointRewardContractSet(address)": TypedContractEvent<
-      PointRewardContractSetEvent.InputTuple,
-      PointRewardContractSetEvent.OutputTuple,
-      PointRewardContractSetEvent.OutputObject
+    "Paused(address)": TypedContractEvent<
+      PausedEvent.InputTuple,
+      PausedEvent.OutputTuple,
+      PausedEvent.OutputObject
     >;
-    PointRewardContractSet: TypedContractEvent<
-      PointRewardContractSetEvent.InputTuple,
-      PointRewardContractSetEvent.OutputTuple,
-      PointRewardContractSetEvent.OutputObject
+    Paused: TypedContractEvent<
+      PausedEvent.InputTuple,
+      PausedEvent.OutputTuple,
+      PausedEvent.OutputObject
     >;
 
-    "RedeemContractSet(address)": TypedContractEvent<
-      RedeemContractSetEvent.InputTuple,
-      RedeemContractSetEvent.OutputTuple,
-      RedeemContractSetEvent.OutputObject
+    "Unpaused(address)": TypedContractEvent<
+      UnpausedEvent.InputTuple,
+      UnpausedEvent.OutputTuple,
+      UnpausedEvent.OutputObject
     >;
-    RedeemContractSet: TypedContractEvent<
-      RedeemContractSetEvent.InputTuple,
-      RedeemContractSetEvent.OutputTuple,
-      RedeemContractSetEvent.OutputObject
+    Unpaused: TypedContractEvent<
+      UnpausedEvent.InputTuple,
+      UnpausedEvent.OutputTuple,
+      UnpausedEvent.OutputObject
     >;
 
     "Upgraded(address)": TypedContractEvent<

@@ -75,8 +75,8 @@ export class GameService {
           startDate: new Date(lastFutureGame.startDate.getTime() + 3600000),
           endDate: new Date(lastFutureGame.endDate.getTime() + 3600000),
           isClosed: false,
-        })
-      )
+        }),
+      );
 
       // submit masked betOrder on-chain
       const betOrders = await this.betOrderRepository.find({
@@ -89,18 +89,21 @@ export class GameService {
 
       const helperBot = new ethers.Wallet(
         await MPC.retrievePrivateKey(process.env.HELPER_BOT_ADDRESS),
-        this.provider
+        this.provider,
       );
-      const helperContract = Helper__factory.connect(process.env.HELPER_CONTRACT_ADDRESS, helperBot);
+      const helperContract = Helper__factory.connect(
+        process.env.HELPER_CONTRACT_ADDRESS,
+        helperBot,
+      );
       // construct params for Helper.betLastMinutes()
       // [key: string] is userWalletAddress, one user might have multiple bets
-      const userBets: { [key: string]: ICore.BetParamsStruct[] } = {}
+      const userBets: { [key: string]: ICore.BetParamsStruct[] } = {};
       for (let i = 0; i < betOrders.length; i++) {
         const betOrder = betOrders[i];
         const walletTx = await this.walletTxRepository.findOne({
           where: { id: betOrder.walletTxId },
-          relations: { userWallet: true }
-        })
+          relations: { userWallet: true },
+        });
         const userAddress = walletTx.userWallet.walletAddress;
         if (!userBets[userAddress]) userBets[userAddress] = [];
         // big forecast & small forecast is treat as separate bet in contract
@@ -123,44 +126,56 @@ export class GameService {
           });
         }
       }
+
+      const walletTx = await this.walletTxRepository
+        .createQueryBuilder('walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .where('walletTx.id = :id', { id: betOrders[0].walletTxId })
+        .getOne();
       const params: IHelper.BetLastMinuteParamsStruct[] = [];
-      for (let userAddress in userBets) {
+      for (const userAddress in userBets) {
         params.push({
+          uid: walletTx.userWallet.user.uid,
+          ticketId: betOrders[0].walletTxId,
           user: userAddress,
           bets: userBets[userAddress],
-        })
+        });
       }
-      const estimatedGas = await helperContract.betLastMinutes.estimateGas(params);
+      const estimatedGas =
+        await helperContract.betLastMinutes.estimateGas(params);
       const txResponse = await helperContract.betLastMinutes(params, {
         // increase gasLimit by 30%
-        gasLimit: estimatedGas * ethers.toBigInt(13) / ethers.toBigInt(10),
+        gasLimit: (estimatedGas * ethers.toBigInt(13)) / ethers.toBigInt(10),
       });
       const txReceipt = await txResponse.wait();
 
-      if (txReceipt.status === 1) { // tx success
+      if (txReceipt.status === 1) {
+        // tx success
         // update walletTx status & txHash for each betOrders
         for (const betOrder of betOrders) {
           const walletTx = await this.walletTxRepository.findOne({
             where: { id: betOrder.walletTxId },
-          })
+          });
           walletTx.txHash = txReceipt.hash;
           walletTx.status = 'S';
           await this.walletTxRepository.save(walletTx);
         }
-
-      } else { // tx failed
+      } else {
+        // tx failed
         for (const betOrder of betOrders) {
           // only update txHash for each betOrders, status remain pending
           const walletTx = await this.walletTxRepository.findOne({
             where: { id: betOrder.walletTxId },
-          })
+          });
           walletTx.txHash = txReceipt.hash;
           await this.walletTxRepository.save(walletTx);
         }
 
-        throw new Error(`betLastMinutes() on-chain transaction failed, txHash: ${txReceipt.hash}`)
+        throw new Error(
+          `betLastMinutes() on-chain transaction failed, txHash: ${txReceipt.hash}`,
+        );
       }
-
     } catch (err) {
       // inform admin
       await this.adminNotificationService.setAdminNotification(
@@ -178,15 +193,18 @@ export class GameService {
       // submit draw result to Core contract
       const setDrawResultBot = new ethers.Wallet(
         await MPC.retrievePrivateKey(process.env.RESULT_BOT_ADDRESS),
-        this.provider
+        this.provider,
       );
-      const coreContract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, setDrawResultBot);
+      const coreContract = Core__factory.connect(
+        process.env.CORE_CONTRACT_ADDRESS,
+        setDrawResultBot,
+      );
       const numberPairs = payload.map((result) => result.numberPair);
       const txResponse = await coreContract.setDrawResults(
         numberPairs,
         ethers.parseEther(process.env.MAX_BET_AMOUNT),
         '0x',
-        { gasLimit: 1500000 }
+        { gasLimit: 1500000 },
       );
       const txReceipt = await txResponse.wait();
 
@@ -196,7 +214,8 @@ export class GameService {
       game.drawTxStatus = 'P';
       await this.gameRepository.save(game);
 
-      if (txReceipt.status === 1) { // on-chain tx success
+      if (txReceipt.status === 1) {
+        // on-chain tx success
         game.drawTxStatus = 'S';
         await this.gameRepository.save(game);
 
@@ -206,7 +225,7 @@ export class GameService {
             where: {
               gameId,
               numberPair: result.numberPair,
-            }
+            },
           });
           // there might be more than 1 betOrder that numberPair matched
           for (const betOrder of betOrders) {
@@ -214,11 +233,12 @@ export class GameService {
             await this.betOrderRepository.save(betOrder);
           }
         }
-
-      } else { // on-chain tx failed
-        throw new Error(`setDrawResults() on-chain transaction failed, txHash: ${txReceipt.hash}`);
+      } else {
+        // on-chain tx failed
+        throw new Error(
+          `setDrawResults() on-chain transaction failed, txHash: ${txReceipt.hash}`,
+        );
       }
-
     } catch (err) {
       await this.adminNotificationService.setAdminNotification(
         `Error in game.service.updateDrawResult, error: ${err}`,
@@ -236,13 +256,12 @@ export class GameService {
         order: { id: 'DESC' },
       });
       return { error: null, data: game.betOrders };
-
     } catch (error) {
       return { error: error, data: null };
     }
   }
 
-  async getPastDrawResults(gameIds:number[]) {
+  async getPastDrawResults(gameIds: number[]) {
     const games = [];
     for (const gameId of gameIds) {
       const game = await this.gameRepository.findOne({
@@ -263,15 +282,15 @@ export class GameService {
         continue;
       }
 
-      game.drawResult = game.drawResult.map(result => (
+      game.drawResult = game.drawResult.map((result) =>
         // to save payload
-        {
+        ({
           id: result.id,
           prizeCategory: result.prizeCategory,
           numberPair: result.numberPair,
           gameId: result.gameId,
-        }
-      )) as DrawResult[];
+        }),
+      ) as DrawResult[];
       games.push({
         // to save payload
         id: game.id,
@@ -288,7 +307,7 @@ export class GameService {
   async getAvailableGames() {
     const games = await this.gameRepository.findBy({ isClosed: false });
 
-    return games.map(game => {
+    return games.map((game) => {
       // to save payload
       return {
         id: game.id,
@@ -297,8 +316,8 @@ export class GameService {
         minBetAmount: game.minBetAmount,
         startDate: game.startDate,
         endDate: game.endDate,
-      }
-    })
+      };
+    });
   }
 
   async getLeaderboard(count: number) {
@@ -311,112 +330,124 @@ export class GameService {
           userWallet: true,
         },
         betOrder: true,
-      }
-    })
+      },
+    });
 
     const maskValue = (value: string) => {
-      const mask = value.slice(0, 3) + '****' + value.slice(value.length - 3)
-      return mask
-    }
+      const mask = value.slice(0, 3) + '****' + value.slice(value.length - 3);
+      return mask;
+    };
 
-    const allObj: { [key: string]: number } = {}
+    const allObj: { [key: string]: number } = {};
     for (const claimDetail of claimDetails) {
       const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
-      if (!allObj.hasOwnProperty(walletAddress)) allObj[walletAddress] = 0
-      allObj[walletAddress] += Number(claimDetail.claimAmount)
+      if (!allObj.hasOwnProperty(walletAddress)) allObj[walletAddress] = 0;
+      allObj[walletAddress] += Number(claimDetail.claimAmount);
     }
-    let total = []
+    let total = [];
     for (const walletAddress in allObj) {
       const userWallet = await this.userWalletRepository.findOne({
         where: { walletAddress },
-        relations: { user: true }
+        relations: { user: true },
       });
       const winnerAccount = userWallet.user.uid;
       total.push({
         winnerAccount: maskValue(winnerAccount),
         walletAddress: maskValue(walletAddress),
         amount: allObj[walletAddress],
-      })
+      });
     }
-    total = total.sort((a, b) => b.amount - a.amount).slice(0, count)
+    total = total.sort((a, b) => b.amount - a.amount).slice(0, count);
 
-    const currentDate = new Date()
+    const currentDate = new Date();
 
-    const dailyObj: { [key: string]: number } = {}
+    const dailyObj: { [key: string]: number } = {};
     for (const claimDetail of claimDetails) {
-      if (claimDetail.betOrder.createdDate.getTime() > (currentDate.getTime() - (24*60*60*1000))) {
-        const walletAddress = claimDetail.walletTx.userWallet.walletAddress
-        if (!dailyObj.hasOwnProperty(walletAddress)) dailyObj[walletAddress] = 0
-        dailyObj[walletAddress] += Number(claimDetail.claimAmount)
+      if (
+        claimDetail.betOrder.createdDate.getTime() >
+        currentDate.getTime() - 24 * 60 * 60 * 1000
+      ) {
+        const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+        if (!dailyObj.hasOwnProperty(walletAddress))
+          dailyObj[walletAddress] = 0;
+        dailyObj[walletAddress] += Number(claimDetail.claimAmount);
       }
     }
-    let daily = []
+    let daily = [];
     for (const walletAddress in dailyObj) {
       const userWallet = await this.userWalletRepository.findOne({
         where: { walletAddress },
-        relations: { user: true }
+        relations: { user: true },
       });
       const winnerAccount = userWallet.user.uid;
       daily.push({
         winnerAccount: maskValue(winnerAccount),
         walletAddress: maskValue(walletAddress),
         amount: dailyObj[walletAddress],
-      })
+      });
     }
-    daily = daily.sort((a, b) => b.amount - a.amount).slice(0, count)
+    daily = daily.sort((a, b) => b.amount - a.amount).slice(0, count);
 
-    const weeklyObj: { [key: string]: number } = {}
+    const weeklyObj: { [key: string]: number } = {};
     for (const claimDetail of claimDetails) {
-      if (claimDetail.betOrder.createdDate.getTime() > (currentDate.getTime() - (7*24*60*60*1000))) {
-        const walletAddress = claimDetail.walletTx.userWallet.walletAddress
-        if (!weeklyObj.hasOwnProperty(walletAddress)) weeklyObj[walletAddress] = 0
-        weeklyObj[walletAddress] += Number(claimDetail.claimAmount)
+      if (
+        claimDetail.betOrder.createdDate.getTime() >
+        currentDate.getTime() - 7 * 24 * 60 * 60 * 1000
+      ) {
+        const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+        if (!weeklyObj.hasOwnProperty(walletAddress))
+          weeklyObj[walletAddress] = 0;
+        weeklyObj[walletAddress] += Number(claimDetail.claimAmount);
       }
     }
-    let weekly = []
+    let weekly = [];
     for (const walletAddress in weeklyObj) {
       const userWallet = await this.userWalletRepository.findOne({
         where: { walletAddress },
-        relations: { user: true }
+        relations: { user: true },
       });
       const winnerAccount = userWallet.user.uid;
       weekly.push({
         winnerAccount: maskValue(winnerAccount),
         walletAddress: maskValue(walletAddress),
         amount: weeklyObj[walletAddress],
-      })
+      });
     }
-    weekly = weekly.sort((a, b) => b.amount - a.amount).slice(0, count)
+    weekly = weekly.sort((a, b) => b.amount - a.amount).slice(0, count);
 
-    const monthlyObj: { [key: string]: number } = {}
+    const monthlyObj: { [key: string]: number } = {};
     for (const claimDetail of claimDetails) {
-      if (claimDetail.betOrder.createdDate.getTime() > (currentDate.getTime() - (30*24*60*60*1000))) {
-        const walletAddress = claimDetail.walletTx.userWallet.walletAddress
-        if (!monthlyObj.hasOwnProperty(walletAddress)) monthlyObj[walletAddress] = 0
-        monthlyObj[walletAddress] += Number(claimDetail.claimAmount)
+      if (
+        claimDetail.betOrder.createdDate.getTime() >
+        currentDate.getTime() - 30 * 24 * 60 * 60 * 1000
+      ) {
+        const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+        if (!monthlyObj.hasOwnProperty(walletAddress))
+          monthlyObj[walletAddress] = 0;
+        monthlyObj[walletAddress] += Number(claimDetail.claimAmount);
       }
     }
-    let monthly = []
+    let monthly = [];
     for (const walletAddress in monthlyObj) {
       const userWallet = await this.userWalletRepository.findOne({
         where: { walletAddress },
-        relations: { user: true }
+        relations: { user: true },
       });
       const winnerAccount = userWallet.user.uid;
       monthly.push({
         winnerAccount: maskValue(winnerAccount),
         walletAddress: maskValue(walletAddress),
         amount: monthlyObj[walletAddress],
-      })
+      });
     }
-    monthly = monthly.sort((a, b) => b.amount - a.amount).slice(0, count)
+    monthly = monthly.sort((a, b) => b.amount - a.amount).slice(0, count);
 
     return {
       total,
       daily,
       weekly,
       monthly,
-    }
+    };
   }
 
   async getPastResult(
