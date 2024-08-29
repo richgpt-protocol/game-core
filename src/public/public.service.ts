@@ -3,6 +3,7 @@ import { UserService } from 'src/user/user.service';
 import { WalletService } from 'src/wallet/wallet.service';
 import { GetProfileDto } from './dtos/get-profile.dto';
 import { UpdateUserGameDto } from './dtos/update-user-game.dto';
+import { UserStatus } from 'src/shared/enum/status.enum';
 
 @Injectable()
 export class PublicService {
@@ -17,15 +18,44 @@ export class PublicService {
 
     if (payload.tgId) {
       field = 'tgId';
-      value = Number(payload.tgId);
+      value = payload.tgId;
     } else if (payload.uid) {
       field = 'uid';
       value = payload.uid;
     }
 
-    const user = await this.userService.findByCriteria(field, value);
+    let user = await this.userService.findByCriteria(field, value);
     if (!user) {
-      return null;
+      if (field === 'uid') {
+        return null;
+      }
+
+      // Create user if tgId not found
+      const existUser = await this.userService.registerWithTelegram({
+        auth_date: 0,
+        first_name: payload.firstName,
+        id: Number(payload.tgId),
+        hash: '',
+        photo_url: payload.photoUrl,
+        username: payload.username,
+        referralCode: payload.referralCode,
+      });
+
+      if (existUser && existUser.data) {
+        user = existUser.data;
+      }
+    }
+
+    if (user.status === UserStatus.UNVERIFIED) {
+      const newUser = await this.userService.signInWithTelegram(
+        Number(payload.tgId),
+      );
+
+      if (newUser && newUser.data) {
+        user = newUser.data;
+      } else {
+        return null;
+      }
     }
 
     const userWallet = await this.walletService.getWalletInfo(user.id);
@@ -40,6 +70,7 @@ export class PublicService {
       walletBalance: userWallet.walletBalance,
       creditBalance: userWallet.creditBalance,
       userLevel: this.walletService.calculateLevel(userWallet.pointBalance),
+      referralCode: user.referralCode, // Share the referral code across the apps
     };
   }
 

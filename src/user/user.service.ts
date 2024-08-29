@@ -503,7 +503,6 @@ export class UserService {
       // create user record if not exist
       if (!user) {
         user = this.userRepository.create({
-          ...payload, // phoneNumber, otpMethod
           uid: '',
           referralCode: null,
           status: UserStatus.UNVERIFIED,

@@ -21,13 +21,31 @@ export class PublicController {
   constructor(private publicService: PublicService) {}
 
   @UseGuards(SecretTokenGuard)
-  @Get('profile')
+  @Get('profile-by-uid')
   @ApiResponse({
     status: 200,
-    description: 'Get user profile',
+    description: 'Get user profile by uid',
     type: ResponseVo,
   })
-  async getProfile(@Query() payload: GetProfileDto): Promise<ResponseVo<any>> {
+  async getProfileByUid(
+    @Query() payload: GetProfileDto,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.findUser(payload);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('profile-by-tgid')
+  @ApiResponse({
+    status: 200,
+    description: 'Get user profile by telegram ID',
+    type: ResponseVo,
+  })
+  async getProfile(@Body() payload: GetProfileDto): Promise<ResponseVo<any>> {
     const data = await this.publicService.findUser(payload);
     return {
       statusCode: HttpStatus.OK,
