@@ -29,6 +29,7 @@ import { ConfigModule } from 'src/config/config.module';
       UserNotification,
     ]),
     AuditLogModule,
+    ConfigModule,
     PermissionModule,
     SharedModule,
     AdminModule,

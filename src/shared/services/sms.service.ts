@@ -19,7 +19,7 @@ export class SMSService {
     @InjectRepository(SmsLogs)
     private smsLogsRepository: Repository<SmsLogs>,
     private telegramService: TelegramService,
-    ) {}
+  ) {}
 
   private async sendSMS(mobileNumber, body) {
     const enableSMS = this.cacheSettingService.get(SettingEnum.ENABLE_SMS);
@@ -59,27 +59,15 @@ export class SMSService {
     }
   }
 
-  private async sendTelegram(mobileNumber: string, body: string) {
-    await this.telegramService.sendOtp(mobileNumber, body);
-  }
-
   async sendUserRegistrationOTP(
     mobileNumber: string,
     otpMethod: string,
-    code: string
+    code: string,
   ) {
     if (otpMethod === 'WHATSAPP') {
       // TODO
-
-    } else if (otpMethod === 'TELEGRAM') {
-      await this.sendTelegram(
-        mobileNumber,
-        `Please use the code - ${code} to verify your mobile number for ${this.configService.get(
-          'APP_NAME',
-        )} user registration.`,
-      );
-
-    } else { // otpMethod === 'SMS'
+    } else {
+      // otpMethod === 'SMS'
       await this.sendSMS(
         mobileNumber,
         `Please use the code - ${code} to verify your mobile number for ${this.configService.get(

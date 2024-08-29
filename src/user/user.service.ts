@@ -49,6 +49,7 @@ type GenerateOtpEvent = {
 @Injectable()
 export class UserService {
   TG_LOGIN_WIDGET_BOT_TOKEN: string;
+  telegramOTPBotUserName: string;
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -71,6 +72,10 @@ export class UserService {
   ) {
     this.TG_LOGIN_WIDGET_BOT_TOKEN = this.configService.get(
       'TG_LOGIN_WIDGET_BOT_TOKEN',
+    );
+
+    this.telegramOTPBotUserName = this.configService.get(
+      'TELEGRAM_OTP_BOT_USERNAME',
     );
   }
 
@@ -230,7 +235,7 @@ export class UserService {
       if (!user) {
         user = this.userRepository.create({
           ...payload, // phoneNumber, otpMethod
-          uid: '',
+          uid: this.generateNumericUID(),
           referralCode: null,
           status: UserStatus.UNVERIFIED,
           isReset: false,
@@ -260,11 +265,23 @@ export class UserService {
         await this.userRepository.save(user);
       }
 
-      // pass to handleGenerateOtpEvent() to generate otp and send to user
-      this.eventEmitter.emit('user.service.otp', {
-        userId: user.id,
-        phoneNumber: user.phoneNumber,
-      });
+      if (payload.otpMethod == 'TELEGRAM') {
+        const code = RandomUtil.generateRandomNumber(6);
+        await this.update(user.id, {
+          verificationCode: code,
+          otpGenerateTime: new Date(),
+        });
+
+        const tgUrl = `https://t.me/${this.telegramOTPBotUserName}?start=${user.uid}`;
+
+        return { error: null, data: { tgUrl, ...user } };
+      } else {
+        // pass to handleGenerateOtpEvent() to generate otp and send to user
+        this.eventEmitter.emit('user.service.otp', {
+          userId: user.id,
+          phoneNumber: user.phoneNumber,
+        });
+      }
 
       // return user record
       return { error: null, data: user };
@@ -576,11 +593,23 @@ export class UserService {
     user.otpMethod = payload.otpMethod;
     await this.userRepository.save(user);
 
-    // pass to handleGenerateOtpEvent() to generate and send otp
-    this.eventEmitter.emit('user.service.otp', {
-      userId: user.id,
-      phoneNumber: user.phoneNumber,
-    });
+    if (payload.otpMethod == 'TELEGRAM') {
+      const code = RandomUtil.generateRandomNumber(6);
+      await this.update(user.id, {
+        verificationCode: code,
+        otpGenerateTime: new Date(),
+      });
+
+      const tgUrl = `https://t.me/${this.telegramOTPBotUserName}?start=${user.uid}`;
+
+      return { error: null, data: { tgUrl, ...user } };
+    } else {
+      // pass to handleGenerateOtpEvent() to generate and send otp
+      this.eventEmitter.emit('user.service.otp', {
+        userId: user.id,
+        phoneNumber: user.phoneNumber,
+      });
+    }
 
     return { error: null, data: user };
   }
@@ -765,7 +794,7 @@ export class UserService {
         // generate user own referral code
         user.referralCode = this.generateReferralCode(user.id);
         // create unique uid for user
-        user.uid = this.generateNumericUID();
+        // user.uid = this.generateNumericUID(); //Generated during singup
         user.status = UserStatus.ACTIVE;
         user.isMobileVerified = true;
         user.updatedBy = UtilConstant.SELF;
