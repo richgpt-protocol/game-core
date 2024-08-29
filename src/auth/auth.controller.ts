@@ -26,15 +26,10 @@ import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto, LoginWithTelegramDTO, UserLoginDto } from './dto/login.dto';
 import { ResponseAdminAuthVo } from './vo/auth.vo';
-import {
-  PasswordResetDto,
-  ResetPasswordDto,
-  UserResetPasswordDto,
-} from './dto/reset-password.dto';
+import { PasswordResetDto, ResetPasswordDto } from './dto/reset-password.dto';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { I18n, I18nContext } from 'nestjs-i18n';
 import { EnumUtil } from 'src/shared/utils/enum.util';
-import { User } from 'src/user/entities/user.entity';
 
 @ApiTags('Authentication')
 @Controller('api/v1/auth')
@@ -153,62 +148,37 @@ export class AuthController {
     try {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { referralCode, hash, ...dataToVerify } = payload;
-      const result = await this.userService.validateSignInWithTelegram(
+      const result = await this.userService.validateTelegramPayload(
         payload.id,
         hash,
         dataToVerify,
       );
-      let userData: { error: string; data?: User };
-      if (result.data || result.error == 'user.ACCOUNT_UNVERIFIED') {
-        // follow sign-in process
-        userData = await this.userService.signInWithTelegram(payload.id);
-      } else if (result.error == 'ACCOUNT_DOESNT_EXISTS') {
-        // register process
 
-        await this.userService.registerWithTelegram(payload);
-        userData = await this.userService.signInWithTelegram(payload.id);
-
-        if (userData.data) {
-          await this.auditLogService.userInsert({
-            module: classInfo.class,
-            actions: classInfo.method,
-            userId: userData.data.id.toString(),
-            content:
-              'Registered User Account Successful: ' +
-              JSON.stringify(userData.data),
-            ipAddress,
-          });
-        }
-      } else {
-        return {
-          statusCode: HttpStatus.BAD_REQUEST,
-          data: {},
-          message: await i18n.translate(result.error),
-        };
+      if (result.error) {
+        throw new BadRequestException(await i18n.translate(result.error));
       }
 
-      if (!userData.data || userData.error) {
-        return {
-          statusCode: HttpStatus.BAD_REQUEST,
-          data: {},
-          message: await i18n.translate(userData.error),
-        };
+      const { data, error } =
+        await this.userService.signInWithTelegram(payload);
+
+      if (error) {
+        throw new BadRequestException(await i18n.translate(error));
       }
 
       await this.auditLogService.userInsert({
         module: classInfo.class,
         actions: classInfo.method,
-        userId: userData.data.id.toString(),
-        content: `Login Successful with ${userData.data.tgId} `,
+        userId: data.id.toString(),
+        content: `Login Successful with ${data.tgId} `,
         ipAddress,
       });
 
       const response = {
-        id: userData.data.id,
-        status: userData.data.status,
-        phoneNumber: userData.data.phoneNumber,
-        referralCode: userData.data.referralCode,
-        isMobileVerified: userData.data.isMobileVerified,
+        id: data.id,
+        status: data.status,
+        phoneNumber: data.phoneNumber,
+        referralCode: data.referralCode,
+        isMobileVerified: data.isMobileVerified,
       };
 
       const loginResult = await this.authService.createToken(
@@ -221,11 +191,14 @@ export class AuthController {
         data: loginResult,
       };
     } catch (ex) {
-      return {
-        statusCode: HttpStatus.BAD_REQUEST,
-        data: {},
-        message: 'error occurred',
-      };
+      const message =
+        ex instanceof BadRequestException ? ex.message : 'error Occurred';
+      throw new BadRequestException(message);
+      // {
+      //   statusCode: HttpStatus.BAD_REQUEST,
+      //   data: {},
+      //   message: 'error occurred',
+      // };
     }
   }
 
