@@ -13,6 +13,7 @@ import { UserWallet } from './user-wallet.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { GameUsdTx } from './game-usd-tx.entity';
+import { GameTx } from 'src/public/entity/gameTx.entity';
 
 @Entity()
 export class CreditWalletTx {
@@ -80,4 +81,8 @@ export class CreditWalletTx {
   @OneToMany(() => GameUsdTx, (gameUsdTx) => gameUsdTx.creditWalletTx)
   // @JoinColumn()
   gameUsdTx: GameUsdTx[];
+
+  @JoinColumn()
+  @OneToOne(() => GameTx, (gameTx) => gameTx.creditWalletTx)
+  gameTx: GameTx;
 }

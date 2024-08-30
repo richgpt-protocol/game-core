@@ -1,5 +1,6 @@
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
+import { GameTx } from 'src/public/entity/gameTx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import {
@@ -82,4 +83,8 @@ export class PointTx {
     nullable: true,
   })
   isLevelUp: boolean;
+
+  @OneToOne(() => GameTx, (gameTx) => gameTx.pointTx)
+  @JoinColumn()
+  gameTx: GameTx;
 }

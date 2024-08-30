@@ -18,6 +18,7 @@ import { GameUsdTx } from './game-usd-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { InternalTransfer } from './internal-transfer.entity';
+import { GameTx } from 'src/public/entity/gameTx.entity';
 
 @Entity()
 export class WalletTx {
@@ -43,7 +44,8 @@ export class WalletTx {
   txHash: string;
 
   @Column({
-    comment: 'S - Success, P - Pending, P - Pending for Admin, PD - Pending for Developer, F - Failed',
+    comment:
+      'S - Success, P - Pending, P - Pending for Admin, PD - Pending for Developer, F - Failed',
     // Pending: pending for on-chain transaction confirmation
     // Pending for Admin: pending for admin approval, valid for redeem-tx only
     // Pending for Developer: pending for developer to check
@@ -117,4 +119,8 @@ export class WalletTx {
   )
   @JoinColumn()
   internalTransferReceiver: InternalTransfer;
+
+  @OneToOne(() => GameTx, (gameTx) => gameTx.walletTx)
+  @JoinColumn()
+  gameTx: GameTx;
 }
