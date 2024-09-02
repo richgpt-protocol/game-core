@@ -549,7 +549,7 @@ export class DepositService {
       await queryRunner.startTransaction();
       
       const pendingDepositTxns = await queryRunner.manager
-        .createQueryBuilder('depositTx', 'depositTx')
+        .createQueryBuilder('deposit_tx', 'depositTx')
         .innerJoinAndSelect('depositTx.walletTx', 'walletTx')
         .innerJoinAndSelect('walletTx.userWallet', 'userWallet')
         .where('depositTx.status = :status', { status: 'P' })
@@ -697,6 +697,7 @@ export class DepositService {
         false,
       );
       
+    } finally {
       release();
     }
     console.log('end handleEscrowTx()');
