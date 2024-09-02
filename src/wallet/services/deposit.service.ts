@@ -537,7 +537,7 @@ export class DepositService {
   // }
 
   // transfer deposited token to escrow wallet
-  @Cron(CronExpression.EVERY_5_SECONDS)
+  @Cron(CronExpression.EVERY_SECOND)
   async handleEscrowTx() {
     console.log('start handleEscrowTx()');
     const release = await this.cronMutex.acquire();
@@ -547,23 +547,25 @@ export class DepositService {
       const queryRunner = this.dataSource.createQueryRunner();
       await queryRunner.connect();
       await queryRunner.startTransaction();
-      
-      const pendingDepositTxns = await queryRunner.manager
+      console.log('queryRunner started');
+
+      const depositTx = await queryRunner.manager
         .createQueryBuilder('deposit_tx', 'depositTx')
         .innerJoinAndSelect('depositTx.walletTx', 'walletTx')
         .innerJoinAndSelect('walletTx.userWallet', 'userWallet')
         .where('depositTx.status = :status', { status: 'P' })
         .orderBy('depositTx.id', 'ASC')
-        .getMany();
-      console.log('pendingDepositTxns', pendingDepositTxns);
+        .getOne();
+      if (!depositTx) return; // no pending deposit transaction, finally block will do queryRunner.release() & cronMutex.release()
+      console.log('depositTx', depositTx);
 
-      for (const depositTx of pendingDepositTxns) {
+      try {
         console.log('Processing transfer deposited token to escrow wallet, depositTx.id:', depositTx.id);
 
         if (depositTx.retryCount >= 5) {
           // retry 5 times already, set status to F and won't enter handleEscrowTx() again
           depositTx.status = 'F';
-          await this.depositRepository.save(depositTx);
+          await queryRunner.manager.save(depositTx);
           // inform admin
           await this.adminNotificationService.setAdminNotification(
             `Transaction to escrow failed after 5 times for depositTx.entity: ${depositTx.id}`,
@@ -573,131 +575,121 @@ export class DepositService {
             false,
             depositTx.walletTxId,
           );
-          continue;
+
+          await queryRunner.commitTransaction();
+          // finally block will do queryRunner.release() & cronMutex.release()
+          return;
         }
 
-        // const queryRunner = this.dataSource.createQueryRunner();
-        // await queryRunner.connect();
-        // await queryRunner.startTransaction();
+        // TODO: if get private key failed, depositTx.status = 'F' and won't enter this handleEscrowTx() again. This issue is caused by gas.reload in processDeposit().
+        const userWallet = await this.getUserWallet(depositTx.walletTx.userWalletId);
+        const userSigner = await this.getSigner(
+          userWallet.walletAddress,
+          depositTx.chainId,
+        );
+        const tokenContract = await this.getTokenContract(
+          depositTx.currency,
+          userSigner,
+        );
+
+        // TODO: get escrow address based on chainId
+        const escrowAddress = this.configService.get('ESCROW_ADDRESS');
 
         try {
-          // TODO: if get private key failed, depositTx.status = 'F' and won't enter this handleEscrowTx() again. This issue is caused by gas.reload in processDeposit().
-          const userWallet = await this.getUserWallet(depositTx.walletTx.userWalletId);
-          const userSigner = await this.getSigner(
+          const depositAmount = parseUnits(
+            depositTx.walletTx.txAmount.toString(),
+            await tokenContract.decimals(),
+          );
+
+          // transfer user deposit token to escrow wallet
+          const onchainEscrowTx = await this.transferToken(
+            tokenContract,
+            escrowAddress,
+            depositAmount,
+          );
+
+          const receipt = await onchainEscrowTx.wait(1);
+          const onchainEscrowTxHash = onchainEscrowTx.hash;
+
+          // reload user wallet that execute token transfer if needed
+          this.eventEmitter.emit(
+            'gas.service.reload',
             userWallet.walletAddress,
             depositTx.chainId,
           );
-          const tokenContract = await this.getTokenContract(
-            depositTx.currency,
-            userSigner,
-          );
 
-          // TODO: get escrow address based on chainId
-          const escrowAddress = this.configService.get('ESCROW_ADDRESS');
+          if (receipt && receipt.status == 1) {
+            // transfer token transaction success
+            depositTx.isTransferred = true;
+            depositTx.status = 'S';
+            depositTx.txHash = onchainEscrowTxHash;
+            await queryRunner.manager.save(depositTx);
+            console.log('depositTx in handleEscrowTx():', depositTx)
 
-          try {
-            const depositAmount = parseUnits(
-              depositTx.walletTx.txAmount.toString(),
-              await tokenContract.decimals(),
+            const gameUsdTx = new GameUsdTx();
+            gameUsdTx.amount = depositTx.walletTx.txAmount;
+            gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+            gameUsdTx.status = 'P';
+            gameUsdTx.senderAddress = this.configService.get(
+              'GAMEUSD_POOL_CONTRACT_ADDRESS',
             );
+            gameUsdTx.receiverAddress = userWallet.walletAddress;
+            gameUsdTx.walletTxId = depositTx.walletTx.id;
+            gameUsdTx.walletTxs = [depositTx.walletTx];
+            await queryRunner.manager.save(gameUsdTx);
+            console.log('gameUsdTx in handleEscrowTx():', gameUsdTx)
 
-            // transfer user deposit token to escrow wallet
-            const onchainEscrowTx = await this.transferToken(
-              tokenContract,
-              escrowAddress,
-              depositAmount,
-            );
-
-            const receipt = await onchainEscrowTx.wait(1);
-            const onchainEscrowTxHash = onchainEscrowTx.hash;
-
-            // reload user wallet that execute token transfer if needed
-            this.eventEmitter.emit(
-              'gas.service.reload',
-              userWallet.walletAddress,
-              depositTx.chainId,
-            );
-
-            if (receipt && receipt.status == 1) {
-              // transfer token transaction success
-              depositTx.isTransferred = true;
-              depositTx.status = 'S';
-              depositTx.txHash = onchainEscrowTxHash;
-              await queryRunner.manager.save(depositTx);
-              console.log('depositTx in handleEscrowTx():', depositTx)
-
-              const gameUsdTx = new GameUsdTx();
-              gameUsdTx.amount = depositTx.walletTx.txAmount;
-              gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
-              gameUsdTx.status = 'P';
-              gameUsdTx.senderAddress = this.configService.get(
-                'GAMEUSD_POOL_CONTRACT_ADDRESS',
-              );
-              gameUsdTx.receiverAddress = userWallet.walletAddress;
-              gameUsdTx.walletTxId = depositTx.walletTx.id;
-              gameUsdTx.walletTxs = [depositTx.walletTx];
-              await queryRunner.manager.save(gameUsdTx);
-              console.log('gameUsdTx in handleEscrowTx():', gameUsdTx)
-
-            } else if (receipt && receipt.status != 1) {
-              // transfer token transaction failed
-              depositTx.retryCount += 1;
-              depositTx.txHash = onchainEscrowTxHash;
-              await queryRunner.manager.save(depositTx);
-            }
-
-          } catch (error) {
-            // common error is user wallet haven't been reloaded yet in processDeposit() event
-            // especially new created wallet
-            console.log('Error when try to execute on-chain transfer, will retry again', error);
-            continue
+          } else if (receipt && receipt.status != 1) {
+            // transfer token transaction failed
+            depositTx.retryCount += 1;
+            depositTx.txHash = onchainEscrowTxHash;
+            await queryRunner.manager.save(depositTx);
           }
-
-          // console.log(
-          //   'receipt',
-          //   receipt,
-          //   'onchainEscrowTxHash',
-          //   onchainEscrowTxHash,
-          // );
 
           await queryRunner.commitTransaction();
 
-        } catch (err) {
-          console.log('Error transfer deposited token to escrow wallet ', err);
-          await queryRunner.rollbackTransaction();
-
-          // inform admin
-          await this.adminNotificationService.setAdminNotification(
-            `Error transfer deposited token to escrow wallet: ${err}`,
-            'ESCROW_FAILED',
-            'Transfer to Escrow Failed',
-            false,
-            false,
-            depositTx.walletTxId,
-          );
-
-          // unknown issue, wait developer to check
-          // set status to F and won't enter this handleEscrowTx() again
-          depositTx.status = 'F';
-          this.depositRepository.save(depositTx);
-
-        } finally {
-          await queryRunner.release();
+        } catch (error) {
+          // common error is user wallet haven't been reloaded yet in processDeposit() event
+          // especially new created wallet
+          console.log('Error when try to execute on-chain transfer, will retry again', error);
+          // finally block will do queryRunner.release() & cronMutex.release()
         }
-      }
 
-    } catch (error) {
+      } catch (err) { // queryRunner
+        console.log('Error transfer deposited token to escrow wallet ', err);
+        await queryRunner.rollbackTransaction();
+
+        // inform admin
+        await this.adminNotificationService.setAdminNotification(
+          `Error transfer deposited token to escrow wallet: ${err}`,
+          'ESCROW_FAILED',
+          'Transfer to Escrow Failed',
+          false,
+          false,
+          depositTx.walletTxId,
+        );
+
+        // unknown issue, wait developer to check
+        // set status to F and won't enter this handleEscrowTx() again
+        depositTx.status = 'F';
+        this.depositRepository.save(depositTx);
+
+      } finally { // queryRunner
+        await queryRunner.release();
+      }
+      
+    } catch (error) { // cronMutex
       console.error(error);
 
       await this.adminNotificationService.setAdminNotification(
         error,
-        'UNKNOWN_FAILURE',
-        'Unknown failure in handleEscrowTx()',
-        false,
-        false,
+        'CRITICAL_FAILURE',
+        'Critical failure in handleEscrowTx()',
+        true,
+        true,
       );
       
-    } finally {
+    } finally { // cronMutex
       release();
     }
     console.log('end handleEscrowTx()');
