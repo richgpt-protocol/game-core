@@ -18,10 +18,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { GameTx } from './entity/gameTx.entity';
 import { Mutex } from 'async-mutex';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
+import axios from 'axios';
 
 @Injectable()
 export class PublicService {
   GAMEUSD_TRANFER_INITIATOR: string;
+  miniGameNotificationEndPoint: string;
+
   CronMutex: Mutex;
   constructor(
     private userService: UserService,
@@ -35,6 +38,17 @@ export class PublicService {
     this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
       'DEPOSIT_BOT_ADDRESS',
     );
+    this.miniGameNotificationEndPoint = this.configService.get(
+      'MINI_GAME_NOTIFICATION_ENDPOINT',
+    );
+
+    if (
+      !this.miniGameNotificationEndPoint ||
+      this.miniGameNotificationEndPoint == ''
+    ) {
+      throw new Error('MINI_GAME_NOTIFICATION_ENDPOINT is not set');
+    }
+
     this.CronMutex = new Mutex();
   }
 
@@ -154,6 +168,7 @@ export class PublicService {
         Number(lastValidPointTx?.endingBalance || 0) + Number(xpAmount);
       pointTx.userWallet = userWallet;
       pointTx.txType = 'GAME_TRANSACTION';
+      pointTx.gameTx = gameTx;
       userWallet.pointBalance = pointTx.endingBalance;
       await queryRunner.manager.save(pointTx);
       await queryRunner.manager.save(userWallet);
@@ -284,6 +299,7 @@ export class PublicService {
       walletTx.status = 'S';
       walletTx.userWallet = userWallet;
       walletTx.userWalletId = userWallet.id;
+      walletTx.gameTx = gameTx;
       await queryRunner.manager.save(walletTx);
 
       gameTx.walletTx = walletTx;
@@ -359,99 +375,139 @@ export class PublicService {
     });
   }
 
-  @Cron(CronExpression.EVERY_10_SECONDS)
+  @Cron(CronExpression.EVERY_SECOND)
   async handleGameTransactions() {
     const release = await this.CronMutex.acquire();
     try {
-      const gameTxns = await this.gameTxRespository.find({
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const gameTxn = await queryRunner.manager.findOne(GameTx, {
         where: {
           status: 'P',
         },
+        order: {
+          createdDate: 'ASC',
+        },
+        // relations: ['userWallet', 'pointTx', 'creditWalletTx', 'walletTx'],
       });
 
-      if (gameTxns.length === 0) {
+      if (!gameTxn) {
+        // console.log('No game transactions found');
+        if (!queryRunner.isReleased) await queryRunner.release();
+
         return;
       }
-
-      for (const _gameTxn of gameTxns) {
-        console.log('Processing game transaction', _gameTxn.id);
-        const queryRunner = this.dataSource.createQueryRunner();
-        try {
-          await queryRunner.connect();
-          await queryRunner.startTransaction();
-
-          const gameTxn = await queryRunner.manager.findOne(GameTx, {
-            where: {
-              id: _gameTxn.id,
-            },
-            // relations: ['userWallet', 'pointTx', 'creditWalletTx', 'walletTx'],
-          });
-
-          const userWallet = await queryRunner.manager.findOne(UserWallet, {
-            where: {
-              id: gameTxn.userWalletId,
-            },
-          });
-
-          if (gameTxn.creditAmount > 0) {
-            await this.addCredit(
-              gameTxn.creditAmount,
-              userWallet.id,
-              gameTxn.id,
-              queryRunner,
-            );
-          }
-
-          if (gameTxn.usdtAmount > 0) {
-            await this.addGameUSD(
-              gameTxn.usdtAmount,
-              userWallet,
-              gameTxn,
-              queryRunner,
-            );
-          }
-
-          if (gameTxn.xp > 0) {
-            await this.addXP(gameTxn.xp, userWallet, gameTxn, queryRunner);
-          }
-
-          gameTxn.status = 'S';
-          await queryRunner.manager.save(gameTxn);
-          // throw new Error('Test Error');
-
-          await queryRunner.commitTransaction();
-        } catch (error) {
-          console.error('error in handleGameTransactions', error);
-          queryRunner.rollbackTransaction();
-
-          // const gameTxn = await queryRunner.manager.findOne(GameTx, {
-          //   where: {
-          //     id: _gameTxn.id,
-          //   },
-          // });
-
-          // if (gameTxn.retryCount >= 5) {
-          //   gameTxn.status = 'PD';
-
-          //   await this.adminNotificationService.setAdminNotification(
-          //     `Failed to process game transaction: ID - ${gameTxn.id}`,
-          //     'GAME_TRANSACTION',
-          //     'GAME_TRANSACTION_FAILED',
-          //     false,
-          //   );
-          // } else {
-          //   gameTxn.retryCount = Number(gameTxn.retryCount || 0) + 1;
-          // }
-
-          // await this.gameTxRespository.save(gameTxn);
-        } finally {
+      try {
+        console.log('Processing game transaction', gameTxn.id);
+        if (gameTxn.status === 'S') {
+          console.log('Game transaction already processed', gameTxn.id);
           if (!queryRunner.isReleased) await queryRunner.release();
+
+          return;
         }
+
+        const userWallet = await queryRunner.manager.findOne(UserWallet, {
+          where: {
+            id: gameTxn.userWalletId,
+          },
+        });
+
+        if (gameTxn.creditAmount > 0) {
+          await this.addCredit(
+            gameTxn.creditAmount,
+            userWallet.id,
+            gameTxn.id,
+            queryRunner,
+          );
+        }
+
+        if (gameTxn.usdtAmount > 0) {
+          await this.addGameUSD(
+            gameTxn.usdtAmount,
+            userWallet,
+            gameTxn,
+            queryRunner,
+          );
+        }
+
+        if (gameTxn.xp > 0) {
+          await this.addXP(gameTxn.xp, userWallet, gameTxn, queryRunner);
+        }
+
+        gameTxn.status = 'S';
+        await queryRunner.manager.save(gameTxn);
+        // throw new Error('Test Error');
+
+        await queryRunner.commitTransaction();
+      } catch (error) {
+        console.error('error in handleGameTransactions Cron', error);
+        const id = gameTxn.id;
+        const retryCount = gameTxn.retryCount || 0;
+
+        console.log(`retryCount: ${retryCount}`);
+
+        await queryRunner.rollbackTransaction();
+
+        if (retryCount >= 3) {
+          await this.dataSource.manager.update(GameTx, id, {
+            status: 'PD',
+          });
+
+          await this.adminNotificationService.setAdminNotification(
+            `Failed to process game transaction: ID - ${id}`,
+            'GAME_TRANSACTION',
+            'GAME_TRANSACTION_FAILED',
+            false,
+          );
+        } else {
+          console.log('updating retry count');
+          await this.dataSource.manager.update(GameTx, id, {
+            retryCount: retryCount + 1,
+          });
+        }
+      } finally {
+        if (!queryRunner.isReleased) await queryRunner.release();
       }
     } catch (error) {
       console.error('error in handleGameTransactions Cron', error);
     } finally {
       release();
+    }
+  }
+
+  @Cron(CronExpression.EVERY_SECOND)
+  async notifyMiniGame() {
+    try {
+      const gameTxns = await this.dataSource.manager.find(GameTx, {
+        where: {
+          isNotified: false,
+        },
+      });
+
+      if (gameTxns.length === 0) {
+        // console.log('No game transactions found for notification');
+        return;
+      }
+
+      for (const gameTxn of gameTxns) {
+        try {
+          await this.dataSource.manager.update(GameTx, gameTxn.id, {
+            isNotified: true,
+          });
+
+          await axios.post(this.miniGameNotificationEndPoint, {
+            gameSessionToken: gameTxn.gameSessionToken,
+            gameUsdAmount: gameTxn.creditAmount,
+            usdtAmount: gameTxn.usdtAmount,
+            xp: gameTxn.xp,
+            creditBalance: gameTxn.creditWalletTx?.endingBalance || 0,
+            walletBalance: gameTxn.walletTx?.endingBalance || 0,
+          });
+        } catch (error) {}
+      }
+    } catch (error) {
+      console.error('error in notifyMiniGame Cron', error);
     }
   }
 }
