@@ -539,9 +539,10 @@ export class DepositService {
   // transfer deposited token to escrow wallet
   @Cron(CronExpression.EVERY_SECOND)
   async handleEscrowTx() {
+    console.log('=====================');
     console.log('start handleEscrowTx()');
     const release = await this.cronMutex.acquire();
-    console.log('continue handleEscrowTx()');
+    console.log('mutex acquired');
 
     try {
       const queryRunner = this.dataSource.createQueryRunner();
@@ -556,7 +557,11 @@ export class DepositService {
         .where('depositTx.status = :status', { status: 'P' })
         .orderBy('depositTx.id', 'ASC')
         .getOne();
-      if (!depositTx) return; // no pending deposit transaction, finally block will do queryRunner.release() & cronMutex.release()
+      if (!depositTx) {
+        await queryRunner.release();
+        // finally block will do cronMutex.release()
+        return;
+      }
       console.log('depositTx', depositTx);
 
       try {
@@ -676,6 +681,7 @@ export class DepositService {
 
       } finally { // queryRunner
         await queryRunner.release();
+        console.log('queryRunner released');
       }
       
     } catch (error) { // cronMutex
@@ -691,6 +697,7 @@ export class DepositService {
       
     } finally { // cronMutex
       release();
+      console.log('mutex released');
     }
     console.log('end handleEscrowTx()');
   }
