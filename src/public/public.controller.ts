@@ -14,6 +14,8 @@ import { SecretTokenGuard } from 'src/shared/guards/secret-token.guard';
 import { ResponseVo } from 'src/shared/vo/response.vo';
 import { GetProfileDto } from './dtos/get-profile.dto';
 import { UpdateUserGameDto } from './dtos/update-user-game.dto';
+import { UpdateTaskXpDto } from './dtos/update-task-xp.dto';
+import { UpdateUserTelegramDto } from './dtos/update-user-telegram.dto';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
@@ -86,6 +88,50 @@ export class PublicController {
     return {
       statusCode: HttpStatus.OK,
       data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('task-xp')
+  @ApiResponse({
+    status: 200,
+    description: 'Update user task details',
+    type: ResponseVo,
+  })
+  async updateTaskXp(
+    @Body() payload: UpdateTaskXpDto,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.updateTaskXP(payload);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('update-user-telegram')
+  @ApiResponse({
+    status: 200,
+    description: 'Update user telegram',
+    type: ResponseVo,
+  })
+  async updateUserTelegram(
+    @Body() payload: UpdateUserTelegramDto,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.updateUserTelegram(payload);
+    if (data) {
+      return {
+        statusCode: HttpStatus.OK,
+        data: null,
+        message: data.message,
+      };
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      data: null,
       message: 'Success',
     };
   }

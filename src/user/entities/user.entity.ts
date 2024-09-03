@@ -38,6 +38,7 @@ export class User {
 
   @Column({
     nullable: true,
+    type: 'bigint',
   })
   tgId: number;
 
