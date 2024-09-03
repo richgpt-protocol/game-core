@@ -3,6 +3,7 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
+  QueryRunner,
   // In,
   // LessThan,
   // MoreThan,
@@ -893,14 +894,14 @@ export class DepositService {
     });
   }
 
-  private async getWalletTx(walletTxId: number) {
-    return await this.dataSource.manager
-      .createQueryBuilder(WalletTx, 'walletTx')
-      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-      .leftJoinAndSelect('userWallet.user', 'user')
-      .where('walletTx.id = :id', { id: walletTxId })
-      .getOne();
-  }
+  // private async getWalletTx(walletTxId: number) {
+  //   return await this.dataSource.manager
+  //     .createQueryBuilder(WalletTx, 'walletTx')
+  //     .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+  //     .leftJoinAndSelect('userWallet.user', 'user')
+  //     .where('walletTx.id = :id', { id: walletTxId })
+  //     .getOne();
+  // }
 
   private async lastValidWalletTx(userWalletId: number) {
     return await this.dataSource.manager.findOne(WalletTx, {
@@ -1046,7 +1047,14 @@ export class DepositService {
       // const depositTxHash = gameUsdTx.txHash;
       // const provider = this.getProvider(gameUsdTx.chainId);
       // const receipt = await provider.getTransactionReceipt(depositTxHash);
-      const walletTx = await this.getWalletTx(gameUsdTx.walletTxId);
+      console.log('handleGameUSDTxHash() gameUsdTx: ', gameUsdTx)
+      const walletTx = await queryRunner.manager
+        .createQueryBuilder(WalletTx, 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .where('walletTx.id = :id', { id: gameUsdTx.walletTxId })
+        .getOne();
+      console.log('handleGameUSDTxHash() walletTx:', walletTx)
 
       // console.log('Deposit tx success', depositTxHash);
       // gameUsdTx.status = 'S';
