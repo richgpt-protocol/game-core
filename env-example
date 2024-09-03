@@ -78,7 +78,7 @@ PAYOUT_BOT_ADDRESS=
 RESULT_BOT_ADDRESS=
 POINT_REWARD_BOT_ADDRESS=
 HELPER_BOT_ADDRESS=
-SUPPLY_ACCOUNT_ADDRESS=
+SUPPLY_ACCOUNT_ADDRESS= # account to supply all native token, must often check balance
 COMMISION_DISTRIBUTOR_BOT_ADDRESS= #Address which can call distributeReferralFee()
 
 # escrow multisig address
