@@ -567,7 +567,7 @@ export class DepositService {
       try {
         console.log('Processing transfer deposited token to escrow wallet, depositTx.id:', depositTx.id);
 
-        if (depositTx.retryCount >= 5) {
+        if (depositTx.retryCount >= 10) {
           // retry 5 times already, set status to F and won't enter handleEscrowTx() again
           depositTx.status = 'F';
           await queryRunner.manager.save(depositTx);
@@ -657,6 +657,7 @@ export class DepositService {
           // common error is user wallet haven't been reloaded yet in processDeposit() event
           // especially new created wallet
           console.log('Error when try to execute on-chain transfer, will retry again', error);
+          depositTx.retryCount += 1;
           // finally block will do queryRunner.release() & cronMutex.release()
         }
 
