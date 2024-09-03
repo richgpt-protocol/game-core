@@ -10,9 +10,11 @@ import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { catchError, firstValueFrom } from 'rxjs';
 import { MPC } from '../mpc';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Mutex } from 'async-mutex';
 
 @Injectable()
 export class GasService {
+  private readonly cronMutex: Mutex = new Mutex();
 
   constructor(
     @InjectRepository(ReloadTx)
@@ -82,70 +84,89 @@ export class GasService {
     }
   }
 
-  isHandlePendingReloadTxInProgress = false;
-
-  @Cron(CronExpression.EVERY_5_SECONDS)
+  @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx(): Promise<void> {
-    if (!this.isHandlePendingReloadTxInProgress) {
-      this.isHandlePendingReloadTxInProgress = true;
+    console.log('handlePendingReloadTx(): started');
+    const release = await this.cronMutex.acquire();
+    console.log('handlePendingReloadTx(): mutex acquired');
 
-      const pendingReloadTx = await this.reloadTxRepository.find({
-        where: {
-          status: 'P',
-        },
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    console.log('handlePendingReloadTx(): queryRunner started');
+    
+    try {
+      const reloadTx = await queryRunner.manager.findOne(ReloadTx, {
+        where: { status: 'P' },
         relations: { userWallet: true },
+        order: { id: 'ASC' },
       });
+  
+      while (reloadTx.retryCount < 5) {
+        try {
+          const provider_rpc_url = reloadTx.chainId === Number(process.env.OPBNB_CHAIN_ID)
+            ? process.env.OPBNB_PROVIDER_RPC_URL
+            : process.env.BNB_PROVIDER_RPC_URL;
+          const provider = new ethers.JsonRpcProvider(provider_rpc_url);
+          
+          const supplyAccount = new ethers.Wallet(
+            await MPC.retrievePrivateKey(process.env.SUPPLY_ACCOUNT_ADDRESS),
+            provider
+          );
 
-      for (const reloadTx of pendingReloadTx) {
-        while (reloadTx.retryCount < 5) {
-          try {
-            const provider_rpc_url = reloadTx.chainId === Number(process.env.OPBNB_CHAIN_ID)
-              ? process.env.OPBNB_PROVIDER_RPC_URL
-              : process.env.BNB_PROVIDER_RPC_URL;
-            const provider = new ethers.JsonRpcProvider(provider_rpc_url);
-            
-            const supplyAccount = new ethers.Wallet(
-              await MPC.retrievePrivateKey(process.env.SUPPLY_ACCOUNT_ADDRESS),
-              provider
-            );
+          const txResponse = await supplyAccount.sendTransaction({
+            to: reloadTx.userWallet.walletAddress,
+            value: ethers.parseEther(reloadTx.amount.toString())
+          });
+          const txReceipt = await txResponse.wait();
+          reloadTx.txHash = txReceipt.hash;
+          
+          if (txReceipt.status === 1) {
+            reloadTx.status = 'S';
+            break;
 
-            const txResponse = await supplyAccount.sendTransaction({
-              to: reloadTx.userWallet.walletAddress,
-              value: ethers.parseEther(reloadTx.amount.toString())
-            });
-            const txReceipt = await txResponse.wait();
-            reloadTx.txHash = txReceipt.hash;
-            
-            if (txReceipt.status === 1) {
-              reloadTx.status = 'S';
-              break;
-
-            } else {
-              reloadTx.status = 'F';
-              reloadTx.retryCount++;
-            }
-
-          } catch (error) {
+          } else {
             reloadTx.status = 'F';
             reloadTx.retryCount++;
           }
-        }
 
-        this.reloadTxRepository.save(reloadTx);
-
-        if (reloadTx.status === 'F') {
-          // native token transfer failed, inform admin
-          await this.adminNotificationService.setAdminNotification(
-            `On-chain transaction failed in GasService.handlePendingReloadTx, txHash: ${reloadTx.txHash}`,
-            'onChainTxError',
-            'On-chain Transaction Failed in GasService.handlePendingReloadTx',
-            true,
-          );
+        } catch (error) {
+          reloadTx.status = 'F';
+          reloadTx.retryCount++;
         }
       }
 
-      this.isHandlePendingReloadTxInProgress = false;
+      await queryRunner.manager.save(reloadTx);
+      await queryRunner.commitTransaction();
+
+      if (reloadTx.status === 'F') {
+        // native token transfer failed, inform admin
+        await this.adminNotificationService.setAdminNotification(
+          `On-chain transaction failed in GasService.handlePendingReloadTx, txHash: ${reloadTx.txHash}`,
+          'onChainTxError',
+          'On-chain Transaction Failed in GasService.handlePendingReloadTx',
+          true,
+        );
+      }
+
+    } catch (error) {
+      console.error('Critical error in handlePendingReloadTx()', error);
+
+      await this.adminNotificationService.setAdminNotification(
+        error,
+        'CRITICAL_FAILURE',
+        'Critical failure in handlePendingReloadTx()',
+        true,
+        true,
+      );
+
+    } finally {
+      await queryRunner.release();
+      console.log('handlePendingReloadTx(): queryRunner released');
+      release();
+      console.log('handlePendingReloadTx(): mutex released');
     }
+    console.log('handlePendingReloadTx(): end');
   }
 
   private _isAdmin(userAddress: string): boolean {
