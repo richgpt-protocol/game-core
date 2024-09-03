@@ -101,6 +101,11 @@ export class GasService {
         relations: { userWallet: true },
         order: { id: 'ASC' },
       });
+      console.log(`handlePendingReloadTx(): ${reloadTx}`);
+      if (!reloadTx) {
+        // finally block will execute queryRunner.release() & cronMutex.release()
+        return;
+      }
   
       while (reloadTx.retryCount < 5) {
         try {
@@ -140,6 +145,7 @@ export class GasService {
       await queryRunner.commitTransaction();
 
       if (reloadTx.status === 'F') {
+        // retryCount >= 5 and status still 'F'
         // native token transfer failed, inform admin
         await this.adminNotificationService.setAdminNotification(
           `On-chain transaction failed in GasService.handlePendingReloadTx, txHash: ${reloadTx.txHash}`,
