@@ -707,42 +707,139 @@ export class DepositService {
   // }
 
   // transfer GameUSD to user wallet
-  private handleGameUsdTxInProcess = false;
-  @Cron(CronExpression.EVERY_5_SECONDS)
+  @Cron(CronExpression.EVERY_SECOND)
   async handleGameUsdTx() {
-    if (this.handleGameUsdTxInProcess) return;
-    this.handleGameUsdTxInProcess = true;
-    // try {
-      const pendingGameUsdTxs = await this.getPendingGameUsdTx();
+    const release = await this.cronMutex.acquire();
+    console.log('handleGameUsdTx(): mutex acquired');
 
-      for (const gameUsdTx of pendingGameUsdTxs) {
-        // try {
-          console.log('Processing transfer GameUSD to user wallet, gameUsdTx:', gameUsdTx);
+    try {
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      console.log('handleGameUsdTx(): queryRunner started');
 
-          if (gameUsdTx.retryCount >= 5) {
-            await this.updateGameUsdTxToFailed(gameUsdTx);
-            continue;
+      const gameUsdTx = await queryRunner.manager
+        .createQueryBuilder('game_usd_tx', 'gameUsdTx')
+        .where('gameUsdTx.status = :status', { status: 'P' })
+        .andWhere('gameUsdTx.senderAddress IN (:...senderAddresses)', {
+          senderAddresses: [
+            this.configService.get('DEPOSIT_BOT_ADDRESS'),
+            this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
+          ],
+        })
+        .andWhere('gameUsdTx.creditWalletTx IS NULL')
+        .orderBy('gameUsdTx.id', 'ASC')
+        .getOne() as GameUsdTx;
+      if (!gameUsdTx) {
+        await queryRunner.release();
+        // finally block will do cronMutex.release()
+        return;
+      }
+      console.log('Processing transfer GameUSD to user wallet, gameUsdTx:', gameUsdTx);
+
+      try {
+        while (gameUsdTx.retryCount < 5) {
+          try {
+            const depositAdminWallet = await this.getSigner(
+              this.configService.get('DEPOSIT_BOT_ADDRESS'),
+              gameUsdTx.chainId,
+            );
+            const onchainGameUsdTx = await this.depositGameUSD(
+              gameUsdTx.receiverAddress,
+              parseEther(gameUsdTx.amount.toString()),
+              depositAdminWallet,
+            );
+      
+            this.eventEmitter.emit(
+              'gas.service.reload',
+              await depositAdminWallet.getAddress(),
+              gameUsdTx.chainId,
+            );
+      
+            gameUsdTx.txHash = onchainGameUsdTx.hash;
+            const txReceipt = await onchainGameUsdTx.wait(1);
+            if (txReceipt && txReceipt.status == 1) {
+              // transfer GameUSD transaction success
+              gameUsdTx.status = 'S';
+              break;
+      
+            } else {
+              // transfer GameUSD transaction failed, try again later
+              gameUsdTx.retryCount += 1;
+            }
+      
+          } catch (error) {
+            console.log('handleGameUsdTx() error:', error);
+            gameUsdTx.retryCount += 1;
+      
+          } finally {
+            await queryRunner.manager.save(gameUsdTx);
+            console.log('handleGameUsdTx():', gameUsdTx)
           }
+        }
 
-          const isTxSuccess = await this.handleOnChainDeposit(gameUsdTx);
-          if (!isTxSuccess) continue;
+        if (gameUsdTx.retryCount >= 5) {
+          // set gameUsdTx status to failed
+          gameUsdTx.status = 'F';
+          await queryRunner.manager.save(gameUsdTx);
+          // set walletTx status to failed
+          await queryRunner.manager.update(
+            WalletTx,
+            { id: gameUsdTx.walletTxId },
+            { status: 'F' },
+          );
 
+          await this.adminNotificationService.setAdminNotification(
+            `GameUSD transaction after 5 times for gameUsdTx id: ${gameUsdTx.id}`,
+            'GAMEUSD_TX_FAILED_5_TIMES',
+            'GameUSD transfer failed',
+            false,
+            false,
+            gameUsdTx.walletTxId,
+          );
+        }
+
+        await queryRunner.commitTransaction();
+        console.log('handleGameUsdTx(): queryRunner committed');
+
+        if (gameUsdTx.status == 'S') {
           // handles the db part of gameUsdTx sent to user address.
-          await this.handleGameUSDTxHash(gameUsdTx.id);
-          console.log('done processing gameUSD gameUsdTx', gameUsdTx.id);
+          await this.handleGameUSDTxHash(gameUsdTx);
+        }
 
-    //     } catch (error) {
-    //       console.log('Error in cron gameUSD gameUsdTx', error);
-    //     }
-      // }
+      } catch (error) { // queryRunner
+        console.error('handleGameUsdTx() error:', error);
+        await this.adminNotificationService.setAdminNotification(
+          `GameUsdTx id: ${gameUsdTx.id}, error: ${error}`,
+          'ERROR_IN_GAMEUSD_TX',
+          'Error in handleGameUsdTx() within queryRunner',
+          false,
+          false,
+          gameUsdTx.walletTxId,
+        );
 
-    // } catch (error) {
-    //   console.error('Error in gameUSD gameUsdTx: releasing mutex', error);
+      } finally { // queryRunner
+        await queryRunner.release();
+        console.log('handleGameUsdTx(): queryRunner released');
+      }
 
+    } catch (error) { // cronMutex
+      console.error('handleGameUsdTx() error:', error);
+
+      await this.adminNotificationService.setAdminNotification(
+        `Critical error: ${error}`,
+        'CRITICAL_FAILURE',
+        'Critical failure in handleGameUsdTx() within cronMutex',
+        true,
+        true,
+      );
+
+    } finally { // cronMutex
+      release();
+      console.log('handleGameUsdTx(): mutex released');
     }
-    this.handleGameUsdTxInProcess = false;
-    // console.log('handleGameUsdTxInProcess', this.handleGameUsdTxInProcess);
-    // console.log('handleGameUsdTx() end')
+
+    console.log('handleGameUsdTx() end')
   }
 
   private async getUserWallet(userWalletId: number) {
@@ -839,19 +936,19 @@ export class DepositService {
     });
   }
 
-  private async getPendingGameUsdTx() {
-    return await this.gameUsdTxRepository
-      .createQueryBuilder('gameUsdTx')
-      .where('gameUsdTx.status = :status', { status: 'P' })
-      .andWhere('gameUsdTx.senderAddress IN (:...senderAddresses)', {
-        senderAddresses: [
-          // this.configService.get('DEPOSIT_BOT_ADDRESS'),
-          this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
-        ],
-      })
-      .andWhere('gameUsdTx.creditWalletTx IS NULL')
-      .orderBy('gameUsdTx.id', 'ASC')
-      .getMany();
+  // private async getPendingGameUsdTx() {
+  //   return await this.gameUsdTxRepository
+  //     .createQueryBuilder('gameUsdTx')
+  //     .where('gameUsdTx.status = :status', { status: 'P' })
+  //     .andWhere('gameUsdTx.senderAddress IN (:...senderAddresses)', {
+  //       senderAddresses: [
+  //         // this.configService.get('DEPOSIT_BOT_ADDRESS'),
+  //         this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
+  //       ],
+  //     })
+  //     .andWhere('gameUsdTx.creditWalletTx IS NULL')
+  //     .orderBy('gameUsdTx.id', 'ASC')
+  //     .getMany();
     // return await this.gameUsdTxRepository.find({
     //   where: {
     //     status: 'P',
@@ -865,86 +962,86 @@ export class DepositService {
     //     id: 'ASC',
     //   },
     // });
-  }
+  // }
 
-  private async updateGameUsdTxToFailed(tx: GameUsdTx) {
-    tx.status = 'F';
-    await this.gameUsdTxRepository.save(tx);
+  // private async updateGameUsdTxToFailed(tx: GameUsdTx) {
+  //   tx.status = 'F';
+  //   await this.gameUsdTxRepository.save(tx);
 
-    await this.dataSource.manager.update(
-      WalletTx,
-      {
-        id: tx.walletTxId,
-      },
-      {
-        status: 'F',
-      },
-    );
+  //   await this.dataSource.manager.update(
+  //     WalletTx,
+  //     {
+  //       id: tx.walletTxId,
+  //     },
+  //     {
+  //       status: 'F',
+  //     },
+  //   );
 
-    await this.adminNotificationService.setAdminNotification(
-      `GameUSD transaction after 5 times for gameUSD.tx.entity: ${tx.id}`,
-      'GAMEUSD_TX_FAILED_5_TIMES',
-      'GameUSD transfer transfer failed',
-      false,
-      false,
-      tx.walletTxId,
-    );
-  }
+  //   await this.adminNotificationService.setAdminNotification(
+  //     `GameUSD transaction after 5 times for gameUSD.tx.entity: ${tx.id}`,
+  //     'GAMEUSD_TX_FAILED_5_TIMES',
+  //     'GameUSD transfer transfer failed',
+  //     false,
+  //     false,
+  //     tx.walletTxId,
+  //   );
+  // }
 
   //handles the onchain-transfer of gameUsd to user address.
-  private async handleOnChainDeposit(gameUsdTx: GameUsdTx): Promise<boolean> {
-    try {
-      const depositAdminWallet = await this.getSigner(
-        this.configService.get('DEPOSIT_BOT_ADDRESS'),
-        gameUsdTx.chainId,
-      );
-      const onchainGameUsdTx = await this.depositGameUSD(
-        gameUsdTx.receiverAddress,
-        parseEther(gameUsdTx.amount.toString()),
-        depositAdminWallet,
-      );
+  // private async handleOnChainDeposit(gameUsdTx: GameUsdTx): Promise<boolean> {
+  //   try {
+  //     const depositAdminWallet = await this.getSigner(
+  //       this.configService.get('DEPOSIT_BOT_ADDRESS'),
+  //       gameUsdTx.chainId,
+  //     );
+  //     const onchainGameUsdTx = await this.depositGameUSD(
+  //       gameUsdTx.receiverAddress,
+  //       parseEther(gameUsdTx.amount.toString()),
+  //       depositAdminWallet,
+  //     );
 
-      this.eventEmitter.emit(
-        'gas.service.reload',
-        await depositAdminWallet.getAddress(),
-        gameUsdTx.chainId,
-      );
+  //     this.eventEmitter.emit(
+  //       'gas.service.reload',
+  //       await depositAdminWallet.getAddress(),
+  //       gameUsdTx.chainId,
+  //     );
 
-      gameUsdTx.txHash = onchainGameUsdTx.hash;
-      const txReceipt = await onchainGameUsdTx.wait(1);
-      if (txReceipt && txReceipt.status == 1) {
-        // transfer GameUSD transaction success
-        gameUsdTx.status = 'S';
+  //     gameUsdTx.txHash = onchainGameUsdTx.hash;
+  //     const txReceipt = await onchainGameUsdTx.wait(1);
+  //     if (txReceipt && txReceipt.status == 1) {
+  //       // transfer GameUSD transaction success
+  //       gameUsdTx.status = 'S';
 
-      } else {
-        // transfer GameUSD transaction failed, try again later
-        gameUsdTx.retryCount += 1;
-        return false
-      }
+  //     } else {
+  //       // transfer GameUSD transaction failed, try again later
+  //       gameUsdTx.retryCount += 1;
+  //       return false
+  //     }
 
-      return true;
+  //     return true;
 
-    } catch (error) {
-      console.log('Error in handleOnChainDeposit():', error);
-      gameUsdTx.retryCount += 1;
-      return false;
+  //   } catch (error) {
+  //     console.log('Error in handleOnChainDeposit():', error);
+  //     gameUsdTx.retryCount += 1;
+  //     return false;
 
-    } finally {
-      await this.gameUsdTxRepository.save(gameUsdTx);
-      console.log('gameUsdTx in handleOnChainDeposit()', gameUsdTx)
-    }
-  }
+  //   } finally {
+  //     await this.gameUsdTxRepository.save(gameUsdTx);
+  //     console.log('gameUsdTx in handleOnChainDeposit()', gameUsdTx)
+  //   }
+  // }
 
   // handles the db part of gameUsdTx sent to user address.
   // won't proceed here if handleOnChainDeposit() return false
-  private async handleGameUSDTxHash(gameUsdTxId: number) {
+  private async handleGameUSDTxHash(gameUsdTx: GameUsdTx) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
-        where: { id: gameUsdTxId },
-      });
+      // const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
+      //   where: { id: gameUsdTxId },
+      // });
       // const depositTxHash = gameUsdTx.txHash;
       // const provider = this.getProvider(gameUsdTx.chainId);
       // const receipt = await provider.getTransactionReceipt(depositTxHash);
@@ -963,7 +1060,7 @@ export class DepositService {
         (Number(previousWalletTx?.endingBalance) || 0) +
         Number(gameUsdTx.amount);
       await queryRunner.manager.save(walletTx);
-      console.log('walletTx in handleGameUSDTxHash()', walletTx)
+      console.log('handleGameUSDTxHash():', walletTx)
 
       // update userWallet walletBalance
       walletTx.userWallet.walletBalance = walletTx.endingBalance;
@@ -990,12 +1087,12 @@ export class DepositService {
       pointTx.walletTxId = walletTx.id;
       pointTx.walletTx = walletTx;
       await queryRunner.manager.save(pointTx);
-      console.log('pointTx in handleGameUSDTxHash()', pointTx)
+      console.log('handleGameUSDTxHash():', pointTx)
 
       // update userWallet pointBalance
       walletTx.userWallet.pointBalance = pointTxEndingBalance;
       await queryRunner.manager.save(walletTx.userWallet);
-      console.log('userWallet in handleGameUSDTxHash()', walletTx.userWallet)
+      console.log('handleGameUSDTxHash():', walletTx.userWallet)
       
       await queryRunner.commitTransaction();
 
