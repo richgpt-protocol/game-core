@@ -70,6 +70,8 @@ export class GasService {
           : process.env.BNB_PROVIDER_RPC_URL;
         const provider = new ethers.JsonRpcProvider(provider_rpc_url);
         
+        // no error handling for admin wallet reload
+        // try again in next reload
         const supplyAccount = new ethers.Wallet(
           await MPC.retrievePrivateKey(process.env.SUPPLY_ACCOUNT_ADDRESS),
           provider
@@ -86,14 +88,11 @@ export class GasService {
 
   @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx(): Promise<void> {
-    console.log('handlePendingReloadTx(): started');
     const release = await this.cronMutex.acquire();
-    console.log('handlePendingReloadTx(): mutex acquired');
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
-    console.log('handlePendingReloadTx(): queryRunner started');
     
     try {
       const reloadTx = await queryRunner.manager.findOne(ReloadTx, {
@@ -101,7 +100,6 @@ export class GasService {
         relations: { userWallet: true },
         order: { id: 'ASC' },
       });
-      console.log(`handlePendingReloadTx(): ${reloadTx}`);
       if (!reloadTx) {
         // finally block will execute queryRunner.release() & cronMutex.release()
         return;
@@ -114,6 +112,7 @@ export class GasService {
             : process.env.BNB_PROVIDER_RPC_URL;
           const provider = new ethers.JsonRpcProvider(provider_rpc_url);
           
+          // if failed to fetch private key will goes to catch block and try again
           const supplyAccount = new ethers.Wallet(
             await MPC.retrievePrivateKey(process.env.SUPPLY_ACCOUNT_ADDRESS),
             provider
@@ -156,8 +155,11 @@ export class GasService {
       }
 
     } catch (error) {
-      console.error('Critical error in handlePendingReloadTx()', error);
+      console.error('handlePendingReloadTx() error within queryRunner, error:', error);
+      // no queryRunner.rollbackTransaction() because it contain on-chain transaction
+      // no new record created so it's safe not to rollback
 
+      // inform admin
       await this.adminNotificationService.setAdminNotification(
         error,
         'CRITICAL_FAILURE',
@@ -168,11 +170,8 @@ export class GasService {
 
     } finally {
       await queryRunner.release();
-      console.log('handlePendingReloadTx(): queryRunner released');
-      release();
-      console.log('handlePendingReloadTx(): mutex released');
+      release(); // release cronMutex
     }
-    console.log('handlePendingReloadTx(): end');
   }
 
   private _isAdmin(userAddress: string): boolean {
