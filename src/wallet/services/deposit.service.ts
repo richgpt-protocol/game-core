@@ -810,6 +810,7 @@ export class DepositService {
   private async getPendingGameUsdTx() {
     return await this.gameUsdTxRepository
       .createQueryBuilder('gameUsdTx')
+      .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTx')
       .where('gameUsdTx.status = :status', { status: 'P' })
       .andWhere('gameUsdTx.senderAddress IN (:...senderAddresses)', {
         senderAddresses: [
@@ -818,6 +819,7 @@ export class DepositService {
         ],
       })
       .andWhere('gameUsdTx.creditWalletTx IS NULL')
+      .andWhere('walletTx.txType = :txType', { txType: 'DEPOSIT' })
       .orderBy('gameUsdTx.id', 'ASC')
       .getMany();
     // return await this.gameUsdTxRepository.find({
