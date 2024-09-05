@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
 import {
@@ -25,13 +25,14 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { SMSService } from 'src/shared/services/sms.service';
-import { UserLoginDto } from 'src/auth/dto/login.dto';
+import { UserLoginDto, LoginWithTelegramDTO } from 'src/auth/dto/login.dto';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { NotificationDto } from './dto/notification.dto';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
+import { ConfigService } from 'src/config/config.service';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -47,6 +48,7 @@ type GenerateOtpEvent = {
 
 @Injectable()
 export class UserService {
+  TG_LOGIN_WIDGET_BOT_TOKEN: string;
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -65,7 +67,13 @@ export class UserService {
     private adminNotificationService: AdminNotificationService,
     private smsService: SMSService,
     private cacheSettingService: CacheSettingService,
-  ) {}
+    private configService: ConfigService,
+    private datasource: DataSource,
+  ) {
+    this.TG_LOGIN_WIDGET_BOT_TOKEN = this.configService.get(
+      'TG_LOGIN_WIDGET_BOT_TOKEN',
+    );
+  }
 
   async findOne(id: number) {
     return await this.userRepository
@@ -263,6 +271,186 @@ export class UserService {
       return { error: null, data: user };
     } catch (err) {
       return { error: err.message, data: null };
+    }
+  }
+
+  async validateTelegramPayload(tgId: number, hash: string, data: any) {
+    const dataCheckString = Object.keys(data)
+      .sort()
+      .map((key) => `${key}=${data[key]}`)
+      .join('\n');
+
+    const secret = crypto
+      .createHash('sha256')
+      .update(this.TG_LOGIN_WIDGET_BOT_TOKEN)
+      .digest();
+    const hmac = crypto
+      .createHmac('sha256', secret)
+      .update(dataCheckString)
+      .digest('hex');
+
+    if (hmac !== hash) {
+      return { error: 'INVALID_HASH' };
+    }
+
+    return { error: null };
+  }
+
+  async validateUserStatus(user: User) {
+    switch (user.status) {
+      case UserStatus.INACTIVE:
+        return {
+          error: 'user.ACCOUNT_INACTIVE',
+        };
+      case UserStatus.SUSPENDED:
+        return {
+          error: 'user.ACCOUNT_SUSPEND',
+          args: {
+            id: 1,
+            supportEmail: this.cacheSettingService.get(
+              SettingEnum.SUPPORT_CONTACT_EMAIL,
+            ),
+          },
+        };
+      case UserStatus.TERMINATED:
+        return {
+          error: 'user.ACCOUNT_TERMINATED',
+        };
+      case UserStatus.UNVERIFIED:
+        return {
+          error: 'user.ACCOUNT_UNVERIFIED',
+        };
+      case UserStatus.PENDING:
+        return {
+          error: 'user.ACCOUNT_PENDING',
+        };
+    }
+
+    return { error: null };
+  }
+
+  async signInWithTelegram(
+    payload: LoginWithTelegramDTO,
+  ): Promise<{ error: string; data: User }> {
+    console.log('signInWithTelegram', payload);
+    const queryRunner = this.datasource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const user = await queryRunner.manager.findOne(User, {
+        where: {
+          tgId: payload.id,
+        },
+        select: [
+          'id',
+          'status',
+          'phoneNumber',
+          'referralCode',
+          'isMobileVerified',
+        ],
+      });
+
+      if (user) {
+        const { error } = await this.validateUserStatus(user);
+        if (error) return { error, data: null };
+
+        return { error: null, data: user };
+      } else {
+        //create new user
+
+        let referralUserId = null;
+        if (payload.referralCode && payload.referralCode != '') {
+          const referralUser = await queryRunner.manager.findOne(User, {
+            where: {
+              referralCode: payload.referralCode,
+            },
+            relations: { wallet: true },
+          });
+
+          if (!referralUser)
+            throw new BadRequestException('Invalid Referral Code');
+
+          referralUserId = referralUser.id;
+        }
+
+        const newUser = new User();
+        newUser.uid = this.generateNumericUID();
+        newUser.referralCode = null;
+        newUser.status = UserStatus.ACTIVE;
+        newUser.isReset = false;
+        newUser.verificationCode = null;
+        newUser.loginAttempt = 0;
+        newUser.isMobileVerified = true;
+        newUser.otpGenerateTime = null;
+        newUser.referralRank = 1;
+        newUser.emailAddress = null;
+        newUser.isEmailVerified = false;
+        newUser.emailVerificationCode = null;
+        newUser.emailOtpGenerateTime = null;
+        newUser.updatedBy = null;
+        newUser.referralUserId = referralUserId;
+        newUser.referralTx = null;
+        newUser.referredTx = null;
+        newUser.wallet = null;
+        newUser.tgId = payload.id;
+        newUser.tgUsername = payload.username;
+        await queryRunner.manager.save(newUser);
+
+        const walletAddress = await MPC.createWallet();
+        const newWallet = new UserWallet();
+        newWallet.walletBalance = 0;
+        newWallet.creditBalance = 0;
+        newWallet.walletAddress = walletAddress;
+        newWallet.pointBalance = 0;
+        newWallet.userId = newUser.id;
+        await queryRunner.manager.save(newWallet);
+
+        newUser.wallet = newWallet;
+        newUser.referralCode = this.generateReferralCode(newUser.id);
+        newUser.updatedBy = UtilConstant.SELF;
+        await queryRunner.manager.save(newUser);
+
+        if (newUser.referralUserId) {
+          const referralTx = new ReferralTx();
+          referralTx.rewardAmount = 0;
+          referralTx.referralType = 'SET_REFERRER';
+          referralTx.bonusAmount = 0;
+          referralTx.bonusCurrency = 'USDT';
+          referralTx.status = 'S';
+          referralTx.txHash = null;
+          referralTx.userId = newUser.id;
+          referralTx.referralUserId = newUser.referralUserId;
+          await queryRunner.manager.save(referralTx);
+        }
+
+        //Add address to deposit bot
+        await axios.post(
+          depositBotAddAddress,
+          {
+            address: walletAddress,
+          },
+          { headers: { 'Content-Type': 'application/json' } },
+        );
+
+        await queryRunner.commitTransaction();
+        return { error: null, data: newUser };
+      }
+    } catch (error) {
+      console.error('error', error);
+      await queryRunner.rollbackTransaction();
+
+      await this.adminNotificationService.setAdminNotification(
+        `Transaction in user.service.signInWithTelegram had been rollback, error: ${error}, telegramId: ${payload.id}`,
+        'rollbackTxError',
+        'Transaction Rollbacked',
+        true,
+      );
+      const errorMessage =
+        error instanceof BadRequestException ? error.message : 'Error Occurred';
+      return { error: errorMessage, data: null };
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
