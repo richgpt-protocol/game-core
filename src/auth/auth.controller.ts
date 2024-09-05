@@ -24,13 +24,9 @@ import { ErrorResponseVo, ResponseVo } from 'src/shared/vo/response.vo';
 import { UserService } from 'src/user/user.service';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { LoginDto, UserLoginDto } from './dto/login.dto';
+import { LoginDto, LoginWithTelegramDTO, UserLoginDto } from './dto/login.dto';
 import { ResponseAdminAuthVo } from './vo/auth.vo';
-import {
-  PasswordResetDto,
-  ResetPasswordDto,
-  UserResetPasswordDto,
-} from './dto/reset-password.dto';
+import { PasswordResetDto, ResetPasswordDto } from './dto/reset-password.dto';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { I18n, I18nContext } from 'nestjs-i18n';
 import { EnumUtil } from 'src/shared/utils/enum.util';
@@ -140,6 +136,70 @@ export class AuthController {
       success: true,
       data: {},
     };
+  }
+
+  @Post('login-with-telegram')
+  async loginWithTelegram(
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+    @Body() payload: LoginWithTelegramDTO,
+    @I18n() i18n: I18nContext,
+  ): Promise<ResponseVo<any>> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { referralCode, hash, ...dataToVerify } = payload;
+      const result = await this.userService.validateTelegramPayload(
+        payload.id,
+        hash,
+        dataToVerify,
+      );
+
+      if (result.error) {
+        throw new BadRequestException(await i18n.translate(result.error));
+      }
+
+      const { data, error } =
+        await this.userService.signInWithTelegram(payload);
+
+      if (error) {
+        throw new BadRequestException(await i18n.translate(error));
+      }
+
+      await this.auditLogService.userInsert({
+        module: classInfo.class,
+        actions: classInfo.method,
+        userId: data.id.toString(),
+        content: `Login Successful with ${data.tgId} `,
+        ipAddress,
+      });
+
+      const response = {
+        id: data.id,
+        status: data.status,
+        phoneNumber: data.phoneNumber,
+        referralCode: data.referralCode,
+        isMobileVerified: data.isMobileVerified,
+      };
+
+      const loginResult = await this.authService.createToken(
+        response,
+        UserRole.USER,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Login Successful',
+        data: loginResult,
+      };
+    } catch (ex) {
+      const message =
+        ex instanceof BadRequestException ? ex.message : 'error Occurred';
+      throw new BadRequestException(message);
+      // {
+      //   statusCode: HttpStatus.BAD_REQUEST,
+      //   data: {},
+      //   message: 'error occurred',
+      // };
+    }
   }
 
   @Post('user-login')

@@ -34,6 +34,7 @@ import { ConfigService } from 'src/config/config.service';
     SharedModule,
     AdminModule,
     SseModule,
+    ConfigModule,
     CacheModule.register(),
   ],
   providers: [UserService, WalletService, ConfigService],

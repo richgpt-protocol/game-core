@@ -78,18 +78,14 @@ PAYOUT_BOT_ADDRESS=
 RESULT_BOT_ADDRESS=
 POINT_REWARD_BOT_ADDRESS=
 HELPER_BOT_ADDRESS=
-SUPPLY_ACCOUNT_ADDRESS=
+SUPPLY_ACCOUNT_ADDRESS= # account to supply all native token, must often check balance
 COMMISION_DISTRIBUTOR_BOT_ADDRESS= #Address which can call distributeReferralFee()
 
 # escrow multisig address
-ESCROW_ADDRESS_BNB=
-ESCROW_ADDRESS_OPBNB=
-ESCROW_ADDRESS_ETHEREUM=
-ESCROW_ADDRESS_ARBITRUM=
-ESCROW_ADDRESS_POLYGON=
-ESCROW_ADDRESS_OPTIMISM=
-ESCROW_ADDRESS_TRON=
-ESCROW_ADDRESS=
+ESCROW_ADDRESS_56=0x # BNB mainnet
+ESCROW_ADDRESS_204=0x # opBNB mainnet
+ESCROW_ADDRESS_97=0x # BNB testnet
+ESCROW_ADDRESS_5611=0x # opBNB testnet
 
 # telegram
 TG_SESSION_STRING=
@@ -101,6 +97,8 @@ ADMIN_TG_CHAT_ID= # Chat id of admin group where notification will be sent
 
 TELEGRAM_OTP_BOT_TOKEN= #token of Bot that sends telegram OTP
 TELEGRAM_OTP_BOT_USERNAME= #Bot's Username that sends telegram OTP
+TG_LOGIN_WIDGET_BOT_TOKEN= # Bot token for login widget bot
+
 # live bet
 EXPLORER_BASE_URL=
 
