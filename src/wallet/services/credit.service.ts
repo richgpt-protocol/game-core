@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { UserWallet } from '../entities/user-wallet.entity';
-import { DataSource, LessThan, MoreThan, Repository } from 'typeorm';
+import { DataSource, MoreThan, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
@@ -249,111 +249,107 @@ export class CreditService {
     });
   }
 
-  @Cron(CronExpression.EVERY_10_SECONDS)
+  @Cron(CronExpression.EVERY_SECOND)
   async handleGameUsdTx() {
     const release = await this.cronMutex.acquire();
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
 
     //top try-catch to release the mutex on query error
     try {
-      const pendingGameUsdTx = await this.gameUsdTxRepository
-        .createQueryBuilder('gameUsdTx')
+      await queryRunner.startTransaction();
+      const gameUsdTx = await queryRunner.manager
+        .createQueryBuilder(GameUsdTx, 'gameUsdTx')
         .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'userWallet')
         .where('gameUsdTx.status = :status', { status: 'P' })
+<<<<<<< Updated upstream
+=======
+        // .andWhere('creditWalletTx.txType = :txType', { txType: 'CREDIT' })
+>>>>>>> Stashed changes
         .andWhere('gameUsdTx.retryCount < 5')
         .andWhere('creditWalletTxId IS NOT NULL')
-        .getMany();
+        .getOne();
 
-      for (const tx of pendingGameUsdTx) {
-        console.log('Processing credit gameUsd tx:', tx.id);
-        const queryRunner = this.dataSource.createQueryRunner();
-        await queryRunner.connect();
-        await queryRunner.startTransaction();
-
-        //Outer try-catch block to handle the transaction and release the queryRunner
-        try {
-          const gameUsdTx = await queryRunner.manager
-            .createQueryBuilder(GameUsdTx, 'gameUsdTx')
-            .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
-            .leftJoinAndSelect('creditWalletTx.userWallet', 'userWallet')
-            .where('gameUsdTx.id = :id', { id: tx.id })
-            .getOne();
-
-          if (gameUsdTx.retryCount >= 5) {
-            gameUsdTx.status = 'F';
-            await queryRunner.manager.save(gameUsdTx);
-
-            await this.adminNotificationService.setAdminNotification(
-              'Failed to credit user; GAMEUSD transfer failed',
-              `CREDIT_TRANSFER_FAILED`,
-              `CREDIT_TRANSFER_FAILED: ${gameUsdTx.id}`,
-              false,
-            );
-            continue;
-          }
-
-          let receipt: ContractTransactionReceipt;
-          //Inner try-catch block to handle the onchainTx and retryCount
-          try {
-            const signer = await this.getSigner(
-              gameUsdTx.chainId,
-              gameUsdTx.senderAddress,
-            );
-            const onchainTx = await this.depositGameUSD(
-              gameUsdTx.receiverAddress,
-              parseUnits(gameUsdTx.amount.toString(), 18),
-              signer,
-            );
-
-            receipt = await onchainTx.wait(2);
-
-            if (receipt && receipt.status != 1) {
-              throw new Error('Transaction failed');
-            }
-          } catch (error) {
-            console.error(error);
-            gameUsdTx.retryCount += 1;
-            await queryRunner.manager.save(gameUsdTx);
-            continue;
-          }
-
-          gameUsdTx.txHash = receipt.hash;
-          gameUsdTx.status = 'S';
-          gameUsdTx.creditWalletTx.status = 'S';
-
-          const lastValidCreditWalletTx = await queryRunner.manager.findOne(
-            CreditWalletTx,
-            {
-              where: {
-                userWallet: gameUsdTx.creditWalletTx.userWallet,
-                status: 'S',
-              },
-              order: {
-                updatedDate: 'DESC',
-              },
-            },
-          );
-          gameUsdTx.creditWalletTx.startingBalance =
-            lastValidCreditWalletTx?.endingBalance || 0;
-          const endingBalance =
-            Number(lastValidCreditWalletTx?.endingBalance || 0) +
-            Number(gameUsdTx.amount);
-          gameUsdTx.creditWalletTx.endingBalance = endingBalance;
-          gameUsdTx.creditWalletTx.userWallet.creditBalance = endingBalance;
-
-          await queryRunner.manager.save(gameUsdTx);
-          await queryRunner.manager.save(gameUsdTx.creditWalletTx);
-          await queryRunner.manager.save(gameUsdTx.creditWalletTx.userWallet);
-        } catch (error) {
-          console.error(error);
-          await queryRunner.rollbackTransaction();
-        } finally {
-          if (!queryRunner.isReleased) await queryRunner.release();
-        }
+      if (!gameUsdTx) {
+        return;
       }
 
-      release();
+      console.log('Processing credit gameUsd tx:', gameUsdTx.id);
+
+      //Outer try-catch block to handle the transaction and release the queryRunner
+      if (gameUsdTx.retryCount >= 5) {
+        gameUsdTx.status = 'F';
+        await queryRunner.manager.save(gameUsdTx);
+
+        await this.adminNotificationService.setAdminNotification(
+          'Failed to credit user; GAMEUSD transfer failed',
+          `CREDIT_TRANSFER_FAILED`,
+          `CREDIT_TRANSFER_FAILED: ${gameUsdTx.id}`,
+          false,
+        );
+        await queryRunner.commitTransaction();
+        return;
+      }
+      let receipt: ContractTransactionReceipt;
+      try {
+        //Inner try-catch block to handle the onchainTx and retryCount
+        const signer = await this.getSigner(
+          gameUsdTx.chainId,
+          gameUsdTx.senderAddress,
+        );
+        const onchainTx = await this.depositGameUSD(
+          gameUsdTx.receiverAddress,
+          parseUnits(gameUsdTx.amount.toString(), 18),
+          signer,
+        );
+
+        receipt = await onchainTx.wait(2);
+
+        if (receipt && receipt.status != 1) {
+          throw new Error('Transaction failed');
+        }
+      } catch (error) {
+        console.error(error);
+        gameUsdTx.retryCount += 1;
+        await queryRunner.manager.save(gameUsdTx);
+        await queryRunner.commitTransaction();
+        return;
+      }
+
+      gameUsdTx.txHash = receipt.hash;
+      gameUsdTx.status = 'S';
+      gameUsdTx.creditWalletTx.status = 'S';
+
+      const lastValidCreditWalletTx = await queryRunner.manager.findOne(
+        CreditWalletTx,
+        {
+          where: {
+            userWallet: gameUsdTx.creditWalletTx.userWallet,
+            status: 'S',
+          },
+          order: {
+            updatedDate: 'DESC',
+          },
+        },
+      );
+      gameUsdTx.creditWalletTx.startingBalance =
+        lastValidCreditWalletTx?.endingBalance || 0;
+      const endingBalance =
+        Number(lastValidCreditWalletTx?.endingBalance || 0) +
+        Number(gameUsdTx.amount);
+      gameUsdTx.creditWalletTx.endingBalance = endingBalance;
+      gameUsdTx.creditWalletTx.userWallet.creditBalance = endingBalance;
+
+      await queryRunner.manager.save(gameUsdTx);
+      await queryRunner.manager.save(gameUsdTx.creditWalletTx);
+      await queryRunner.manager.save(gameUsdTx.creditWalletTx.userWallet);
+      await queryRunner.commitTransaction();
     } catch (error) {
       console.error(error);
+      await queryRunner.rollbackTransaction();
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
       release();
     }
   }
@@ -379,7 +375,7 @@ export class CreditService {
 
   // Less heavey on db as it won't scan the same record twice.
   // But need to edit past transaction's status.
-  async expireCreditsMethod2() {
+  async expireCredits() {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -451,76 +447,76 @@ export class CreditService {
 
   // won't get wrong, but will be heavy on db as it queries all the non-expired
   // credits everytime.
-  async expireCredits() {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+  // async expireCredits() {
+  //   const queryRunner = this.dataSource.createQueryRunner();
+  //   await queryRunner.connect();
+  //   await queryRunner.startTransaction();
 
-    try {
-      const nonExpiredCreditWalletTxns = await queryRunner.manager
-        .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
-        .innerJoin('creditWalletTx.userWallet', 'userWallet')
-        .select([
-          'SUM(creditWalletTx.amount) as totalAmount',
-          'userWallet.id As walletId',
-          'userWallet.creditBalance as creditBalance',
-        ])
-        .where('creditWalletTx.expirationDate > :expirationDate', {
-          expirationDate: new Date(),
-        })
-        .andWhere('creditWalletTx.txType = :type', { type: 'CREDIT' })
-        .andWhere('creditWalletTx.status = :status', { status: 'S' })
-        .groupBy('userWallet.id')
-        .getRawMany();
+  //   try {
+  //     const nonExpiredCreditWalletTxns = await queryRunner.manager
+  //       .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
+  //       .innerJoin('creditWalletTx.userWallet', 'userWallet')
+  //       .select([
+  //         'SUM(creditWalletTx.amount) as totalAmount',
+  //         'userWallet.id As walletId',
+  //         'userWallet.creditBalance as creditBalance',
+  //       ])
+  //       .where('creditWalletTx.expirationDate > :expirationDate', {
+  //         expirationDate: new Date(),
+  //       })
+  //       .andWhere('creditWalletTx.txType = :type', { type: 'CREDIT' })
+  //       .andWhere('creditWalletTx.status = :status', { status: 'S' })
+  //       .groupBy('userWallet.id')
+  //       .getRawMany();
 
-      // console.log('nonExpiredCreditWalletTxns', nonExpiredCreditWalletTxns);
+  //     // console.log('nonExpiredCreditWalletTxns', nonExpiredCreditWalletTxns);
 
-      for (const tx of nonExpiredCreditWalletTxns) {
-        const nonEXpiredAmount = Number(tx.totalAmount) || 0;
+  //     for (const tx of nonExpiredCreditWalletTxns) {
+  //       const nonEXpiredAmount = Number(tx.totalAmount) || 0;
 
-        console.log('nonEXpiredAmount', nonEXpiredAmount);
-        console.log('creditBalance', tx.creditBalance);
+  //       console.log('nonEXpiredAmount', nonEXpiredAmount);
+  //       console.log('creditBalance', tx.creditBalance);
 
-        //non expired credit is the maximum valid credit balance.
-        //User could have used some of it already, so its the minimum of the two.
-        const activeCredit = Math.min(
-          Number(tx.creditBalance),
-          nonEXpiredAmount,
-        );
+  //       //non expired credit is the maximum valid credit balance.
+  //       //User could have used some of it already, so its the minimum of the two.
+  //       const activeCredit = Math.min(
+  //         Number(tx.creditBalance),
+  //         nonEXpiredAmount,
+  //       );
 
-        // console.log('activeCredit', activeCredit);
+  //       // console.log('activeCredit', activeCredit);
 
-        const diff = Number(tx.creditBalance) - activeCredit;
-        // console.log('diff', diff);
+  //       const diff = Number(tx.creditBalance) - activeCredit;
+  //       // console.log('diff', diff);
 
-        if (diff > 0) {
-          console.log('Expiring credit for wallet:', tx.walletId);
-          const creditWalletTx = new CreditWalletTx();
-          creditWalletTx.amount = diff;
-          creditWalletTx.txType = 'EXPIRY';
-          creditWalletTx.status = 'S';
-          creditWalletTx.walletId = tx.walletId;
-          creditWalletTx.userWallet = tx.walletId;
-          creditWalletTx.startingBalance = tx.creditBalance;
-          creditWalletTx.endingBalance = activeCredit;
+  //       if (diff > 0) {
+  //         console.log('Expiring credit for wallet:', tx.walletId);
+  //         const creditWalletTx = new CreditWalletTx();
+  //         creditWalletTx.amount = diff;
+  //         creditWalletTx.txType = 'EXPIRY';
+  //         creditWalletTx.status = 'S';
+  //         creditWalletTx.walletId = tx.walletId;
+  //         creditWalletTx.userWallet = tx.walletId;
+  //         creditWalletTx.startingBalance = tx.creditBalance;
+  //         creditWalletTx.endingBalance = activeCredit;
 
-          await queryRunner.manager.save(creditWalletTx);
+  //         await queryRunner.manager.save(creditWalletTx);
 
-          const userWallet = await queryRunner.manager.findOne(UserWallet, {
-            where: { id: tx.walletId },
-          });
+  //         const userWallet = await queryRunner.manager.findOne(UserWallet, {
+  //           where: { id: tx.walletId },
+  //         });
 
-          userWallet.creditBalance = activeCredit;
-          await queryRunner.manager.save(userWallet);
-        }
+  //         userWallet.creditBalance = activeCredit;
+  //         await queryRunner.manager.save(userWallet);
+  //       }
 
-        await queryRunner.commitTransaction();
-      }
-    } catch (error) {
-      console.error(error);
-      await queryRunner.rollbackTransaction();
-    } finally {
-      if (!queryRunner.isReleased) await queryRunner.release();
-    }
-  }
+  //       await queryRunner.commitTransaction();
+  //     }
+  //   } catch (error) {
+  //     console.error(error);
+  //     await queryRunner.rollbackTransaction();
+  //   } finally {
+  //     if (!queryRunner.isReleased) await queryRunner.release();
+  //   }
+  // }
 }

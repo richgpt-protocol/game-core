@@ -1255,9 +1255,13 @@ export class BetService {
   @Cron(CronExpression.EVERY_10_SECONDS)
   async handleRetryTxns() {
     const release = await this.retryTxnsCronMutex.acquire();
+    const queryRunner = this.dataSource.createQueryRunner();
     try {
-      const pendingGameUsdTx = await this.gameUsdTxRepository
-        .createQueryBuilder('gameUsdTx')
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      const gameUsdTx = await queryRunner.manager
+        .createQueryBuilder(GameUsdTx, 'gameUsdTx')
         .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
         .leftJoinAndSelect('walletTxs.betOrders', 'betOrders')
         .leftJoinAndSelect('walletTxs.userWallet', 'userWallet')
@@ -1276,138 +1280,139 @@ export class BetService {
         )
         .andWhere('walletTxs.txType = :txType', { txType: 'PLAY' })
         .orderBy('gameUsdTx.id', 'ASC')
-        .getMany();
+        .getOne();
+
+      if (!gameUsdTx) return;
 
       const provider = new JsonRpcProvider(
         this.configService.get('OPBNB_PROVIDER_RPC_URL'),
       );
 
-      for (const gameUsdTx of pendingGameUsdTx) {
+      try {
+        console.log(`retrying gameUsdTx: ${gameUsdTx.id}`);
+        const queryRunner = this.dataSource.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        if (gameUsdTx.walletTxs[0].txType == 'REFERRAL') {
+          // await this.handleReferralGameUSDTx(gameUsdTx);
+          console.error('SHOULD NOT REACH THIS BLOCK');
+          return;
+        }
+
+        if (gameUsdTx.retryCount >= 5) {
+          gameUsdTx.status = 'F';
+          gameUsdTx.walletTxs[0].status = 'F';
+
+          const creditTxnIds = gameUsdTx.walletTxs[0].betOrders
+            .filter((betOrder) => betOrder.creditWalletTx)
+            .map((betOrder) => betOrder.creditWalletTx.id);
+
+          if (creditTxnIds.length > 0) {
+            await queryRunner.manager
+              .createQueryBuilder()
+              .update(CreditWalletTx)
+              .set({ status: 'F' })
+              .where('id IN (:...ids)', {
+                ids: creditTxnIds,
+              })
+              .execute();
+          }
+
+          await queryRunner.manager.save(gameUsdTx);
+          await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
+
+          await queryRunner.commitTransaction();
+          return;
+        }
+
+        const walletTx = gameUsdTx.walletTxs[0];
+        const betOrders = gameUsdTx.walletTxs[0].betOrders;
+
+        // Returns false if the user doesn't have enough balance and reload is pending
+        const hasBalance = await this.checkNativeBalance(
+          walletTx.userWallet,
+          gameUsdTx.chainId,
+        );
+        // If its false, that means a reload might be pending. So process it in next iteration.
+        if (!hasBalance) return;
+
         try {
-          console.log(`retrying gameUsdTx: ${gameUsdTx.id}`);
-          const queryRunner = this.dataSource.createQueryRunner();
-          await queryRunner.connect();
-          await queryRunner.startTransaction();
-
-          if (gameUsdTx.walletTxs[0].txType == 'REFERRAL') {
-            // await this.handleReferralGameUSDTx(gameUsdTx);
-            continue;
+          //Since gameUsdTx.txHash is already there, the bet is already success.
+          //so retry only the offchain part
+          if (gameUsdTx.txHash) {
+            return await this.handleTxSuccess({
+              txHash: gameUsdTx.txHash,
+              gameUsdTx,
+              walletTx: gameUsdTx.walletTxs[0],
+              _queryRunner: queryRunner,
+            });
           }
 
-          if (gameUsdTx.retryCount >= 5) {
-            gameUsdTx.status = 'F';
-            gameUsdTx.walletTxs[0].status = 'F';
-
-            const creditTxnIds = gameUsdTx.walletTxs[0].betOrders
-              .filter((betOrder) => betOrder.creditWalletTx)
-              .map((betOrder) => betOrder.creditWalletTx.id);
-
-            if (creditTxnIds.length > 0) {
-              await queryRunner.manager
-                .createQueryBuilder()
-                .update(CreditWalletTx)
-                .set({ status: 'F' })
-                .where('id IN (:...ids)', {
-                  ids: creditTxnIds,
-                })
-                .execute();
+          const totalCreditsUsed = betOrders.reduce((acc, bet) => {
+            if (bet.creditWalletTx) {
+              acc += bet.creditWalletTx.amount;
             }
+            return acc;
+          }, 0);
 
-            await queryRunner.manager.save(gameUsdTx);
-            await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
-
-            await queryRunner.commitTransaction();
-            continue;
-          }
-
-          const walletTx = gameUsdTx.walletTxs[0];
-          const betOrders = gameUsdTx.walletTxs[0].betOrders;
-
-          // Returns false if the user doesn't have enough balance and reload is pending
-          const hasBalance = await this.checkNativeBalance(
-            walletTx.userWallet,
-            gameUsdTx.chainId,
+          let tx = null;
+          const userSigner = new Wallet(
+            await MPC.retrievePrivateKey(walletTx.userWallet.walletAddress),
+            provider,
           );
-          // If its false, that means a reload might be pending. So process it in next iteration.
-          if (!hasBalance) continue;
 
           try {
-            //Since gameUsdTx.txHash is already there, the bet is already success.
-            //so retry only the offchain part
-            if (gameUsdTx.txHash) {
-              return await this.handleTxSuccess({
-                txHash: gameUsdTx.txHash,
+            tx = await this._bet(
+              Number(walletTx.userWallet.user.uid),
+              walletTx.id,
+              betOrders,
+              userSigner,
+              provider,
+            );
+            // console.log('Bettx: ');
+            // console.log(tx);
+            // tx = {
+            //   hash: '0x123',
+            // };
+          } catch (error) {
+            console.error(error);
+            gameUsdTx.retryCount += 1;
+            await queryRunner.manager.save(gameUsdTx);
+          }
+
+          if (tx) {
+            const txStatus = await provider.getTransactionReceipt(tx.hash);
+            if (txStatus.status && txStatus.status === 1) {
+              // gameUsdTx.status = 'S';
+              // await queryRunner.manager.save(gameUsdTx);
+
+              gameUsdTx.txHash = tx.hash;
+              await queryRunner.manager.save(gameUsdTx);
+              await this.handleTxSuccess({
+                txHash: tx.hash,
                 gameUsdTx,
                 walletTx: gameUsdTx.walletTxs[0],
                 _queryRunner: queryRunner,
               });
-            }
-
-            const totalCreditsUsed = betOrders.reduce((acc, bet) => {
-              if (bet.creditWalletTx) {
-                acc += bet.creditWalletTx.amount;
-              }
-              return acc;
-            }, 0);
-
-            let tx = null;
-            const userSigner = new Wallet(
-              await MPC.retrievePrivateKey(walletTx.userWallet.walletAddress),
-              provider,
-            );
-
-            try {
-              tx = await this._bet(
-                Number(walletTx.userWallet.user.uid),
-                walletTx.id,
-                betOrders,
-                userSigner,
-                provider,
-              );
-              // console.log('Bettx: ');
-              // console.log(tx);
-              // tx = {
-              //   hash: '0x123',
-              // };
-            } catch (error) {
-              console.error(error);
+            } else if (txStatus.status && txStatus.status != 1) {
               gameUsdTx.retryCount += 1;
               await queryRunner.manager.save(gameUsdTx);
+              // await queryRunner.commitTransaction();
             }
-
-            if (tx) {
-              const txStatus = await provider.getTransactionReceipt(tx.hash);
-              if (txStatus.status && txStatus.status === 1) {
-                // gameUsdTx.status = 'S';
-                // await queryRunner.manager.save(gameUsdTx);
-
-                gameUsdTx.txHash = tx.hash;
-                await queryRunner.manager.save(gameUsdTx);
-                await this.handleTxSuccess({
-                  txHash: tx.hash,
-                  gameUsdTx,
-                  walletTx: gameUsdTx.walletTxs[0],
-                  _queryRunner: queryRunner,
-                });
-              } else if (txStatus.status && txStatus.status != 1) {
-                gameUsdTx.retryCount += 1;
-                await queryRunner.manager.save(gameUsdTx);
-                // await queryRunner.commitTransaction();
-              }
-            }
-
-            await queryRunner.commitTransaction();
-          } catch (error) {
-            console.error(error);
-            await queryRunner.rollbackTransaction();
-          } finally {
-            if (!queryRunner.isReleased) await queryRunner.release();
-            //TODO add admin notification
           }
+
+          await queryRunner.commitTransaction();
         } catch (error) {
-          console.error(`error in retrying gameUsdTx: ${gameUsdTx.id}`);
           console.error(error);
+          await queryRunner.rollbackTransaction();
+        } finally {
+          if (!queryRunner.isReleased) await queryRunner.release();
+          //TODO add admin notification
         }
+      } catch (error) {
+        console.error(`error in retrying gameUsdTx: ${gameUsdTx.id}`);
+        console.error(error);
       }
     } catch (error) {
       console.error('Error in retryTxnsCron. Releasing Mutex', error);
