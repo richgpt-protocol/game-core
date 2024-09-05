@@ -180,6 +180,7 @@ export class UserService {
       updatedDate,
       updatedBy,
       referralUserId,
+      withdrawPassword,
       ...result
     } = await this.userRepository.findOne({
       where: { id: userId },
@@ -193,7 +194,12 @@ export class UserService {
       result.wallet = wallet as UserWallet;
     }
 
-    return result;
+    const response = {
+      isWithdrawPasswordSet: !!withdrawPassword,
+      ...result,
+    };
+
+    return response;
   }
 
   async register(payload: RegisterUserDto) {

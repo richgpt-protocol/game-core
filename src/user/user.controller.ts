@@ -34,12 +34,14 @@ import {
   UpdateUserByAdminDto,
   UpdateUserDto,
   VerifyOtpDto,
+  WithdrawlPinDto,
 } from './dto/register-user.dto';
 import { UserService } from './user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { WalletService } from 'src/wallet/wallet.service';
+import * as bcrypt from 'bcrypt';
 
 @ApiTags('User')
 @Controller('api/v1/user')
@@ -85,7 +87,8 @@ export class UserController {
           module: classInfo.class,
           actions: classInfo.method,
           userId: user.id.toString(),
-          content: 'Registered User Account Successful: ' + JSON.stringify(user),
+          content:
+            'Registered User Account Successful: ' + JSON.stringify(user),
           ipAddress,
         });
 
@@ -94,7 +97,6 @@ export class UserController {
           data: user,
           message: 'otp sent',
         };
-
       } else {
         return {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -102,7 +104,6 @@ export class UserController {
           message: await i18n.translate(result.error),
         };
       }
-
     } catch (ex) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
@@ -136,7 +137,6 @@ export class UserController {
           data: result.data,
           message: 'otp sent',
         };
-
       } else {
         return {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -144,7 +144,6 @@ export class UserController {
           message: await i18n.translate(result.error),
         };
       }
-
     } catch (ex) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
@@ -169,7 +168,7 @@ export class UserController {
   ) {
     const userId = req.user.userId;
     const phoneNumber = payload.phoneNumber ?? null;
-    const backupEmailAddress = payload.backupEmailAddress?? null;
+    const backupEmailAddress = payload.backupEmailAddress ?? null;
     if (!phoneNumber && !backupEmailAddress) {
       return {
         statusCode: HttpStatus.BAD_REQUEST,
@@ -192,7 +191,11 @@ export class UserController {
     // save payload into cache to use in verifyOtp()
     // the cache is valid for 60 seconds(60000 milliseconds), which is same expired time as the otp
     await this.cacheManager.set(`${userId} phoneNumber`, phoneNumber, 60000);
-    await this.cacheManager.set(`${userId} backupEmailAddress`, backupEmailAddress, 60000);
+    await this.cacheManager.set(
+      `${userId} backupEmailAddress`,
+      backupEmailAddress,
+      60000,
+    );
 
     // pass to handleGenerateOtpEvent() to generate and send otp
     this.eventEmitter.emit('user.service.otp', { userId, phoneNumber });
@@ -236,7 +239,9 @@ export class UserController {
 
       // fetch payload from cache & update user profile
       const phoneNumber = await this.cacheManager.get(`${userId} phoneNumber`);
-      const backupEmailAddress = await this.cacheManager.get(`${userId} backupEmailAddress`);
+      const backupEmailAddress = await this.cacheManager.get(
+        `${userId} backupEmailAddress`,
+      );
       await this.userService.update(userId, {
         phoneNumber: phoneNumber ?? user.phoneNumber,
         emailAddress: backupEmailAddress ?? user.emailAddress,
@@ -247,13 +252,50 @@ export class UserController {
         data: {},
         message: 'update profile successful',
       };
-
     } catch (error) {
-      console.error(error)
+      console.error(error);
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         data: {},
         message: 'Failed to update profile, please contact admin',
+      };
+    }
+  }
+
+  @Secure(null, UserRole.USER)
+  @Post('update-withdraw-password')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  async updateWithdrawPassword(
+    @Request() req,
+    @Body() payload: WithdrawlPinDto,
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+  ) {
+    try {
+      const userId = req.user.userId;
+      const hash = await bcrypt.hash(payload.pin, 10);
+      await this.userService.update(userId, { withdrawPassword: hash });
+
+      await this.auditLogService.addAuditLog(
+        classInfo,
+        req,
+        ipAddress,
+        `Update Withdraw Password Successful: ${JSON.stringify(payload)}`,
+      );
+
+      return {
+        statusCode: HttpStatus.CREATED,
+        data: {},
+        message: 'update withdraw password successful',
+      };
+    } catch (error) {
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: {},
+        message: 'Failed to update withdraw password, please contact admin',
       };
     }
   }
@@ -275,7 +317,7 @@ export class UserController {
     @HandlerClass() classInfo: IHandlerClass,
     @I18n() i18n: I18nContext,
   ) {
-    const user = await this.userService.getUserInfo(req.user.userId) as any;
+    const user = (await this.userService.getUserInfo(req.user.userId)) as any;
     if (user) {
       await this.auditLogService.addAuditLog(
         classInfo,
@@ -284,7 +326,9 @@ export class UserController {
         `Get User Info Successful`,
       );
 
-      const level = this.walletService.calculateLevel(Number(user.wallet.pointBalance));
+      const level = this.walletService.calculateLevel(
+        Number(user.wallet.pointBalance),
+      );
       user.wallet.level = level;
 
       return {
@@ -556,17 +600,13 @@ export class UserController {
     @Query('count') count: number,
   ) {
     try {
-
-      const phoneNumberAndRewardAmount = await this.userService.getRefereePerformance(
-        req.user.userId,
-        count
-      );
+      const phoneNumberAndRewardAmount =
+        await this.userService.getRefereePerformance(req.user.userId, count);
       return {
         statusCode: 200,
         data: phoneNumberAndRewardAmount,
         message: null,
       };
-
     } catch (error) {
       return {
         statusCode: 400,
@@ -594,7 +634,7 @@ export class UserController {
     @Query('code') code: string,
   ) {
     try {
-      console.log('code', code)
+      console.log('code', code);
       if (!code) throw new Error();
       const referrer = await this.userService.getReferrer(code);
       return {
@@ -602,7 +642,6 @@ export class UserController {
         data: referrer,
         message: null,
       };
-
     } catch (error) {
       return {
         statusCode: 400,
