@@ -30,6 +30,7 @@ import { ChatbotModule } from './chatbot/chatbot.module';
 import { BackOfficeModule } from './back-office/back-office.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PointModule } from './point/point.module';
+import { BullModule } from '@nestjs/bullmq';
 
 @Module({
   imports: [
@@ -57,6 +58,12 @@ import { PointModule } from './point/point.module';
         synchronize: configService.isDev ? true : false,
       }),
       inject: [ConfigService],
+    }),
+    BullModule.forRoot({
+      connection: {
+        host: 'localhost',
+        port: 6379,
+      },
     }),
     UserModule,
     SettingModule,
