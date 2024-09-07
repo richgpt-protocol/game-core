@@ -12,6 +12,7 @@ export class IpWhitelistMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction) {
     const clientIp = req.ip;
+    console.log('Client IP:', clientIp);
 
     if (this.allowedIps.includes(clientIp)) {
       next(); // Allow the request if the IP is in the list
