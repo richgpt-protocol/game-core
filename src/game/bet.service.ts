@@ -255,7 +255,7 @@ export class BetService {
       gameUsdTx.receiverAddress = this.configService.get(
         'GAMEUSD_POOL_CONTRACT_ADDRESS',
       );
-      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.retryCount = 0;
 
       await queryRunner.manager.save(gameUsdTx);
@@ -265,7 +265,7 @@ export class BetService {
       await this.eventEmitter.emit(
         'gas.service.reload',
         userInfo.wallet.walletAddress,
-        Number(process.env.OPBNB_CHAIN_ID),
+        Number(process.env.BASE_CHAIN_ID),
       );
 
       await this.eventEmitter.emit('bet.submitTx', {
@@ -1078,7 +1078,7 @@ export class BetService {
       // Returns false if the user doesn't have enough balance and reload is pending
       const hasBalance = await this.checkNativeBalance(
         walletTx.userWallet,
-        +this.configService.get('GAMEUSD_CHAIN_ID'),
+        +this.configService.get('BASE_CHAIN_ID'),
       );
       // If its false, that means a reload might be pending. So process it in next iteration.
       if (!hasBalance) throw new Error('Not Enough Native Balance');
@@ -1106,7 +1106,7 @@ export class BetService {
           amount: commisionAmount,
           status: 'S',
           retryCount: 0,
-          chainId: +this.configService.get('GAMEUSD_CHAIN_ID'),
+          chainId: +this.configService.get('BASE_CHAIN_ID'),
           senderAddress: this.configService.get(
             'GAMEUSD_POOL_CONTRACT_ADDRESS',
           ),

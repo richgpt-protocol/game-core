@@ -373,7 +373,7 @@ export class WithdrawService {
           this.eventEmitter.emit(
             'gas.service.reload',
             userWallet.walletAddress,
-            Number(process.env.OPBNB_CHAIN_ID),
+            Number(process.env.BASE_CHAIN_ID),
           );
         }
 
@@ -390,7 +390,7 @@ export class WithdrawService {
         // this.eventEmitter.emit(
         //   'gas.service.reload',
         //   userWallet.walletAddress,
-        //   Number(process.env.OPBNB_CHAIN_ID),
+        //   Number(process.env.BASE_CHAIN_ID),
         // );
 
         // // update txHash for walletTx & gameUsdTx

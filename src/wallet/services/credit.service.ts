@@ -95,7 +95,7 @@ export class CreditService {
       gameUsdTx.txHash = null;
       gameUsdTx.receiverAddress = userWallet.walletAddress;
       gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
-      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.creditWalletTx = creditWalletTx;
       gameUsdTx.retryCount = 0;
 
@@ -228,7 +228,7 @@ export class CreditService {
   }
 
   private async getSigner(chainId: number, address: string): Promise<Wallet> {
-    const providerUrl = this.configService.get(`PROVIDER_URL_${chainId}`);
+    const providerUrl = this.configService.get(`PROVIDER_RPC_URL_${chainId}`);
     const provider = new JsonRpcProvider(providerUrl);
     const signerPrivKey = await MPC.retrievePrivateKey(address);
 
