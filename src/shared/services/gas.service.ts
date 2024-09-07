@@ -11,6 +11,7 @@ import { catchError, firstValueFrom } from 'rxjs';
 import { MPC } from '../mpc';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Mutex } from 'async-mutex';
+import { ConfigService } from 'src/config/config.service';
 
 @Injectable()
 export class GasService {
@@ -24,13 +25,14 @@ export class GasService {
     private readonly adminNotificationService: AdminNotificationService,
     private readonly httpService: HttpService,
     private dataSource: DataSource,
+    private readonly configService: ConfigService,
   ) {}
 
   @OnEvent('gas.service.reload', { async: true })
   async handleGasReloadEvent(userAddress: string, chainId: number): Promise<void> {
-    const provider_rpc_url = chainId === Number(process.env.OPBNB_CHAIN_ID)
-      ? process.env.OPBNB_PROVIDER_RPC_URL
-      : process.env.BNB_PROVIDER_RPC_URL;
+    const provider_rpc_url = this.configService.get(
+      `PROVIDER_RPC_URL_${chainId.toString()}`,
+    );
     const provider = new ethers.JsonRpcProvider(provider_rpc_url);
     const balance = await provider.getBalance(userAddress);
 
@@ -65,7 +67,7 @@ export class GasService {
         // no reloadTx for admin reload because
         // no userWallet for admin (userWalletId is compulsory)
         // just simply reload admin wallet
-        const provider_rpc_url = chainId === Number(process.env.OPBNB_CHAIN_ID)
+        const provider_rpc_url = chainId === Number(process.env.BASE_CHAIN_ID)
           ? process.env.OPBNB_PROVIDER_RPC_URL
           : process.env.BNB_PROVIDER_RPC_URL;
         const provider = new ethers.JsonRpcProvider(provider_rpc_url);
@@ -107,9 +109,9 @@ export class GasService {
   
       while (reloadTx.retryCount < 5) {
         try {
-          const provider_rpc_url = reloadTx.chainId === Number(process.env.OPBNB_CHAIN_ID)
-            ? process.env.OPBNB_PROVIDER_RPC_URL
-            : process.env.BNB_PROVIDER_RPC_URL;
+          const provider_rpc_url = this.configService.get(
+            `PROVIDER_RPC_URL_${reloadTx.chainId.toString()}`,
+          );
           const provider = new ethers.JsonRpcProvider(provider_rpc_url);
           
           // if failed to fetch private key will goes to catch block and try again
