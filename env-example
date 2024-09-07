@@ -38,11 +38,11 @@ DEPOSIT_BOT_SERVER_URL=
 DEPOSIT_BOT_SECRET=
 CRYPTO_PRICE_API_URL=
 MINIMUM_NATIVE_BALANCE_5611=
-PROVIDER_URL_5611=
 
 # bet
 MIN_BET_AMOUNT=
 MAX_BET_AMOUNT=
+MAX_CREDIT_AMOUNT=
 
 # mpc
 MPC_SERVER_URL_1=
@@ -51,13 +51,17 @@ MPC_SERVER_URL_3=
 
 # opBNB
 OPBNB_PROVIDER_RPC_URL=
-OPBNB_CHAIN_ID=
 OPBNB_USDT_TOKEN_ADDRESS=
 
 # BNB
 BNB_PROVIDER_RPC_URL=
-BNB_CHAIN_ID=
 BNB_USDT_TOKEN_ADDRESS=
+
+# provider rpc url
+PROVIDER_RPC_URL_56= # BNB mainnet
+PROVIDER_RPC_URL_204= # opBNB mainnet
+PROVIDER_RPC_URL_97= # BNB testnet
+PROVIDER_RPC_URL_5611= # opBNB testnet
 
 # contract address
 GAMEUSD_CONTRACT_ADDRESS=
@@ -78,7 +82,7 @@ PAYOUT_BOT_ADDRESS=
 RESULT_BOT_ADDRESS=
 POINT_REWARD_BOT_ADDRESS=
 HELPER_BOT_ADDRESS=
-SUPPLY_ACCOUNT_ADDRESS= # account to supply all native token, must often check balance
+SUPPLY_ACCOUNT_ADDRESS= # account to supply all native token, must often check balance, need to make sure there is balance for all deposit support chain
 COMMISION_DISTRIBUTOR_BOT_ADDRESS= #Address which can call distributeReferralFee()
 
 # escrow multisig address
