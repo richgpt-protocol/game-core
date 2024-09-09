@@ -29,7 +29,11 @@ export class QueueService {
     if (queueHandlers) {
       const handler = queueHandlers.get(job.data.queueType);
       if (handler && handler.failureHandler) {
-        await handler.failureHandler(job, error);
+        try {
+          await handler.failureHandler(job, error);
+        } catch (error) {
+          console.error(error);
+        }
       } else {
         console.warn(`No failure handler found for job ${job.data.queueType}`);
       }
@@ -88,9 +92,15 @@ export class QueueService {
     return queue;
   }
 
-  async addJob(queueName: string, jobName: string, data: any) {
+  async addJob(
+    queueName: string,
+    jobName: string,
+    data: any,
+    delay: number = 1000, // 1 second
+  ) {
     const queue = this.createQueue(queueName);
     await queue.add(jobName, data, {
+      delay,
       attempts: 5,
       backoff: {
         type: 'exponential',
