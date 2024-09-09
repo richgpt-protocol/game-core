@@ -31,6 +31,8 @@ import { BackOfficeModule } from './back-office/back-office.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PointModule } from './point/point.module';
 import { BullModule } from '@nestjs/bullmq';
+import { QueueModule } from './queue/queue.module';
+import { QueueOptions } from 'bullmq';
 
 @Module({
   imports: [
@@ -59,11 +61,16 @@ import { BullModule } from '@nestjs/bullmq';
       }),
       inject: [ConfigService],
     }),
-    BullModule.forRoot({
-      connection: {
-        host: 'localhost',
-        port: 6379,
-      },
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) =>
+        ({
+          connection: {
+            host: configService.get('REDIS_HOST'),
+            port: +configService.get('REDIS_PORT'),
+          },
+        }) as QueueOptions,
+      inject: [ConfigService],
     }),
     UserModule,
     SettingModule,
@@ -105,6 +112,7 @@ import { BullModule } from '@nestjs/bullmq';
     BackOfficeModule,
     ScheduleModule.forRoot(),
     PointModule,
+    QueueModule,
   ],
   controllers: [AppController],
   providers: [

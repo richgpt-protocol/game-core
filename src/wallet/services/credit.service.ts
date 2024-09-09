@@ -15,18 +15,15 @@ import { AdminNotificationService } from 'src/shared/services/admin-notification
 import { Deposit__factory } from 'src/contract';
 import { MPC } from 'src/shared/mpc';
 import { Mutex } from 'async-mutex';
-import {
-  InjectQueue,
-  OnWorkerEvent,
-  Processor,
-  WorkerHost,
-} from '@nestjs/bullmq';
-import { Job, Queue } from 'bullmq';
+import { Job } from 'bullmq';
 import { randomUUID } from 'crypto';
+import { QueueService } from 'src/queue/queue.service';
 @Injectable()
 export class CreditService {
   GAMEUSD_TRANFER_INITIATOR: string;
   private readonly cronMutex: Mutex = new Mutex();
+  QUEUE_NAME = 'CreditQueue';
+  QUEUE_TYPE = 'CREDIT';
   constructor(
     @InjectRepository(UserWallet)
     private readonly userWalletRepository: Repository<UserWallet>,
@@ -40,14 +37,18 @@ export class CreditService {
     private readonly adminNotificationService: AdminNotificationService,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
-    @InjectQueue('CreditQueue') private creditQueue: Queue,
+    private readonly queueService: QueueService,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
       'DEPOSIT_BOT_ADDRESS',
     );
+  }
 
-    //clears the queue
-    // creditQueue.obliterate({ force: true });
+  onModuleInit() {
+    this.queueService.registerHandler(this.QUEUE_NAME, this.QUEUE_TYPE, {
+      jobHandler: this.process.bind(this),
+      failureHandler: this.onFailed.bind(this),
+    });
   }
 
   // async getCreditBalance(userId: number): Promise<number> {
@@ -78,13 +79,9 @@ export class CreditService {
       }
 
       const jobId = `addCredit-${randomUUID()}`;
-
-      await this.creditQueue.add(jobId, payload, {
-        attempts: 5,
-        backoff: {
-          type: 'exponential',
-          delay: 10000, // 10 seconds
-        },
+      await this.queueService.addJob(this.QUEUE_NAME, jobId, {
+        ...payload,
+        queueType: this.QUEUE_TYPE,
       });
     } catch (error) {
       console.log('catch block');
@@ -200,6 +197,41 @@ export class CreditService {
       Number(userWallet.creditBalance),
       Number(nonExpiredBalance),
     );
+  }
+
+  async process(job: Job<AddCreditDto, any, string>): Promise<any> {
+    const payload = job.data;
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      // process the credit tx here
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      console.error(error);
+      await queryRunner.rollbackTransaction();
+
+      throw new Error('Failed to add credit');
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  async onFailed(job: Job<AddCreditDto, any, string>) {
+    const payload = job.data;
+
+    if (job.attemptsMade >= job.opts.attempts) {
+      let message = `Failed to add ${payload.amount} credits to ${payload.walletAddress}`;
+      if (payload.campaignId) message += ` for campaign ${payload.campaignId}`;
+      this.adminNotificationService.setAdminNotification(
+        message,
+        'ADD_CREDIT_FAILED',
+        'Failed to add credit',
+        false,
+      );
+    }
   }
 
   expireCronMutex = new Mutex();
@@ -367,163 +399,4 @@ export class CreditService {
   //     if (!queryRunner.isReleased) await queryRunner.release();
   //   }
   // }
-}
-
-@Processor('CreditQueue')
-export class CreditConsumer extends WorkerHost {
-  GAMEUSD_TRANFER_INITIATOR: string;
-  constructor(
-    private readonly dataSource: DataSource,
-    private readonly configService: ConfigService,
-    private readonly adminNotificationService: AdminNotificationService,
-  ) {
-    super();
-
-    this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
-      'DEPOSIT_BOT_ADDRESS',
-    );
-  }
-
-  @OnWorkerEvent('failed')
-  async onFailed(job: Job<AddCreditDto, any, string>) {
-    console.log('Job failed', job.id, job.attemptsMade, job.opts.attempts);
-
-    const payload = job.data;
-
-    if (job.attemptsMade >= job.opts.attempts) {
-      let message = `Failed to add ${payload.amount} credits to ${payload.walletAddress}`;
-      if (payload.campaignId) message += ` for campaign ${payload.campaignId}`;
-      this.adminNotificationService.setAdminNotification(
-        message,
-        'ADD_CREDIT_FAILED',
-        'Failed to add credit',
-        false,
-      );
-    }
-  }
-
-  async process(job: Job<AddCreditDto, any, string>): Promise<any> {
-    console.log(`Processing job: ${job.id}. Attempt ${job.attemptsMade}`);
-    const payload = job.data;
-    const queryRunner = this.dataSource.createQueryRunner();
-    try {
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
-
-      // Add credit to user
-      const userWallet = await queryRunner.manager.findOne(UserWallet, {
-        where: { walletAddress: payload.walletAddress },
-      });
-
-      const today = new Date();
-      const expirationDate = new Date(today.setDate(today.getDate() + 60));
-
-      //update or insert credit wallet tx
-      const creditWalletTx = new CreditWalletTx();
-      creditWalletTx.amount = payload.amount;
-      creditWalletTx.txType = 'CREDIT';
-      creditWalletTx.status = 'P';
-      creditWalletTx.walletId = userWallet.id;
-      creditWalletTx.userWallet = userWallet;
-      creditWalletTx.expirationDate = expirationDate;
-
-      if (payload.campaignId) {
-        const campaign = await queryRunner.manager.findOne(Campaign, {
-          where: { id: payload.campaignId },
-        });
-        creditWalletTx.campaign = campaign;
-      }
-
-      await queryRunner.manager.save(creditWalletTx);
-
-      const gameUsdTx = new GameUsdTx();
-      gameUsdTx.amount = payload.amount;
-      gameUsdTx.status = 'P';
-      gameUsdTx.txHash = null;
-      gameUsdTx.receiverAddress = userWallet.walletAddress;
-      gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
-      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
-      gameUsdTx.creditWalletTx = creditWalletTx;
-      gameUsdTx.retryCount = 0;
-
-      await queryRunner.manager.save(gameUsdTx);
-      creditWalletTx.gameUsdTx = [gameUsdTx];
-      await queryRunner.manager.save(creditWalletTx);
-
-      const signer = await this.getSigner(
-        gameUsdTx.chainId,
-        gameUsdTx.senderAddress,
-      );
-      const onchainTx = await this.depositGameUSD(
-        gameUsdTx.receiverAddress,
-        parseUnits(gameUsdTx.amount.toString(), 18),
-        signer,
-      );
-
-      const receipt = await onchainTx.wait(2);
-
-      if (receipt && receipt.status != 1) {
-        throw new Error('Transaction failed');
-      }
-
-      gameUsdTx.txHash = receipt.hash;
-      gameUsdTx.status = 'S';
-      gameUsdTx.creditWalletTx.status = 'S';
-
-      const lastValidCreditWalletTx = await queryRunner.manager.findOne(
-        CreditWalletTx,
-        {
-          where: {
-            userWallet: userWallet,
-            status: 'S',
-          },
-          order: {
-            updatedDate: 'DESC',
-          },
-        },
-      );
-      gameUsdTx.creditWalletTx.startingBalance =
-        lastValidCreditWalletTx?.endingBalance || 0;
-      const endingBalance =
-        Number(lastValidCreditWalletTx?.endingBalance || 0) +
-        Number(gameUsdTx.amount);
-      gameUsdTx.creditWalletTx.endingBalance = endingBalance;
-      userWallet.creditBalance = endingBalance;
-
-      await queryRunner.manager.save(gameUsdTx);
-      await queryRunner.manager.save(gameUsdTx.creditWalletTx);
-      await queryRunner.manager.save(userWallet);
-
-      await queryRunner.commitTransaction();
-    } catch (error) {
-      console.error(error);
-      await queryRunner.rollbackTransaction();
-
-      throw new Error('Failed to add credit');
-    } finally {
-      if (!queryRunner.isReleased) await queryRunner.release();
-    }
-  }
-
-  private async getSigner(chainId: number, address: string): Promise<Wallet> {
-    const providerUrl = this.configService.get(`PROVIDER_URL_${chainId}`);
-    const provider = new JsonRpcProvider(providerUrl);
-    const signerPrivKey = await MPC.retrievePrivateKey(address);
-
-    return new Wallet(signerPrivKey, provider);
-  }
-
-  private async depositGameUSD(to: string, amount: bigint, signer: Wallet) {
-    const depositContractAddress = this.configService.get(
-      'DEPOSIT_CONTRACT_ADDRESS',
-    );
-    const depositContract = Deposit__factory.connect(
-      depositContractAddress,
-      signer,
-    );
-    const gasLimit = await depositContract.deposit.estimateGas(to, amount);
-    return await depositContract.deposit(to, amount, {
-      gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
-    });
-  }
 }

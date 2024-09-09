@@ -31,8 +31,9 @@ import { ConfigService } from 'src/config/config.service';
 import { DepositService } from './services/deposit.service';
 import { PointModule } from 'src/point/point.module';
 import { ConfigModule } from 'src/config/config.module';
-import { CreditConsumer, CreditService } from './services/credit.service';
-import { BullModule } from '@nestjs/bullmq';
+import {
+  /* CreditConsumer,  */ CreditService,
+} from './services/credit.service';
 
 @Module({
   imports: [
@@ -62,9 +63,6 @@ import { BullModule } from '@nestjs/bullmq';
     UserModule,
     forwardRef(() => PointModule),
     ConfigModule,
-    BullModule.registerQueue({
-      name: 'CreditQueue',
-    }),
   ],
   providers: [
     WalletService,
@@ -74,9 +72,8 @@ import { BullModule } from '@nestjs/bullmq';
     ConfigService,
     DepositService,
     CreditService,
-    CreditConsumer,
   ],
   controllers: [WalletController],
-  exports: [WalletService, CreditService, BullModule],
+  exports: [WalletService, CreditService],
 })
 export class WalletModule {}

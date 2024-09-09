@@ -1,0 +1,138 @@
+import { Injectable } from '@nestjs/common';
+import { Job, Queue, Worker } from 'bullmq';
+import { ConfigService } from 'src/config/config.service';
+
+interface QueueHandler {
+  jobHandler: (job: Job) => Promise<any>;
+  failureHandler?: (job: Job, error: Error) => Promise<any>;
+}
+
+@Injectable()
+export class QueueService {
+  private handlers: Map<string, Map<string, QueueHandler>> = new Map();
+  private queues: Map<string, Queue> = new Map();
+  private redisHost: string;
+  private redisPort: number;
+
+  constructor(private readonly configService: ConfigService) {
+    this.redisHost = this.configService.get('REDIS_HOST');
+    this.redisPort = +this.configService.get('REDIS_PORT');
+  }
+
+  async onFailed(job: Job, error: Error) {
+    console.error(
+      `Job ${job.id} failed with error: ${error.message}. Attempts ${job.attemptsMade}`,
+    );
+
+    // if (job.attemptsMade >= job.opts.attempts) {
+    const queueHandlers = this.handlers.get(job.queueName);
+    if (queueHandlers) {
+      const handler = queueHandlers.get(job.data.queueType);
+      if (handler && handler.failureHandler) {
+        await handler.failureHandler(job, error);
+      } else {
+        console.warn(`No failure handler found for job ${job.data.queueType}`);
+      }
+    } else {
+      console.warn(`No handlers found for queue ${job.queueName}`);
+    }
+    // }
+  }
+
+  async registerHandler(
+    queueName: string,
+    queueType: string,
+    handlers: QueueHandler,
+  ) {
+    if (!this.handlers.has(queueName)) {
+      this.handlers.set(queueName, new Map());
+    }
+    this.handlers.get(queueName).set(queueType, handlers);
+
+    this.createQueue(queueName);
+  }
+
+  async process(job: Job): Promise<any> {
+    const queueHandlers = this.handlers.get(job.queueName);
+    if (queueHandlers) {
+      const handler = queueHandlers.get(job.data.queueType);
+      if (handler) {
+        console.log(
+          `Processing ${job.queueName} Job ${job.id}. Attempts ${job.attemptsMade}`,
+        );
+        return await handler.jobHandler(job);
+      } else {
+        console.error(`No handler found for job ${job.name}`);
+      }
+    } else {
+      console.error(`No handlers found for queue ${job.queueName}`);
+    }
+  }
+
+  createQueue(queueName: string): Queue {
+    if (this.queues.has(queueName)) {
+      return this.queues.get(queueName);
+    }
+
+    const queue = new Queue(queueName);
+    this.queues.set(queueName, queue);
+
+    // Create a worker for the new queue
+    new Worker(queueName, this.process.bind(this), {
+      connection: {
+        host: this.redisHost,
+        port: this.redisPort,
+      },
+    }).on('failed', this.onFailed.bind(this));
+
+    return queue;
+  }
+
+  async addJob(queueName: string, jobName: string, data: any) {
+    const queue = this.createQueue(queueName);
+    await queue.add(jobName, data, {
+      attempts: 5,
+      backoff: {
+        type: 'exponential',
+        delay: 10000, // 10 seconds
+      },
+    });
+  }
+}
+// @Processor('GenericQueue')
+// export class QueueService extends WorkerHost {
+//   private handlers: Map<string, QueueHandler> = new Map();
+//   constructor() {
+//     super();
+//   }
+
+//   @OnWorkerEvent('failed')
+//   async onFailed(job: Job, error: Error) {
+//     console.error(
+//       `Job ${job.id} failed with error: ${error.message}. Attempts ${job.attemptsMade}`,
+//     );
+
+//     const handler = this.handlers.get(job.data.queueType);
+//     if (handler && handler.failureHandler) {
+//       await handler.failureHandler(job, error);
+//     } else {
+//       console.warn(`No failure handler found for job ${job.name}`);
+//     }
+//   }
+
+//   registerHandler(type: string, handlers: QueueHandler) {
+//     this.handlers.set(type, handlers);
+//   }
+
+//   async process(job: Job): Promise<any> {
+//     const handler = this.handlers.get(job.data.queueType);
+//     if (handler) {
+//       console.log(
+//         `Processing ${job.data.queueType} Job ${job.id}. Attempts ${job.attemptsMade}`,
+//       );
+//       return await handler.jobHandler(job);
+//     } else {
+//       console.error(`No handler found for job ${job.name}`);
+//     }
+//   }
+// }
