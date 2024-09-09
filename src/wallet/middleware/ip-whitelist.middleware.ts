@@ -8,12 +8,23 @@ import { Request, Response, NextFunction } from 'express';
 @Injectable()
 export class IpWhitelistMiddleware implements NestMiddleware {
   // Define the list of allowed IPs
-  private readonly allowedIps: string[] = ['18.219.125.24'];
+  private readonly allowedIps: string[] = ['172.26.0.6'];
 
   use(req: Request, res: Response, next: NextFunction) {
-    const clientIp = req.ip;
+    let clientIp = req.headers['x-forwarded-for'] as string || req.ip;
     console.log('Client IP:', clientIp);
 
+    // Handle multiple IPs in X-Forwarded-For (real client IP is the first one)
+    if (clientIp.includes(',')) {
+      clientIp = clientIp.split(',')[0].trim();
+    }
+
+    // Normalize IPv6-mapped IPv4 addresses
+    if (clientIp.startsWith('::ffff:')) {
+      clientIp = clientIp.replace('::ffff:', '');
+    }
+
+    console.log('Client IP:', clientIp);
     if (this.allowedIps.includes(clientIp)) {
       next(); // Allow the request if the IP is in the list
     } else {
