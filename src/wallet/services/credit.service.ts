@@ -199,6 +199,28 @@ export class CreditService {
     );
   }
 
+  private async getSigner(chainId: number, address: string): Promise<Wallet> {
+    const providerUrl = this.configService.get(`PROVIDER_URL_${chainId}`);
+    const provider = new JsonRpcProvider(providerUrl);
+    const signerPrivKey = await MPC.retrievePrivateKey(address);
+
+    return new Wallet(signerPrivKey, provider);
+  }
+
+  private async depositGameUSD(to: string, amount: bigint, signer: Wallet) {
+    const depositContractAddress = this.configService.get(
+      'DEPOSIT_CONTRACT_ADDRESS',
+    );
+    const depositContract = Deposit__factory.connect(
+      depositContractAddress,
+      signer,
+    );
+    const gasLimit = await depositContract.deposit.estimateGas(to, amount);
+    return await depositContract.deposit(to, amount, {
+      gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
+    });
+  }
+
   async process(job: Job<AddCreditDto, any, string>): Promise<any> {
     const payload = job.data;
     const queryRunner = this.dataSource.createQueryRunner();
@@ -206,7 +228,91 @@ export class CreditService {
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
-      // process the credit tx here
+      // Add credit to user
+      const userWallet = await queryRunner.manager.findOne(UserWallet, {
+        where: { walletAddress: payload.walletAddress },
+      });
+
+      const today = new Date();
+      const expirationDate = new Date(today.setDate(today.getDate() + 60));
+
+      //update or insert credit wallet tx
+      const creditWalletTx = new CreditWalletTx();
+      creditWalletTx.amount = payload.amount;
+      creditWalletTx.txType = 'CREDIT';
+      creditWalletTx.status = 'P';
+      creditWalletTx.walletId = userWallet.id;
+      creditWalletTx.userWallet = userWallet;
+      creditWalletTx.expirationDate = expirationDate;
+
+      if (payload.campaignId) {
+        const campaign = await queryRunner.manager.findOne(Campaign, {
+          where: { id: payload.campaignId },
+        });
+        creditWalletTx.campaign = campaign;
+      }
+
+      await queryRunner.manager.save(creditWalletTx);
+
+      // throw new Error('Test error');
+
+      const gameUsdTx = new GameUsdTx();
+      gameUsdTx.amount = payload.amount;
+      gameUsdTx.status = 'P';
+      gameUsdTx.txHash = null;
+      gameUsdTx.receiverAddress = userWallet.walletAddress;
+      gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
+      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      gameUsdTx.creditWalletTx = creditWalletTx;
+      gameUsdTx.retryCount = 0;
+
+      await queryRunner.manager.save(gameUsdTx);
+      creditWalletTx.gameUsdTx = [gameUsdTx];
+      await queryRunner.manager.save(creditWalletTx);
+
+      const signer = await this.getSigner(
+        gameUsdTx.chainId,
+        gameUsdTx.senderAddress,
+      );
+      const onchainTx = await this.depositGameUSD(
+        gameUsdTx.receiverAddress,
+        parseUnits(gameUsdTx.amount.toString(), 18),
+        signer,
+      );
+
+      const receipt = await onchainTx.wait(2);
+
+      if (receipt && receipt.status != 1) {
+        throw new Error('Transaction failed');
+      }
+
+      gameUsdTx.txHash = receipt.hash;
+      gameUsdTx.status = 'S';
+      gameUsdTx.creditWalletTx.status = 'S';
+
+      const lastValidCreditWalletTx = await queryRunner.manager.findOne(
+        CreditWalletTx,
+        {
+          where: {
+            userWallet: userWallet,
+            status: 'S',
+          },
+          order: {
+            updatedDate: 'DESC',
+          },
+        },
+      );
+      gameUsdTx.creditWalletTx.startingBalance =
+        lastValidCreditWalletTx?.endingBalance || 0;
+      const endingBalance =
+        Number(lastValidCreditWalletTx?.endingBalance || 0) +
+        Number(gameUsdTx.amount);
+      gameUsdTx.creditWalletTx.endingBalance = endingBalance;
+      userWallet.creditBalance = endingBalance;
+
+      await queryRunner.manager.save(gameUsdTx);
+      await queryRunner.manager.save(gameUsdTx.creditWalletTx);
+      await queryRunner.manager.save(userWallet);
 
       await queryRunner.commitTransaction();
     } catch (error) {
