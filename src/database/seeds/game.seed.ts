@@ -50,43 +50,42 @@ export default class CreateGames implements Seeder {
 
     // set default prize algo
     await dataSource
-        .createQueryBuilder()
-        .insert()
-        .into('prize_algo')
-        .values([{
-          updatedBy: 'seeder',
-          // max ticket
-          maxTicketPriority: null,
-          maxTicketFirstPrizeCount: null,
-          maxTicketSecondPrizeCount: null,
-          maxTicketThirdPrizeCount: null,
-          maxTicketSpecialPrizeCount: null,
-          maxTicketConsolationPrizeCount: null,
-          maxTicketStartEpoch: null,
-          maxTicketEndEpoch: null,
-          // least first
-          leastFirstPriority: 1,
-          leastFirstRandomLevel: 2,
-          leastFirstStartEpoch: null,
-          leastFirstEndEpoch: null,
-          // fixed number
-          fixedNumberPriority: null,
-          fixedNumberNumberPair: '8888',
-          fixedNumberIndex: 0,
-          fixedNumberStartEpoch: null,
-          fixedNumberEndEpoch: null,
-          // allow prize
-          allowPrizePriority: null,
-          allowFirstPrize: true,
-          allowSecondPrize: true,
-          allowThirdPrize: true,
-          allowSpecialPrize: true,
-          allowSpecialPrizeCount: null,
-          allowConsolationPrize: true,
-          allowConsolationPrizeCount: null,
-          allowPrizeStartEpoch: null,
-          allowPrizeEndEpoch: null,
-        }])
-        .execute();
+      .createQueryBuilder()
+      .insert()
+      .into('prize_algo')
+      .values([
+        // max ticket
+        { updatedBy: 'seeder', key: 'maxTicketPriority', value: null },
+        { updatedBy: 'seeder', key: 'maxTicketFirstPrizeCount', value: null },
+        { updatedBy: 'seeder', key: 'maxTicketSecondPrizeCount', value: null },
+        { updatedBy: 'seeder', key: 'maxTicketThirdPrizeCount', value: null },
+        { updatedBy: 'seeder', key: 'maxTicketSpecialPrizeCount', value: null },
+        { updatedBy: 'seeder', key: 'maxTicketConsolationPrizeCount', value: null },
+        { updatedBy: 'seeder', key: 'maxTicketStartEpoch', value: null },
+        { updatedBy: 'seeder', key: 'maxTicketEndEpoch', value: null },
+        // least first
+        { updatedBy: 'seeder', key: 'leastFirstPriority', value: 1 },
+        { updatedBy: 'seeder', key: 'leastFirstRandomLevel', value: 2 },
+        { updatedBy: 'seeder', key: 'leastFirstStartEpoch', value: null },
+        { updatedBy: 'seeder', key: 'leastFirstEndEpoch', value: null },
+        // fixed number
+        { updatedBy: 'seeder', key: 'fixedNumberPriority', value: null },
+        { updatedBy: 'seeder', key: 'fixedNumberNumberPair', value: '8888' },
+        { updatedBy: 'seeder', key: 'fixedNumberIndex', value: 0 },
+        { updatedBy: 'seeder', key: 'fixedNumberStartEpoch', value: null },
+        { updatedBy: 'seeder', key: 'fixedNumberEndEpoch', value: null },
+        // allow prize
+        { updatedBy: 'seeder', key: 'allowPrizePriority', value: null },
+        { updatedBy: 'seeder', key: 'allowFirstPrize', value: true },
+        { updatedBy: 'seeder', key: 'allowSecondPrize', value: true },
+        { updatedBy: 'seeder', key: 'allowThirdPrize', value: true },
+        { updatedBy: 'seeder', key: 'allowSpecialPrize', value: true },
+        { updatedBy: 'seeder', key: 'allowSpecialPrizeCount', value: null },
+        { updatedBy: 'seeder', key: 'allowConsolationPrize', value: true },
+        { updatedBy: 'seeder', key: 'allowConsolationPrizeCount', value: null },
+        { updatedBy: 'seeder', key: 'allowPrizeStartEpoch', value: null },
+        { updatedBy: 'seeder', key: 'allowPrizeEndEpoch', value: null },
+      ])
+      .execute();
   }
 }

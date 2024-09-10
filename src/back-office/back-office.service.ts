@@ -639,9 +639,7 @@ export class BackOfficeService {
   }
 
   async getCurrentPrizeAlgo() {
-    const prizeAlgo = await this.prizeAlgoRepository.findOne({
-      where: { id: 1 }
-    });
+    const prizeAlgo = await this.prizeAlgoRepository.find();
 
     const game = await this.gameRepository.findOne({
       where: { isClosed: false },
@@ -653,18 +651,24 @@ export class BackOfficeService {
     };
   }
 
-  async updatePrizeAlgo(prizeAlgo: PrizeAlgo) {
-    const currentPrizeAlgo = await this.prizeAlgoRepository.findOne({
-      where: { id: 1 },
-    });
-
-    if (!currentPrizeAlgo) {
-      throw new InternalServerErrorException('Prize Algo not found');
+  async updatePrizeAlgo(adminId: number, prizeAlgos: Array<{ key: string, value: any }>) {
+    const existingPrizeAlgos = await this.prizeAlgoRepository.find();
+  
+    const prizeAlgoMap = new Map(prizeAlgos.map(item => [item.key, item]));
+  
+    for (const existingPrizeAlgo of existingPrizeAlgos) {
+      const newPrizeAlgo = prizeAlgoMap.get(existingPrizeAlgo.key);
+      if (newPrizeAlgo) {
+        if (existingPrizeAlgo.value !== newPrizeAlgo.value) {
+          existingPrizeAlgo.value = newPrizeAlgo.value;
+          existingPrizeAlgo.updatedBy = adminId;
+        }
+      } else {
+        throw new InternalServerErrorException(`Prize Algo with key ${existingPrizeAlgo.key} not found in the new prizeAlgos`);
+      }
     }
-
-    await this.prizeAlgoRepository.save({
-      ...currentPrizeAlgo,
-      ...prizeAlgo,
-    });
+  
+    // existingPrizeAlgos is replaced with the updated prizeAlgos
+    await this.prizeAlgoRepository.save(existingPrizeAlgos);
   }
 }
