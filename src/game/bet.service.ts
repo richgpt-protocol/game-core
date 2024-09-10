@@ -18,6 +18,7 @@ import {
   MoreThanOrEqual,
   LessThan,
   QueryRunner,
+  Not,
 } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -58,7 +59,6 @@ import { Mutex } from 'async-mutex';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
-import { randomUUID } from 'crypto';
 
 dotenv.config();
 
@@ -67,7 +67,7 @@ interface SubmitBetJobDTO {
   walletTxId: number;
   betOrders: number[];
   gameUsdTxId: number;
-  creditBalanceUsed: number;
+  // creditBalanceUsed: number;
 }
 @Injectable()
 export class BetService implements OnModuleInit {
@@ -293,7 +293,7 @@ export class BetService implements OnModuleInit {
       //   Number(process.env.OPBNB_CHAIN_ID),
       // );
 
-      const jobId = `placeBet-${randomUUID()}`;
+      const jobId = `placeBet-${gameUsdTx.id}`;
       await this.queueService.addJob(
         'BET_QUEUE',
         jobId,
@@ -301,18 +301,11 @@ export class BetService implements OnModuleInit {
           walletTxId: walletTx.id,
           betOrders: betOrders.map((bet) => bet.id),
           gameUsdTxId: gameUsdTx.id,
-          creditBalanceUsed,
+          // creditBalanceUsed,
           queueType: 'SUBMIT_BET',
         },
         3000, //starts processing after 3 seconds
       );
-
-      await this.eventEmitter.emit('bet.submitTx', {
-        betsPayload: betOrders,
-        walletTx,
-        gameUsdTx,
-        creditBalanceUsed,
-      });
     } catch (error) {
       console.error(`Rolling back Db transaction`);
       console.error(error);
@@ -325,6 +318,48 @@ export class BetService implements OnModuleInit {
       }
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  async restartBet(gameTxId: number) {
+    try {
+      const gameusdTx = await this.gameUsdTxRepository.findOne({
+        where: {
+          id: gameTxId,
+          status: Not('S'),
+        },
+        relations: ['walletTxs', 'walletTxs.betOrders'],
+      });
+
+      if (!gameusdTx) {
+        throw new BadRequestException('Invalid gameTxId');
+      }
+
+      if (gameusdTx.walletTxs[0].txType !== 'PLAY') {
+        throw new BadRequestException('Invalid txType');
+      }
+
+      const jobId = `placeBet-${gameusdTx.id}`;
+      await this.queueService.addJob(
+        'BET_QUEUE',
+        jobId,
+        {
+          gameUsdTxId: gameusdTx.id,
+          walletTxId: gameusdTx.walletTxId,
+          betOrders: gameusdTx.walletTxs[0].betOrders.map((bet) => bet.id),
+          queueType: 'SUBMIT_BET',
+        },
+        3000, //starts processing after 3 seconds
+      );
+
+      return true;
+    } catch (error) {
+      console.error(error);
+      if (error instanceof BadRequestException) {
+        throw new BadRequestException(error.message);
+      } else {
+        throw new BadRequestException('Error in restartBet');
+      }
     }
   }
 
@@ -756,11 +791,13 @@ export class BetService implements OnModuleInit {
       const userWallet = await queryRunner.manager
         .createQueryBuilder(UserWallet, 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
-        .where('userWallet.id = :id', { id: job.data.walletTxId })
+        .where('userWallet.id = :id', {
+          id: gameUsdTx.walletTxs[0].userWalletId,
+        })
         .getOne();
 
       if (gameUsdTx.txHash) {
-        const jobId = `updateBetStatus-${randomUUID()}`;
+        const jobId = `updateBetStatus-${gameUsdTx.id}`;
         await this.queueService.addJob(
           'BET_QUEUE',
           jobId,
@@ -783,6 +820,12 @@ export class BetService implements OnModuleInit {
         provider,
       );
 
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        await userSigner.getAddress(),
+        Number(gameUsdTx.chainId),
+      );
+
       const onchainTx = await this._bet(
         Number(userWallet.user.uid),
         job.data.walletTxId,
@@ -794,17 +837,20 @@ export class BetService implements OnModuleInit {
       const txReceipt = await provider.getTransactionReceipt(onchainTx.hash);
       if (txReceipt && txReceipt.status === 1) {
         gameUsdTx.txHash = onchainTx.hash;
+        await queryRunner.manager.save(gameUsdTx);
       } else {
         throw new Error('Error in submitBet');
       }
 
       await queryRunner.commitTransaction();
 
+      const jobId = `updateBetStatus-${gameUsdTx.id}`;
       await this.queueService.addJob(
         'BET_QUEUE',
-        'SUBMIT_SUCCESS_PROCESS',
+        jobId,
         {
           gameUsdTxId: gameUsdTx.id,
+          queueType: 'SUBMIT_SUCCESS_PROCESS',
         },
         3000, //starts processing after 3 seconds
       );
@@ -976,6 +1022,9 @@ export class BetService implements OnModuleInit {
 
       await queryRunner.commitTransaction();
     } catch (error) {
+      console.error(error);
+      await queryRunner.rollbackTransaction();
+      throw new Error('Error in handleTxSuccess');
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
@@ -1002,6 +1051,13 @@ export class BetService implements OnModuleInit {
 
       if (!userInfo || userInfo.referralUserId == null) return;
 
+      const referralUserInfo = await queryRunner.manager.findOne(User, {
+        where: {
+          id: userInfo.referralUserId,
+        },
+        relations: ['wallet'],
+      });
+
       const commisionAmount =
         betAmount * this.referralCommissionByRank(userInfo.referralRank);
 
@@ -1021,7 +1077,8 @@ export class BetService implements OnModuleInit {
       walletTxInserted.txType = 'REFERRAL';
       walletTxInserted.txAmount = commisionAmount;
       walletTxInserted.status = 'S';
-      walletTxInserted.userWalletId = userInfo.referralUserId;
+      walletTxInserted.userWalletId = referralUserInfo.wallet.id;
+      walletTxInserted.userWallet = referralUserInfo.wallet;
       walletTxInserted.txHash = betTxHash;
       walletTxInserted.startingBalance = lastValidWalletTx?.endingBalance || 0;
       walletTxInserted.endingBalance =
@@ -1048,8 +1105,6 @@ export class BetService implements OnModuleInit {
         walletTx.userWallet,
         +this.configService.get('GAMEUSD_CHAIN_ID'),
       );
-      // If its false, that means a reload might be pending. So process it in next iteration.
-      if (!hasBalance) throw new Error('Not Enough Native Balance');
 
       const depositContract = Deposit__factory.connect(
         this.configService.get('HELPER_CONTRACT_ADDRESS'),
@@ -1130,8 +1185,6 @@ export class BetService implements OnModuleInit {
       // await queryRunner.rollbackTransaction();
 
       throw new Error('BET: Error processing Referral');
-    } finally {
-      // if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
