@@ -21,6 +21,19 @@ import { Mutex } from 'async-mutex';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { Deposit__factory } from 'src/contract';
 
+/**
+ * How deposit works
+ * 1. deposit-bot access via api/v1/wallet/deposit
+ * 2. processDeposit() create pending walletTx and depositTx
+ * 3. handleEscrowTx() fetch pending depositTx with cron, and transfer deposited token to escrow wallet
+ *    once success, set depositTx status to success and create pending gameUsdTx, otherwise retry again in next cron job
+ * 4. handleGameUsdTx() fetch pending gameUsdTx with cron, and transfer GameUSD to user wallet
+ *    once success, set gameUsdTx status to success and proceed to handleGameUSDTxHash(), otherwise retry again in next cron job
+ * 5. handleGameUSDTxHash() update walletTx status to success, update userWallet.walletBalance,
+ *    create pointTx & update user userWallet.pointBalance, and proceed with handleReferralFlow()
+ * 6. handleReferralFlow() create referral pointTx and update referral userWallet.pointBalance if user has referral.
+ */
+
 @Injectable()
 export class DepositService {
   private readonly cronMutex: Mutex = new Mutex();
@@ -127,10 +140,18 @@ export class DepositService {
       await queryRunner.manager.save(depositTx);
 
       // reload user wallet if needed
+      if (payload.chainId != Number(process.env.BASE_CHAIN_ID)) {
+        // reload user wallet on deposit chain if needed
+        this.eventEmitter.emit(
+          'gas.service.reload',
+          payload.walletAddress,
+          payload.chainId,
+        );
+      }
       this.eventEmitter.emit(
         'gas.service.reload',
         payload.walletAddress,
-        Number(process.env.OPBNB_CHAIN_ID),
+        Number(process.env.BASE_CHAIN_ID),
       );
 
       await queryRunner.commitTransaction();
@@ -248,7 +269,7 @@ export class DepositService {
 
             const gameUsdTx = new GameUsdTx();
             gameUsdTx.amount = depositTx.walletTx.txAmount;
-            gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+            gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
             gameUsdTx.status = 'P';
             gameUsdTx.senderAddress = this.configService.get(
               'GAMEUSD_POOL_CONTRACT_ADDRESS',
@@ -264,7 +285,6 @@ export class DepositService {
             await queryRunner.manager.save(depositTx);
           }
 
-          await queryRunner.commitTransaction();
         } catch (error) {
           // two possible reach here:
           // 1. get private key failed due to share threshold not met
@@ -275,7 +295,11 @@ export class DepositService {
           );
           depositTx.retryCount += 1;
           // finally block will do queryRunner.release() & cronMutex.release()
+
+        } finally {
+          await queryRunner.commitTransaction();
         }
+        
       } catch (err) {
         // queryRunner
         console.error('handleEscrowTx() error within queryRunner, error:', err);
@@ -320,7 +344,7 @@ export class DepositService {
     walletAddress: string,
     chainId: number,
   ): Promise<ethers.Wallet> {
-    const providerUrl = this.configService.get(`PROVIDER_URL_${chainId}`);
+    const providerUrl = this.configService.get(`PROVIDER_RPC_URL_${chainId}`);
     const provider = new ethers.JsonRpcProvider(providerUrl);
     return new ethers.Wallet(
       await MPC.retrievePrivateKey(walletAddress),

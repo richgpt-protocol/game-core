@@ -109,7 +109,7 @@ export class InternalTransferService {
       gameUsdTx.walletTxId = senderWalletTx.id;
       gameUsdTx.senderAddress = senderWallet.walletAddress;
       gameUsdTx.receiverAddress = receiverWallet.walletAddress;
-      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.retryCount = 0;
 
       await queryRunner.manager.save(gameUsdTx);
