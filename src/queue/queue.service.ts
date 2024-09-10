@@ -92,6 +92,13 @@ export class QueueService {
     return queue;
   }
 
+  /**
+   * Adds a job to the queue
+   * @param queueName The name of the queue
+   * @param jobName Name/Id of the Job. **Note:** `jobName` should be unique. 2 jobs with the same name will not be added to the queue
+   * @param data The data to be processed by the job
+   * @param delay The delay in milliseconds before the job is processed
+   */
   async addJob(
     queueName: string,
     jobName: string,
@@ -102,6 +109,7 @@ export class QueueService {
     await queue.add(jobName, data, {
       delay,
       attempts: 5,
+      debounce: { id: jobName }, //can't add 2 jobs with the same id
       backoff: {
         type: 'exponential',
         delay: 10000, // 10 seconds
