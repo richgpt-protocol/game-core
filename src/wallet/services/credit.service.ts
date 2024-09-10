@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { UserWallet } from '../entities/user-wallet.entity';
-import { DataSource, MoreThan, Repository } from 'typeorm';
+import { DataSource, MoreThan, Not, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
@@ -16,7 +16,6 @@ import { Deposit__factory } from 'src/contract';
 import { MPC } from 'src/shared/mpc';
 import { Mutex } from 'async-mutex';
 import { Job } from 'bullmq';
-import { randomUUID } from 'crypto';
 import { QueueService } from 'src/queue/queue.service';
 @Injectable()
 export class CreditService {
@@ -60,8 +59,11 @@ export class CreditService {
   // }
 
   async addCredit(payload: AddCreditDto) {
+    const queryRunner = this.dataSource.createQueryRunner();
     try {
-      const userWallet = this.userWalletRepository.findOne({
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const userWallet = await queryRunner.manager.findOne(UserWallet, {
         where: { walletAddress: payload.walletAddress },
       });
 
@@ -78,14 +80,89 @@ export class CreditService {
         }
       }
 
-      const jobId = `addCredit-${randomUUID()}`;
-      await this.queueService.addJob(this.QUEUE_NAME, jobId, {
-        ...payload,
-        queueType: this.QUEUE_TYPE,
-      });
+      const today = new Date();
+      const expirationDate = new Date(today.setDate(today.getDate() + 60));
+
+      //update or insert credit wallet tx
+      const creditWalletTx = new CreditWalletTx();
+      creditWalletTx.amount = payload.amount;
+      creditWalletTx.txType = 'CREDIT';
+      creditWalletTx.status = 'P';
+      creditWalletTx.walletId = userWallet.id;
+      creditWalletTx.userWallet = userWallet;
+      creditWalletTx.expirationDate = expirationDate;
+
+      if (payload.campaignId) {
+        const campaign = await queryRunner.manager.findOne(Campaign, {
+          where: { id: payload.campaignId },
+        });
+        creditWalletTx.campaign = campaign;
+      }
+
+      await queryRunner.manager.save(creditWalletTx);
+
+      const gameUsdTx = new GameUsdTx();
+      gameUsdTx.amount = payload.amount;
+      gameUsdTx.status = 'P';
+      gameUsdTx.txHash = null;
+      gameUsdTx.receiverAddress = userWallet.walletAddress;
+      gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
+      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      gameUsdTx.creditWalletTx = creditWalletTx;
+      gameUsdTx.retryCount = 0;
+
+      await queryRunner.manager.save(gameUsdTx);
+      creditWalletTx.gameUsdTx = [gameUsdTx];
+      await queryRunner.manager.save(creditWalletTx);
+
+      await queryRunner.commitTransaction();
+
+      const jobId = `addCredit-${creditWalletTx.id}`;
+      await this.queueService.addJob(
+        this.QUEUE_NAME,
+        jobId,
+        {
+          creditWalletTxId: creditWalletTx.id,
+          queueType: this.QUEUE_TYPE,
+        },
+        3000,
+      );
     } catch (error) {
       console.log('catch block');
       console.error(error);
+      await queryRunner.rollbackTransaction();
+      if (error instanceof BadRequestException) {
+        throw new BadRequestException(error.message);
+      } else {
+        throw new BadRequestException('Failed to add credit');
+      }
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  async retryCreditTx(creditWalletTxId: number) {
+    try {
+      const creditWalletTx = await this.creditWalletTxRepository.findOne({
+        where: { id: creditWalletTxId, status: Not('S') },
+      });
+
+      if (!creditWalletTx) {
+        throw new BadRequestException('Credit wallet tx not found');
+      }
+
+      await this.queueService.addJob(
+        this.QUEUE_NAME,
+        `addCredit-${creditWalletTx.id}`,
+        {
+          creditWalletTxId: creditWalletTx.id,
+          queueType: this.QUEUE_TYPE,
+        },
+        3000,
+      );
+
+      return { message: 'Retry job added' };
+    } catch (error) {
       if (error instanceof BadRequestException) {
         throw new BadRequestException(error.message);
       } else {
@@ -221,54 +298,29 @@ export class CreditService {
     });
   }
 
-  async process(job: Job<AddCreditDto, any, string>): Promise<any> {
-    const payload = job.data;
+  async process(
+    job: Job<{ creditWalletTxId: number }, any, string>,
+  ): Promise<any> {
+    const { creditWalletTxId } = job.data;
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
-      // Add credit to user
-      const userWallet = await queryRunner.manager.findOne(UserWallet, {
-        where: { walletAddress: payload.walletAddress },
-      });
+      const creditWalletTx = await queryRunner.manager
+        .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
+        .leftJoinAndSelect('creditWalletTx.gameUsdTx', 'gameUsdTx')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'userWallet')
+        .where('creditWalletTx.id = :id', { id: creditWalletTxId })
+        .getOne();
 
-      const today = new Date();
-      const expirationDate = new Date(today.setDate(today.getDate() + 60));
-
-      //update or insert credit wallet tx
-      const creditWalletTx = new CreditWalletTx();
-      creditWalletTx.amount = payload.amount;
-      creditWalletTx.txType = 'CREDIT';
-      creditWalletTx.status = 'P';
-      creditWalletTx.walletId = userWallet.id;
-      creditWalletTx.userWallet = userWallet;
-      creditWalletTx.expirationDate = expirationDate;
-
-      if (payload.campaignId) {
-        const campaign = await queryRunner.manager.findOne(Campaign, {
-          where: { id: payload.campaignId },
-        });
-        creditWalletTx.campaign = campaign;
+      if (!creditWalletTx) {
+        throw new Error('Credit wallet tx not found');
       }
 
-      await queryRunner.manager.save(creditWalletTx);
-
+      const gameUsdTx = creditWalletTx.gameUsdTx[0];
+      const userWallet = creditWalletTx.userWallet;
       // throw new Error('Test error');
-
-      const gameUsdTx = new GameUsdTx();
-      gameUsdTx.amount = payload.amount;
-      gameUsdTx.status = 'P';
-      gameUsdTx.txHash = null;
-      gameUsdTx.receiverAddress = userWallet.walletAddress;
-      gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
-      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
-      gameUsdTx.creditWalletTx = creditWalletTx;
-      gameUsdTx.retryCount = 0;
-
-      await queryRunner.manager.save(gameUsdTx);
-      creditWalletTx.gameUsdTx = [gameUsdTx];
-      await queryRunner.manager.save(creditWalletTx);
 
       const signer = await this.getSigner(
         gameUsdTx.chainId,
@@ -288,7 +340,7 @@ export class CreditService {
 
       gameUsdTx.txHash = receipt.hash;
       gameUsdTx.status = 'S';
-      gameUsdTx.creditWalletTx.status = 'S';
+      creditWalletTx.status = 'S';
 
       const lastValidCreditWalletTx = await queryRunner.manager.findOne(
         CreditWalletTx,
@@ -302,16 +354,16 @@ export class CreditService {
           },
         },
       );
-      gameUsdTx.creditWalletTx.startingBalance =
+      creditWalletTx.startingBalance =
         lastValidCreditWalletTx?.endingBalance || 0;
       const endingBalance =
         Number(lastValidCreditWalletTx?.endingBalance || 0) +
         Number(gameUsdTx.amount);
-      gameUsdTx.creditWalletTx.endingBalance = endingBalance;
+      creditWalletTx.endingBalance = endingBalance;
       userWallet.creditBalance = endingBalance;
 
       await queryRunner.manager.save(gameUsdTx);
-      await queryRunner.manager.save(gameUsdTx.creditWalletTx);
+      await queryRunner.manager.save(creditWalletTx);
       await queryRunner.manager.save(userWallet);
 
       await queryRunner.commitTransaction();
@@ -325,18 +377,41 @@ export class CreditService {
     }
   }
 
-  async onFailed(job: Job<AddCreditDto, any, string>) {
-    const payload = job.data;
+  async onFailed(job: Job<{ creditWalletTxId: number }, any, string>) {
+    const { creditWalletTxId } = job.data;
 
     if (job.attemptsMade >= job.opts.attempts) {
-      let message = `Failed to add ${payload.amount} credits to ${payload.walletAddress}`;
-      if (payload.campaignId) message += ` for campaign ${payload.campaignId}`;
-      this.adminNotificationService.setAdminNotification(
-        message,
-        'ADD_CREDIT_FAILED',
-        'Failed to add credit',
-        false,
-      );
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+
+      try {
+        await queryRunner.startTransaction();
+        const creditWalletTx = await queryRunner.manager
+          .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
+          .leftJoinAndSelect('creditWalletTx.gameUsdTx', 'gameUsdTx')
+          .where('creditWalletTx.id = :id', { id: creditWalletTxId })
+          .getOne();
+
+        creditWalletTx.status = 'F';
+        creditWalletTx.gameUsdTx[0].status = 'F';
+
+        await queryRunner.manager.save(creditWalletTx);
+        await queryRunner.manager.save(creditWalletTx.gameUsdTx[0]);
+
+        await queryRunner.commitTransaction();
+      } catch (error) {
+        console.error(error);
+        await queryRunner.rollbackTransaction();
+      } finally {
+        if (!queryRunner.isReleased) await queryRunner.release();
+
+        await this.adminNotificationService.setAdminNotification(
+          `Failed to process credit wallet tx ${creditWalletTxId}`,
+          'ADD_CREDIT_FAILED',
+          'Failed to add credit',
+          false,
+        );
+      }
     }
   }
 
