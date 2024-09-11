@@ -1014,7 +1014,6 @@ export class BetService implements OnModuleInit {
       await queryRunner.commitTransaction();
 
       await this.handleReferralFlow(
-        queryRunner,
         user.id,
         gameUsdTx.walletTxs[0].txAmount,
         gameUsdTx.txHash,
@@ -1023,12 +1022,12 @@ export class BetService implements OnModuleInit {
       );
 
       await this.userService.setUserNotification(
-        payload.walletTx.userWallet.userId,
+        gameUsdTx.walletTxs[0].userWallet.userId,
         {
           type: 'bet',
           title: 'Buy Order Processed Successfully',
           message: 'Your Buy has been successfully processed',
-          walletTxId: payload.walletTx.id,
+          walletTxId: gameUsdTx.walletTxs[0].id,
         },
       );
     } catch (error) {
@@ -1041,7 +1040,6 @@ export class BetService implements OnModuleInit {
   }
 
   private async handleReferralFlow(
-    queryRunner: QueryRunner,
     userId: number,
     betAmount: number,
     betTxHash: string,
