@@ -262,13 +262,13 @@ export class BetService {
 
       await queryRunner.commitTransaction();
 
-      await this.eventEmitter.emit(
+      this.eventEmitter.emit(
         'gas.service.reload',
         userInfo.wallet.walletAddress,
         Number(process.env.BASE_CHAIN_ID),
       );
 
-      await this.eventEmitter.emit('bet.submitTx', {
+      this.eventEmitter.emit('bet.submitTx', {
         betsPayload: betOrders,
         walletTx,
         gameUsdTx,
@@ -1084,12 +1084,12 @@ export class BetService {
       if (!hasBalance) throw new Error('Not Enough Native Balance');
 
       const depositContract = Deposit__factory.connect(
-        this.configService.get('HELPER_CONTRACT_ADDRESS'),
+        this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
         new Wallet(
           await MPC.retrievePrivateKey(
-            this.configService.get('COMMISION_DISTRIBUTOR_BOT_ADDRESS'),
+            this.configService.get('DEPOSIT_BOT_ADDRESS'),
           ),
-          new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL')),
+          new JsonRpcProvider(this.configService.get('PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'))),
         ),
       );
 
