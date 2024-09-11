@@ -165,7 +165,6 @@ export class GameController {
   ): Promise<ResponseVo<any>> {
     try {
       const userId = req.user.userId;
-      // const userId = 1;
       const data = await this.betService.bet(userId, payload);
       return {
         statusCode: HttpStatus.OK,
