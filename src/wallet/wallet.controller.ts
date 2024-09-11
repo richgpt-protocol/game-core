@@ -577,4 +577,15 @@ export class WalletController {
     //   throw new InternalServerErrorException();
     // }
   }
+
+  @Secure(null, UserRole.ADMIN)
+  @Post('retry-credit')
+  async retryCredit(@Body() payload: { creditWalletTxId: number }) {
+    await this.creditService.retryCreditTx(payload.creditWalletTxId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'retry credit process initiated',
+      data: {},
+    };
+  }
 }
