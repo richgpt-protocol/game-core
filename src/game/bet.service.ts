@@ -287,7 +287,7 @@ export class BetService implements OnModuleInit {
 
       await queryRunner.commitTransaction();
 
-      await this.eventEmitter.emit(
+      this.eventEmitter.emit(
         'gas.service.reload',
         userInfo.wallet.walletAddress,
         Number(process.env.BASE_CHAIN_ID),
@@ -499,7 +499,7 @@ export class BetService implements OnModuleInit {
     const creditWalletTxns = [];
 
     bets.forEach((bet) => {
-      if (creditRemaining) {
+      if (creditRemaining > 0) {
         const betAmonut = bet.bigForecastAmount + bet.smallForecastAmount;
         const creditAvailable =
           creditRemaining > +maxAllowedCreditAmount
@@ -1011,8 +1011,10 @@ export class BetService implements OnModuleInit {
       userWallet.pointBalance = pointTxEndingBalance;
       await queryRunner.manager.save(userWallet);
       await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
+      await queryRunner.commitTransaction();
 
       await this.handleReferralFlow(
+        queryRunner,
         user.id,
         gameUsdTx.walletTxs[0].txAmount,
         gameUsdTx.txHash,
@@ -1020,7 +1022,15 @@ export class BetService implements OnModuleInit {
         queryRunner,
       );
 
-      await queryRunner.commitTransaction();
+      await this.userService.setUserNotification(
+        payload.walletTx.userWallet.userId,
+        {
+          type: 'bet',
+          title: 'Buy Order Processed Successfully',
+          message: 'Your Buy has been successfully processed',
+          walletTxId: payload.walletTx.id,
+        },
+      );
     } catch (error) {
       console.error(error);
       await queryRunner.rollbackTransaction();
@@ -1031,6 +1041,7 @@ export class BetService implements OnModuleInit {
   }
 
   private async handleReferralFlow(
+    queryRunner: QueryRunner,
     userId: number,
     betAmount: number,
     betTxHash: string,
@@ -1040,6 +1051,7 @@ export class BetService implements OnModuleInit {
     // const queryRunner = this.dataSource.createQueryRunner();
     // await queryRunner.connect();
     // await queryRunner.startTransaction();
+
 
     try {
       const userInfo = await queryRunner.manager
@@ -1107,12 +1119,12 @@ export class BetService implements OnModuleInit {
       );
 
       const depositContract = Deposit__factory.connect(
-        this.configService.get('HELPER_CONTRACT_ADDRESS'),
+        this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
         new Wallet(
           await MPC.retrievePrivateKey(
-            this.configService.get('COMMISION_DISTRIBUTOR_BOT_ADDRESS'),
+            this.configService.get('DEPOSIT_BOT_ADDRESS'),
           ),
-          new JsonRpcProvider(this.configService.get('OPBNB_PROVIDER_RPC_URL')),
+          new JsonRpcProvider(this.configService.get('PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'))),
         ),
       );
 
@@ -1186,6 +1198,9 @@ export class BetService implements OnModuleInit {
 
       throw new Error('BET: Error processing Referral');
     }
+    // } finally {
+    //   if (!queryRunner.isReleased) await queryRunner.release();
+    // }
   }
 
   async updateReferrerXpPoints(
