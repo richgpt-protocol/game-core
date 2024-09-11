@@ -425,7 +425,7 @@ export class BetService {
     const creditWalletTxns = [];
 
     bets.forEach((bet) => {
-      if (creditRemaining) {
+      if (creditRemaining > 0) {
         const betAmonut = bet.bigForecastAmount + bet.smallForecastAmount;
         const creditAvailable =
           creditRemaining > +maxAllowedCreditAmount
