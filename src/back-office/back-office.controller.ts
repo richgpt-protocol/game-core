@@ -235,12 +235,12 @@ export class BackOfficeController {
   @Get('sales-report')
   @Render('sales-report')
   async salesReport(
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
+    @Query('startDate') _startDate: string,
+    @Query('endDate') _endDate: string,
   ) {
     const result = await this.backOfficeService.salesReport(
-      new Date(startDate),
-      new Date(endDate),
+      _startDate + ' 00:00:00',
+      _endDate + ' 23:59:59',
     );
     return {
       data: {
@@ -299,12 +299,12 @@ export class BackOfficeController {
           fnee: this.getValue(res.data, 'fixedNumberEndEpoch'),
 
           app: this.getValue(res.data, 'allowPrizePriority'),
-          afp: this.getValue(res.data, 'allowFirstPrize'),
-          asp: this.getValue(res.data, 'allowSecondPrize'),
-          atp: this.getValue(res.data, 'allowThirdPrize'),
-          aspp: this.getValue(res.data, 'allowSpecialPrize'),
+          afp: this.getValue(res.data, 'allowFirstPrize') === '1' ? true : false,
+          asp: this.getValue(res.data, 'allowSecondPrize') === '1' ? true : false,
+          atp: this.getValue(res.data, 'allowThirdPrize') === '1' ? true : false,
+          aspp: this.getValue(res.data, 'allowSpecialPrize') === '1' ? true : false,
           asppc: this.getValue(res.data, 'allowSpecialPrizeCount'),
-          acp: this.getValue(res.data, 'allowConsolationPrize'),
+          acp: this.getValue(res.data, 'allowConsolationPrize') === '1' ? true : false,
           acpc: this.getValue(res.data, 'allowConsolationPrizeCount'),
           apse: this.getValue(res.data, 'allowPrizeStartEpoch'),
           apee: this.getValue(res.data, 'allowPrizeEndEpoch'),
@@ -416,6 +416,7 @@ export class BackOfficeController {
     const res = await this.backOfficeService.getCurrentPrizeAlgo();
     return {
       data: {
+        status: 'updated successfully',
         currentPa: {
           ce: res.currentEpoch,
 
@@ -440,12 +441,12 @@ export class BackOfficeController {
           fnee: this.getValue(res.data, 'fixedNumberEndEpoch'),
 
           app: this.getValue(res.data, 'allowPrizePriority'),
-          afp: this.getValue(res.data, 'allowFirstPrize'),
-          asp: this.getValue(res.data, 'allowSecondPrize'),
-          atp: this.getValue(res.data, 'allowThirdPrize'),
-          aspp: this.getValue(res.data, 'allowSpecialPrize'),
+          afp: this.getValue(res.data, 'allowFirstPrize') === '1' ? true : false,
+          asp: this.getValue(res.data, 'allowSecondPrize') === '1' ? true : false,
+          atp: this.getValue(res.data, 'allowThirdPrize') === '1' ? true : false,
+          aspp: this.getValue(res.data, 'allowSpecialPrize') === '1' ? true : false,
           asppc: this.getValue(res.data, 'allowSpecialPrizeCount'),
-          acp: this.getValue(res.data, 'allowConsolationPrize'),
+          acp: this.getValue(res.data, 'allowConsolationPrize') === '1' ? true : false,
           acpc: this.getValue(res.data, 'allowConsolationPrizeCount'),
           apse: this.getValue(res.data, 'allowPrizeStartEpoch'),
           apee: this.getValue(res.data, 'allowPrizeEndEpoch'),

@@ -560,13 +560,14 @@ export class BackOfficeService {
     };
   }
 
-  async salesReport(startDate: Date, endDate: Date) {
+  async salesReport(startDate: string, endDate: string) {
     const betOrders = await this.betOrderRepository
       .createQueryBuilder('betOrder')
       .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .leftJoinAndSelect('betOrder.claimDetail', 'claimDetail')
       .where('betOrder.createdDate BETWEEN :startDate AND :endDate', {
+        // need to pass as string instead of Date object because of the timezone issue
         startDate,
         endDate,
       })
@@ -585,8 +586,8 @@ export class BackOfficeService {
       .getRawMany();
 
     const resultByDate = {};
-    const start = startDate;
-    while (start < endDate) {
+    const start = new Date(startDate);
+    while (start < new Date(endDate)) {
       resultByDate[start.toDateString()] = {
         totalBetAmount: 0,
         betCount: 0,
@@ -594,10 +595,10 @@ export class BackOfficeService {
         totalPayout: 0,
         totalPayoutRewards: 0,
         commissionAmount:
-          commissions.find(
+          Number(commissions.find(
             (_commision) =>
               _commision.createdDate.toDateString() === start.toDateString(),
-          )?.txAmount || 0,
+          )?.txAmount || 0),
       };
       start.setDate(start.getDate() + 1);
     }
