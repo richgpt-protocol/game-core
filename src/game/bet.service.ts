@@ -988,15 +988,16 @@ export class BetService {
 
       await queryRunner.manager.save(payload.walletTx);
       await queryRunner.manager.save(userWallet);
+      await queryRunner.commitTransaction();
 
       await this.handleReferralFlow(
+        queryRunner,
         user.id,
         payload.walletTx.txAmount,
         payload.gameUsdTx.txHash,
         payload.walletTx.id,
       );
 
-      await queryRunner.commitTransaction();
       await this.userService.setUserNotification(
         payload.walletTx.userWallet.userId,
         {
@@ -1015,13 +1016,14 @@ export class BetService {
   }
 
   private async handleReferralFlow(
+    queryRunner: QueryRunner,
     userId: number,
     betAmount: number,
     betTxHash: string,
     betWalletTxId: number,
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
+    // const queryRunner = this.dataSource.createQueryRunner();
+    // await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
@@ -1162,9 +1164,10 @@ export class BetService {
       await queryRunner.rollbackTransaction();
 
       throw new Error('BET: Error processing Referral');
-    } finally {
-      if (!queryRunner.isReleased) await queryRunner.release();
     }
+    // } finally {
+    //   if (!queryRunner.isReleased) await queryRunner.release();
+    // }
   }
 
   async updateReferrerXpPoints(
