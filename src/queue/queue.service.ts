@@ -53,7 +53,7 @@ export class QueueService {
     }
     this.handlers.get(queueName).set(queueType, handlers);
 
-    // this.createQueue(queueName);
+    this.createQueue(queueName);
   }
 
   async process(job: Job): Promise<any> {
