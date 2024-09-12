@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   main:
     container_name: main
@@ -14,6 +12,7 @@ services:
     depends_on:
       - mysql
       - mongodb
+      - redis
     volumes:
       - ./.env:/app/.env
   mysql:
