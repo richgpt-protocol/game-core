@@ -5,6 +5,7 @@ import { User } from 'src/user/entities/user.entity';
 import { Telegraf } from 'telegraf';
 import { Repository } from 'typeorm';
 import { AdminNotificationService } from './admin-notification.service';
+import { UserStatus } from '../enum/status.enum';
 
 @Injectable()
 export class TelegramService {
@@ -57,10 +58,10 @@ export class TelegramService {
         return await ctx.reply('Invalid request');
       }
 
-      if (user.tgId && user.tgUsername && user.status == 'A') {
+      if (user.tgId && user.status == 'A') {
         //Login OTP
-        if (user.tgUsername != username) {
-          return await ctx.reply('Invalid Username');
+        if (user.tgId != id) {
+          return await ctx.reply('Invalid Telegram account');
         }
 
         return await ctx.reply(
@@ -82,8 +83,12 @@ export class TelegramService {
           ],
         });
 
-        if (existing && existing.status != 'U') {
-          return await ctx.reply('Telegram already linked to an account');
+        if (
+          existing &&
+          existing.status != UserStatus.UNVERIFIED &&
+          existing.status != UserStatus.PENDING
+        ) {
+          return await ctx.reply('Please Contact Admin');
         }
 
         user.tgId = id;
@@ -122,6 +127,17 @@ export class TelegramService {
   private async handleContactSharing(ctx) {
     const { id, username } = ctx.update.message.from;
     const { contact } = ctx.update.message;
+
+    // If user uploads contact manually
+    if (!contact || !contact.phone_number || !contact.user_id) {
+      return await ctx.reply('Invalid request: contact is missing');
+    }
+    if (contact.user_id != id) {
+      return await ctx.reply('Invalid contact');
+    }
+    if (contact.vcard) {
+      return await ctx.reply('Please use the Button to share contact');
+    }
 
     const user = await this.userRepository.findOne({
       where: {

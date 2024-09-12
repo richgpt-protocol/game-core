@@ -98,9 +98,23 @@ export class UserService {
   async findOneWithoutHiddenFields(id) {
     if (!id)
       throw new Error('UserService.findOneWithoutHiddenFields() - id is null');
-    return await this.userRepository.findOneBy({
-      id,
-    });
+
+    const queryRunner = this.datasource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const user = await queryRunner.manager.findOne(User, {
+        where: { id },
+      });
+      return user;
+    } catch (err) {
+      throw new Error(err.message);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+    // return await this.userRepository.findOneBy({
+    //   id,
+    // });
   }
 
   async findReferralCodeWithoutHiddenFields(code: string) {
@@ -292,7 +306,7 @@ export class UserService {
     }
   }
 
-  async validateTelegramPayload(tgId: number, hash: string, data: any) {
+  async validateTelegramPayload(tgId: string, hash: string, data: any) {
     const dataCheckString = Object.keys(data)
       .sort()
       .map((key) => `${key}=${data[key]}`)
@@ -651,7 +665,6 @@ export class UserService {
   }
 
   async verifyOtp(payload: UserLoginDto) {
-    // fetch user record
     const user = await this.userRepository
       .createQueryBuilder('row')
       .select('row')
@@ -659,56 +672,49 @@ export class UserService {
       .addSelect('row.referralUser')
       .addSelect('row.wallet')
       .addSelect('row.loginAttempt')
-      .where({
-        phoneNumber: payload.phoneNumber,
-      })
+      .where({ phoneNumber: payload.phoneNumber })
       .getOne();
 
-    // check if user exist
     if (!user) {
       return { error: 'invalid phone number', data: null };
     }
-    // check if user login attempt exceed 3 times
+
     if (user.loginAttempt >= 3) {
-      await this.update(user.id, {
-        status: UserStatus.SUSPENDED,
-      });
-      return {
-        error: 'user.EXCEED_LOGIN_ATTEMPT',
-      };
+      await this.update(user.id, { status: UserStatus.SUSPENDED });
+      return { error: 'user.EXCEED_LOGIN_ATTEMPT' };
     }
-    // check if user otp is matched
+
     if (user.verificationCode !== payload.code) {
-      // Increase failed login attempt
-      await this.update(user.id, {
-        loginAttempt: user.loginAttempt + 1,
-      });
+      await this.update(user.id, { loginAttempt: user.loginAttempt + 1 });
       return { error: 'user.FAILED_VERIFY_OTP', data: null };
     }
-    // check if otp expired
+
     const otpExpiryTime = user.otpGenerateTime;
-    otpExpiryTime.setMinutes(otpExpiryTime.getMinutes() + 1); // Verify within 1 minute
+    otpExpiryTime.setMinutes(otpExpiryTime.getMinutes() + 1);
     if (DateUtil.compareDate(new Date(), otpExpiryTime) > 0) {
       return { error: 'user.OTP_EXPIRED', data: null };
     }
 
-    // update user
     user.verificationCode = null;
     user.otpGenerateTime = null;
-    user.updatedBy = UtilConstant.SELF;
     await this.userRepository.save(user);
 
-    // for first success otp verification (first success account creation)
-    if (user.status == UserStatus.UNVERIFIED) {
-      // start queryRunner
+    if (
+      user.status === UserStatus.UNVERIFIED ||
+      user.status === UserStatus.PENDING
+    ) {
       const queryRunner = this.dataSource.createQueryRunner();
       await queryRunner.connect();
       await queryRunner.startTransaction();
-      try {
-        // generate on-chain wallet
-        const walletAddress = await MPC.createWallet();
 
-        // create userWallet record
+      try {
+        const userInTransaction = await queryRunner.manager
+          .createQueryBuilder(User, 'user')
+          .setLock('pessimistic_write')
+          .where('user.id = :id', { id: user.id })
+          .getOne();
+
+        const walletAddress = await MPC.createWallet();
         const userWallet = this.userWalletRepository.create({
           walletBalance: 0,
           creditBalance: 0,
@@ -718,20 +724,16 @@ export class UserService {
         });
         await queryRunner.manager.save(userWallet);
 
-        // update user
-        user.wallet = userWallet;
-        // generate user own referral code
-        user.referralCode = this.generateReferralCode(user.id);
-        // create unique uid for user
-        // user.uid = this.generateNumericUID(); //Generated during singup
-        user.status = UserStatus.ACTIVE;
-        user.isMobileVerified = true;
-        user.updatedBy = UtilConstant.SELF;
-        await queryRunner.manager.save(user);
+        // Update user within the same queryRunner transaction
+        userInTransaction.wallet = userWallet;
+        userInTransaction.referralCode = this.generateReferralCode(user.id);
+        userInTransaction.status = UserStatus.ACTIVE;
+        userInTransaction.isMobileVerified = true;
+        userInTransaction.updatedBy = UtilConstant.SELF;
+        await queryRunner.manager.save(userInTransaction);
 
-        // referral section
-        if (user.referralUserId) {
-          // create referralTx
+        // Handle referral logic if applicable
+        if (userInTransaction.referralUserId) {
           const referralTx = this.referralTxRepository.create({
             rewardAmount: 0,
             referralType: 'SET_REFERRER',
@@ -744,40 +746,27 @@ export class UserService {
           });
           await queryRunner.manager.save(referralTx);
         }
-        //Add new address to Deposit Bot
+
+        //Add address to deposit bot
         await axios.post(
           depositBotAddAddress,
           {
             address: walletAddress,
           },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          },
+          { headers: { 'Content-Type': 'application/json' } },
         );
 
-        // // Temporary hide
-        // await this.emailService.sendWelcomeEmail(
-        //   UserRole.USER,
-        //   result.emailAddress,
-        //   result.id.toString(),
-        //   result.firstName,
-        // );
-
         await queryRunner.commitTransaction();
+
+        return { error: null, data: userInTransaction };
       } catch (err) {
         await queryRunner.rollbackTransaction();
 
-        // update user record
-        user.status = UserStatus.PENDING;
-        user.updatedBy = UtilConstant.SELF;
-        await this.userRepository.update(user, {
+        await this.userRepository.update(user.id, {
           status: UserStatus.PENDING,
           updatedBy: UtilConstant.SELF,
         });
 
-        // inform admin for rollback transaction
         await this.adminNotificationService.setAdminNotification(
           `Transaction in user.service.verifyOtp had been rollback, error: ${err}, userId: ${user.id}`,
           'rollbackTxError',
@@ -786,10 +775,11 @@ export class UserService {
         );
         return { error: err.message, data: null };
       } finally {
-        await queryRunner.release();
+        if (!queryRunner.isReleased) await queryRunner.release();
       }
     }
 
+    //Returned when queryRunner is not used
     return { error: null, data: user };
   }
 
