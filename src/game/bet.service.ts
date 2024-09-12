@@ -2,26 +2,18 @@
 import {
   BadRequestException,
   Injectable,
-  InternalServerErrorException,
   OnModuleInit,
 } from '@nestjs/common';
-import { ChatCompletionMessageParam } from 'openai/resources';
-// import { SendMessageDto } from './dto/bet.dto';
-// import { MongoClient, WithId } from 'mongodb'
-import * as dotenv from 'dotenv';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   In,
   Repository,
   DataSource,
-  MoreThanOrEqual,
-  LessThan,
   QueryRunner,
   Not,
 } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { BetDto, EstimateBetResponseDTO } from 'src/game/dto/Bet.dto';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
@@ -30,9 +22,7 @@ import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
 import { BetOrder } from './entities/bet-order.entity';
 import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 import { ConfigService } from 'src/config/config.service';
-
 import {
-  Contract,
   JsonRpcProvider,
   MaxUint256,
   Wallet,
@@ -42,9 +32,7 @@ import {
 import {
   Core__factory,
   Deposit__factory,
-  GameUSDPool__factory,
   GameUSD__factory,
-  Helper__factory,
 } from 'src/contract';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
@@ -55,19 +43,15 @@ import { PointService } from 'src/point/point.service';
 import { UserService } from 'src/user/user.service';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { MPC } from 'src/shared/mpc';
-import { Mutex } from 'async-mutex';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
 
-dotenv.config();
 
-// const client = new MongoClient('mongodb://localhost:27017')
 interface SubmitBetJobDTO {
   walletTxId: number;
   betOrders: number[];
   gameUsdTxId: number;
-  // creditBalanceUsed: number;
 }
 @Injectable()
 export class BetService implements OnModuleInit {
@@ -254,9 +238,10 @@ export class BetService implements OnModuleInit {
       walletTx.status = 'P';
       walletTx.userWalletId = userInfo.wallet.id;
       walletTx.userWallet = userInfo.wallet;
-      await queryRunner.manager.save(walletTx);
 
       const betOrders = await this.createBetOrders(payload, walletTx);
+      await queryRunner.manager.save(betOrders);
+
       const {
         creditRemaining,
         walletBalanceRemaining,
@@ -264,12 +249,11 @@ export class BetService implements OnModuleInit {
         creditBalanceUsed,
         creditWalletTxns,
       } = this.validateCreditAndBalance(userInfo, payload, betOrders);
-
       await queryRunner.manager.save(creditWalletTxns);
+
       walletTx.txAmount = walletBalanceUsed + creditBalanceUsed;
       walletTx.betOrders = betOrders;
       await queryRunner.manager.save(walletTx);
-      await queryRunner.manager.save(betOrders);
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = walletBalanceUsed;
@@ -282,16 +266,15 @@ export class BetService implements OnModuleInit {
       );
       gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.retryCount = 0;
-
       await queryRunner.manager.save(gameUsdTx);
 
       await queryRunner.commitTransaction();
 
-      this.eventEmitter.emit(
-        'gas.service.reload',
-        userInfo.wallet.walletAddress,
-        Number(process.env.BASE_CHAIN_ID),
-      );
+      // this.eventEmitter.emit(
+      //   'gas.service.reload',
+      //   userInfo.wallet.walletAddress,
+      //   gameUsdTx.chainId,
+      // );
 
       const jobId = `placeBet-${gameUsdTx.id}`;
       await this.queueService.addJob(
@@ -301,7 +284,6 @@ export class BetService implements OnModuleInit {
           walletTxId: walletTx.id,
           betOrders: betOrders.map((bet) => bet.id),
           gameUsdTxId: gameUsdTx.id,
-          // creditBalanceUsed,
           queueType: 'SUBMIT_BET',
         },
         3000, //starts processing after 3 seconds
@@ -485,7 +467,6 @@ export class BetService implements OnModuleInit {
     creditBalanceUsed: number;
     creditWalletTxns: CreditWalletTx[];
   } {
-    // console.log(userInfo);
     const totalCredits = userInfo.wallet.creditBalance;
     const walletBalance = userInfo.wallet.walletBalance;
 
@@ -647,21 +628,21 @@ export class BetService implements OnModuleInit {
   ) {
     try {
       const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
-      const gmaeUsdContract = GameUSD__factory.connect(
+      const gameUsdTokenContract = GameUSD__factory.connect(
         this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
         userSigner,
       );
 
-      const allowance = await gmaeUsdContract.allowance(
+      const allowance = await gameUsdTokenContract.allowance(
         userSigner.address,
         coreContractAddr,
       );
 
       if (allowanceNeeded != BigInt(0) && allowance < allowanceNeeded) {
-        const estimatedGasCost = await gmaeUsdContract
+        const estimatedGasCost = await gameUsdTokenContract
           .connect(userSigner)
           .approve.estimateGas(coreContractAddr, MaxUint256);
-        const tx = await gmaeUsdContract
+        const tx = await gameUsdTokenContract
           .connect(userSigner)
           .approve(coreContractAddr, MaxUint256, {
             gasLimit:
@@ -679,8 +660,6 @@ export class BetService implements OnModuleInit {
           tx.hash,
         );
 
-        // console.log(txStatus);
-
         if (txStatus.status === 1) {
           console.log('approved');
         } else {
@@ -697,8 +676,8 @@ export class BetService implements OnModuleInit {
     uid: number,
     ticketId: number,
     payload: BetOrder[],
-    userSigner,
-    provider,
+    userSigner: Wallet,
+    provider: JsonRpcProvider,
   ) {
     try {
       const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
@@ -730,14 +709,11 @@ export class BetService implements OnModuleInit {
         }
       });
 
-      // console.log(`approve`);
       await this._checkAllowanceAndApprove(
         userSigner,
-        parseUnits(totalAmount.toString(), 18),
+        ethers.MaxUint256,
       );
 
-      // console.log(bets)
-      // console.log(`Approve done`);
       const gasLimit = await coreContract
         .connect(userSigner)
         [
@@ -751,16 +727,13 @@ export class BetService implements OnModuleInit {
         ](uid, ticketId, bets, {
           gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
         });
+      await tx.wait();
 
-      // console.log(`bet tx sent - waiting for confirmation`);
       this.eventEmitter.emit(
         'gas.service.reload',
         await userSigner.getAddress(),
         Number(tx.chainId),
       );
-
-      await tx.wait();
-      // console.log(`bet tx confirmed`);
 
       return tx;
     } catch (error) {
@@ -774,7 +747,6 @@ export class BetService implements OnModuleInit {
     await queryRunner.connect();
     try {
       await queryRunner.startTransaction();
-
       const gameUsdTx = await queryRunner.manager
         .createQueryBuilder(GameUsdTx, 'gameUsdTx')
         .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
@@ -786,7 +758,7 @@ export class BetService implements OnModuleInit {
         .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
         .getOne();
 
-      console.log(gameUsdTx);
+      console.log('Processing gameUsdTx id:', gameUsdTx.id);
 
       const userWallet = await queryRunner.manager
         .createQueryBuilder(UserWallet, 'userWallet')
@@ -812,20 +784,12 @@ export class BetService implements OnModuleInit {
       }
 
       const provider = new JsonRpcProvider(
-        this.configService.get('OPBNB_PROVIDER_RPC_URL'),
+        this.configService.get(`PROVIDER_RPC_URL_${this.configService.get('BASE_CHAIN_ID')}`),
       );
-
       const userSigner = new Wallet(
         await MPC.retrievePrivateKey(userWallet.walletAddress),
         provider,
       );
-
-      this.eventEmitter.emit(
-        'gas.service.reload',
-        await userSigner.getAddress(),
-        Number(gameUsdTx.chainId),
-      );
-
       const onchainTx = await this._bet(
         Number(userWallet.user.uid),
         job.data.walletTxId,
@@ -1047,8 +1011,8 @@ export class BetService implements OnModuleInit {
     queryRunner?: QueryRunner,
   ) {
     // const queryRunner = this.dataSource.createQueryRunner();
-    // await queryRunner.connect();
-    // await queryRunner.startTransaction();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
 
     try {
@@ -1189,10 +1153,10 @@ export class BetService implements OnModuleInit {
 
       await queryRunner.manager.save(referrerWallet);
 
-      // await queryRunner.commitTransaction();
+      await queryRunner.commitTransaction();
     } catch (error) {
       console.error('Error in referral tx', error);
-      // await queryRunner.rollbackTransaction();
+      await queryRunner.rollbackTransaction();
 
       throw new Error('BET: Error processing Referral');
     }
