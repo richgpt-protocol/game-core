@@ -78,7 +78,12 @@ export class QueueService {
       return this.queues.get(queueName);
     }
 
-    const queue = new Queue(queueName);
+    const queue = new Queue(queueName, {
+      connection: {
+        host: this.redisHost,
+        port: this.redisPort
+      }
+    });
     this.queues.set(queueName, queue);
 
     // Create a worker for the new queue
