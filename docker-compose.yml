@@ -50,7 +50,7 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
     ports:
-      - "6379:6379"
+      - "6380:6380"
     volumes:
       - redis_data:/data
   webserver:
