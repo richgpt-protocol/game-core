@@ -47,6 +47,9 @@ services:
     container_name: redis
     networks:
       - webnet
+    environment:
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
     ports:
       - "6379:6379"
     volumes:
