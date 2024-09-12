@@ -17,6 +17,7 @@ export class QueueService {
   constructor(private readonly configService: ConfigService) {
     this.redisHost = this.configService.get('REDIS_HOST');
     this.redisPort = +this.configService.get('REDIS_PORT');
+    console.log('QueueService', this.redisHost, this.redisPort);
   }
 
   async onFailed(job: Job, error: Error) {
@@ -84,8 +85,10 @@ export class QueueService {
     // Create a worker for the new queue
     new Worker(queueName, this.process.bind(this), {
       connection: {
-        host: this.redisHost,
-        port: this.redisPort,
+        // host: this.redisHost,
+        // port: this.redisPort,
+        host: 'redis',
+        port: 6379,
       },
     }).on('failed', this.onFailed.bind(this));
 
