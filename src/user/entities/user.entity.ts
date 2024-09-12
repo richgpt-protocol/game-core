@@ -39,7 +39,7 @@ export class User {
   @Column({
     nullable: true,
   })
-  withdrawPassword: string;
+  withdrawPin: string;
 
   @Column({
     nullable: true,

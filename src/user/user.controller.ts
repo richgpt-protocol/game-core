@@ -42,6 +42,8 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { WalletService } from 'src/wallet/wallet.service';
 import * as bcrypt from 'bcrypt';
+import { DataSource } from 'typeorm';
+import { User } from './entities/user.entity';
 
 @ApiTags('User')
 @Controller('api/v1/user')
@@ -53,6 +55,7 @@ export class UserController {
     // private smsService: SMSService,
     // private telegramService: TelegramService,
     private eventEmitter: EventEmitter2,
+    private dataSource: DataSource,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
@@ -274,10 +277,21 @@ export class UserController {
     @IpAddress() ipAddress,
     @HandlerClass() classInfo: IHandlerClass,
   ) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
     try {
+      await queryRunner.startTransaction();
       const userId = req.user.userId;
       const hash = await bcrypt.hash(payload.pin, 10);
-      await this.userService.update(userId, { withdrawPassword: hash });
+      await queryRunner.manager.update(
+        User,
+        { id: userId },
+        {
+          withdrawPin: hash,
+        },
+      );
+
+      // await this.userService.update(userId, { withdrawPin: hash });
 
       await this.auditLogService.addAuditLog(
         classInfo,
@@ -286,17 +300,22 @@ export class UserController {
         `Update Withdraw Password Successful: ${JSON.stringify(payload)}`,
       );
 
+      await queryRunner.commitTransaction();
+
       return {
         statusCode: HttpStatus.CREATED,
         data: {},
         message: 'update withdraw password successful',
       };
     } catch (error) {
+      await queryRunner.rollbackTransaction();
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         data: {},
         message: 'Failed to update withdraw password, please contact admin',
       };
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 

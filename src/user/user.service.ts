@@ -180,7 +180,7 @@ export class UserService {
       updatedDate,
       updatedBy,
       referralUserId,
-      withdrawPassword,
+      withdrawPin,
       ...result
     } = await this.userRepository.findOne({
       where: { id: userId },
@@ -195,7 +195,7 @@ export class UserService {
     }
 
     const response = {
-      isWithdrawPasswordSet: !!withdrawPassword,
+      isWithdrawPasswordSet: !!withdrawPin,
       ...result,
     };
 
