@@ -39,6 +39,11 @@ export class User {
   @Column({
     nullable: true,
   })
+  withdrawPin: string;
+
+  @Column({
+    nullable: true,
+  })
   tgId: number;
 
   @Column({ nullable: true })

@@ -21,6 +21,7 @@ import { WalletService } from '../wallet.service';
 import { UserService } from 'src/user/user.service';
 import { MPC } from 'src/shared/mpc';
 import * as dotenv from 'dotenv';
+import * as bcrypt from 'bcrypt';
 dotenv.config();
 
 type RedeemResponse = {
@@ -78,8 +79,28 @@ export class WithdrawService {
     payload: RedeemDto,
   ): Promise<RedeemResponse> {
     const userWallet = await this.userWalletRepository.findOneBy({ userId });
+    const user = await this.userRepository.findOneBy({ id: userId });
 
-    if (payload.amount <= 1) {
+    if (!user.withdrawPin) {
+      return {
+        error: 'Please set withdraw password',
+        data: null,
+      };
+    }
+
+    const verified = await bcrypt.compare(
+      payload.withdrawPin,
+      user.withdrawPin,
+    );
+
+    if (!verified) {
+      return {
+        error: 'Please check withdraw password',
+        data: null,
+      };
+    }
+
+    if (payload.amount < 1) {
       return {
         error: 'Minimum withdrawable amount is $1',
         data: null,
