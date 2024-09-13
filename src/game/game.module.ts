@@ -27,6 +27,7 @@ import { UserModule } from 'src/user/user.module';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
+import { WalletModule } from 'src/wallet/wallet.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
     PointModule,
     SharedModule,
     UserModule,
+    WalletModule,
   ],
   providers: [
     GameService,
@@ -59,7 +61,7 @@ import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
     GameGateway,
     CacheSettingService,
     BetService,
-    CreditService,
+    // CreditService,
   ],
   controllers: [GameController],
   exports: [GameService],
