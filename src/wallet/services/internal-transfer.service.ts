@@ -17,7 +17,8 @@ import { AdminNotificationService } from 'src/shared/services/admin-notification
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { MPC } from 'src/shared/mpc';
-
+import { User } from 'src/user/entities/user.entity';
+import * as bcrypt from 'bcrypt';
 @Injectable()
 export class InternalTransferService {
   constructor(
@@ -46,10 +47,30 @@ export class InternalTransferService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const senderWallet = await queryRunner.manager
-        .createQueryBuilder(UserWallet, 'wallet')
-        .where({ userId: userId })
+      const senderInfo = await queryRunner.manager
+        .createQueryBuilder(User, 'user')
+        .leftJoinAndSelect('user.wallet', 'wallet')
+        .where('user.id = :userId', { userId })
         .getOne();
+
+      const senderWallet = senderInfo.wallet;
+
+      if (!senderInfo.withdrawPin) {
+        throw new BadRequestException('Withdraw pin not set');
+      }
+
+      const isPinVerified = await bcrypt.compare(
+        payload.pin,
+        senderInfo.withdrawPin,
+      );
+
+      if (!isPinVerified) {
+        throw new BadRequestException('Invalid pin');
+      }
+
+      if (payload.amount < 1) {
+        throw new BadRequestException('Minimum transfer amount is $1');
+      }
 
       const query = queryRunner.manager
         .createQueryBuilder(UserWallet, 'wallet')
@@ -330,13 +351,7 @@ export class InternalTransferService {
           senderUserWallet.walletBalance =
             Number(senderUserWallet.walletBalance) -
             Number(senderWalletTx.txAmount);
-          senderUserWallet.walletBalance =
-            Number(senderUserWallet.walletBalance) -
-            Number(senderWalletTx.txAmount);
 
-          receiverUserWallet.walletBalance =
-            Number(receiverUserWallet.walletBalance) +
-            Number(senderWalletTx.txAmount);
           receiverUserWallet.walletBalance =
             Number(receiverUserWallet.walletBalance) +
             Number(senderWalletTx.txAmount);

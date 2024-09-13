@@ -465,7 +465,7 @@ export class WalletController {
     @Request() req,
     @Body() payload: TransferGameUSDDto,
   ): Promise<ResponseVo<any>> {
-    const userId = req.user.id;
+    const userId = req.user.userId;
     // const userId = 1;
     try {
       await this.internalTransferService.transferGameUSD(userId, payload);
