@@ -44,7 +44,7 @@ export class User {
   @Column({
     nullable: true,
   })
-  tgId: number;
+  tgId: string;
 
   @Column({ nullable: true })
   referralCode: string;
