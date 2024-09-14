@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export enum SendMode {
   phone,
@@ -30,4 +30,13 @@ export class TransferGameUSDDto {
   })
   @IsNotEmpty()
   receiver: string;
+
+  @ApiProperty({
+    type: String,
+    description: 'Withdraw Pin',
+    required: true,
+  })
+  @IsNotEmpty()
+  @IsString()
+  pin: string;
 }
