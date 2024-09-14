@@ -117,7 +117,7 @@ export class QueueService {
       debounce: { id: jobName }, //can't add 2 jobs with the same id
       backoff: {
         type: 'exponential',
-        delay: 10000, // 10 seconds
+        delay: 5000, // 5 seconds
       },
     });
   }
