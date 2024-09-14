@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, LessThan, MoreThan, Repository } from 'typeorm';
+import { DataSource, In, LessThan, MoreThan, Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -14,12 +14,19 @@ import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { MPC } from 'src/shared/mpc';
-import * as dotenv from 'dotenv';
-dotenv.config();
+import { ConfigService } from 'src/config/config.service';
+import { QueueService } from 'src/queue/queue.service';
+import { Job } from 'bullmq';
+
+
+interface SubmitDrawResultDTO {
+  drawResults: DrawResult[];
+  gameId: number;
+}
 
 @Injectable()
-export class GameService {
-  provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
+export class GameService implements OnModuleInit {
+  provider = new ethers.JsonRpcProvider(this.configService.get('PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID')));
 
   constructor(
     @InjectRepository(Game)
@@ -36,7 +43,11 @@ export class GameService {
     private claimDetalRepository: Repository<ClaimDetail>,
     private adminNotificationService: AdminNotificationService,
     private cacheSettingService: CacheSettingService,
+    private configService: ConfigService,
+    private readonly queueService: QueueService,
+    private dataSource: DataSource,
   ) {}
+  
 
   // process of closing bet for current epoch, set draw result, and announce draw result
   // 1. GameService.setBetClose: scheduled at :00UTC, create new game, and also submit masked betOrder to Core contract
@@ -44,6 +55,15 @@ export class GameService {
   // 3. GameGateway.emitDrawResult: scheduled at :02UTC, emit draw result to all connected clients
   // 4. follow by GameService.updateDrawResult: submit draw result to Core contract
   // 5. :05UTC, allow claim
+
+  onModuleInit() {
+    this.queueService.registerHandler('GAME_QUEUE', 'SUBMIT_DRAW_RESULT', {
+      jobHandler: this.submitDrawResult.bind(this),
+
+      //Executed when onchain tx is failed for 5 times continously
+      failureHandler: this.onChainTxFailed.bind(this),
+    });
+  }
 
   @Cron('0 0 */1 * * *', { utcOffset: 0 }) // every hour UTC time
   async setBetClose(): Promise<void> {
@@ -67,8 +87,8 @@ export class GameService {
       await this.gameRepository.save(
         this.gameRepository.create({
           epoch: (Number(lastFutureGame.epoch) + 1).toString(),
-          maxBetAmount: Number(process.env.MAX_BET_AMOUNT),
-          minBetAmount: Number(process.env.MIN_BET_AMOUNT),
+          maxBetAmount: Number(this.configService.get('MAX_BET_AMOUNT')),
+          minBetAmount: Number(this.configService.get('MIN_BET_AMOUNT')),
           drawTxHash: null,
           drawTxStatus: null,
           // startDate & endDate: previous date + 1 hour
@@ -88,11 +108,11 @@ export class GameService {
       if (betOrders.length === 0) return; // no masked betOrder to submit
 
       const helperBot = new ethers.Wallet(
-        await MPC.retrievePrivateKey(process.env.HELPER_BOT_ADDRESS),
+        await MPC.retrievePrivateKey(this.configService.get('HELPER_BOT_ADDRESS')),
         this.provider,
       );
       const helperContract = Helper__factory.connect(
-        process.env.HELPER_CONTRACT_ADDRESS,
+        this.configService.get('HELPER_CONTRACT_ADDRESS'),
         helperBot,
       );
       // construct params for Helper.betLastMinutes()
@@ -187,65 +207,103 @@ export class GameService {
     }
   }
 
-  // this function called by emitDrawResult() in game.gateway
-  async updateDrawResult(payload: DrawResult[], gameId: number): Promise<void> {
+  async submitDrawResult(job: Job<SubmitDrawResultDTO>): Promise<void> {
+    const { drawResults, gameId } = job.data;
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
     try {
       // submit draw result to Core contract
       const setDrawResultBot = new ethers.Wallet(
-        await MPC.retrievePrivateKey(process.env.RESULT_BOT_ADDRESS),
+        await MPC.retrievePrivateKey(this.configService.get('RESULT_BOT_ADDRESS')),
         this.provider,
       );
       const coreContract = Core__factory.connect(
-        process.env.CORE_CONTRACT_ADDRESS,
+        this.configService.get('CORE_CONTRACT_ADDRESS'),
         setDrawResultBot,
       );
-      const numberPairs = payload.map((result) => result.numberPair);
+      const numberPairs = drawResults.map((result) => result.numberPair);
       const txResponse = await coreContract.setDrawResults(
         numberPairs,
-        ethers.parseEther(process.env.MAX_BET_AMOUNT),
+        ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
         '0x',
         { gasLimit: 1500000 },
       );
       const txReceipt = await txResponse.wait();
 
-      // update txHash into game record
-      const game = await this.gameRepository.findOneBy({ id: gameId });
-      game.drawTxHash = txReceipt.hash;
-      game.drawTxStatus = 'P';
-      await this.gameRepository.save(game);
-
+      const game = await queryRunner.manager.findOneBy(Game, { id: gameId });
       if (txReceipt.status === 1) {
         // on-chain tx success
         game.drawTxStatus = 'S';
-        await this.gameRepository.save(game);
+        game.drawTxHash = txReceipt.hash;
+        await queryRunner.manager.save(game);
 
         // find betOrder that numberPair matched and update availableClaim to true
-        for (const result of payload) {
-          const betOrders = await this.betOrderRepository.find({
-            where: {
-              gameId,
-              numberPair: result.numberPair,
-            },
-          });
+        for (const result of drawResults) {
+          const betOrders = await queryRunner.manager.find(
+            BetOrder,
+            {
+              where: {
+                gameId,
+                numberPair: result.numberPair,
+              },
+            }
+          );
           // there might be more than 1 betOrder that numberPair matched
           for (const betOrder of betOrders) {
             betOrder.availableClaim = true;
-            await this.betOrderRepository.save(betOrder);
+            await queryRunner.manager.save(betOrder);
           }
         }
+        await queryRunner.commitTransaction();
       } else {
         // on-chain tx failed
+        game.drawTxStatus = 'P';
+        await queryRunner.manager.save(game);
+        await queryRunner.commitTransaction();
         throw new Error(
           `setDrawResults() on-chain transaction failed, txHash: ${txReceipt.hash}`,
         );
       }
     } catch (err) {
-      await this.adminNotificationService.setAdminNotification(
-        `Error in game.service.updateDrawResult, error: ${err}`,
-        'executionError',
-        'Execution Error in updateDrawResult()',
-        true,
-      );
+      console.error('Error in game.service.submitDrawResult:', err);
+
+      // await this.adminNotificationService.setAdminNotification(
+      //   `Error in game.service.submitDrawResult, error: ${err}`,
+      //   'executionError',
+      //   'Execution Error in submitDrawResult()',
+      //   true,
+      // );
+
+      throw new Error(err);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async onChainTxFailed(job: Job, error: Error) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      if (job.attemptsMade >= job.opts.attempts) {
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        const game = await queryRunner.manager.findOne(
+          Game,
+          {
+            where: {
+              id: job.data.gameId
+            }
+          }
+        );
+        game.drawTxStatus = 'F';
+        await queryRunner.manager.save(game);
+        await queryRunner.commitTransaction();
+      }
+    } catch (error) {
+      console.error('Error in game.service.onChainTxFailed, error:', error);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
