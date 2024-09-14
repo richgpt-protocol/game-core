@@ -238,6 +238,7 @@ export class BetService implements OnModuleInit {
       walletTx.status = 'P';
       walletTx.userWalletId = userInfo.wallet.id;
       walletTx.userWallet = userInfo.wallet;
+      await queryRunner.manager.save(walletTx);
 
       const betOrders = await this.createBetOrders(payload, walletTx);
       await queryRunner.manager.save(betOrders);
@@ -397,7 +398,7 @@ export class BetService implements OnModuleInit {
         }
 
         if (
-          (new Date().getTime() - allGamesObj[epoch].endDate.getTime()) / 1000 >
+          (new Date().getUTCDate() - allGamesObj[epoch].endDate.getTime()) / 1000 >
           this.maskingIntervalInSeconds
         ) {
           throw new BadRequestException(
