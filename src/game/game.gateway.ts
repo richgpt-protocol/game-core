@@ -73,12 +73,12 @@ export class GameGateway {
       // await this.gameService.updateDrawResult(drawResults, lastGame.id);
       const jobId = `submitDrawResult-${lastGame.id}`;
       await this.queueService.addJob(
-        'BET_QUEUE',
+        'GAME_QUEUE',
         jobId,
         {
           drawResults: drawResults,
           lastGameId: lastGame.id,
-          queueType: 'SUBMIT_BET',
+          queueType: 'SUBMIT_DRAW_RESULT',
         },
         0, // no delay
       );
