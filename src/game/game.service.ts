@@ -53,7 +53,7 @@ export class GameService implements OnModuleInit {
   // 1. GameService.setBetClose: scheduled at :00UTC, create new game, and also submit masked betOrder to Core contract
   // 2. Local script: cron at :01UTC create drawResult records and save directly into database
   // 3. GameGateway.emitDrawResult: scheduled at :02UTC, emit draw result to all connected clients
-  // 4. follow by GameService.updateDrawResult: submit draw result to Core contract
+  // 4. follow by job GameService.submitDrawResult: submit draw result to Core contract
   // 5. :05UTC, allow claim
 
   onModuleInit() {
@@ -212,6 +212,7 @@ export class GameService implements OnModuleInit {
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
+    await queryRunner.startTransaction();
     try {
       // submit draw result to Core contract
       const setDrawResultBot = new ethers.Wallet(
