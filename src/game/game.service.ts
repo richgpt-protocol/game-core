@@ -224,11 +224,16 @@ export class GameService implements OnModuleInit {
         setDrawResultBot,
       );
       const numberPairs = drawResults.map((result) => result.numberPair);
+      const estimatedGas = await coreContract.setDrawResults.estimateGas(
+        numberPairs,
+        ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
+        '0x',
+      );
       const txResponse = await coreContract.setDrawResults(
         numberPairs,
         ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
         '0x',
-        { gasLimit: 1500000 },
+        { gasLimit: estimatedGas * ethers.toBigInt(130) / ethers.toBigInt(100) },
       );
       const txReceipt = await txResponse.wait();
 
