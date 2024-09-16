@@ -10,6 +10,7 @@ import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
+import { ClaimService } from 'src/wallet/services/claim.service';
 import { WalletService } from 'src/wallet/wallet.service';
 import { Between, In, Repository } from 'typeorm';
 
@@ -37,6 +38,7 @@ export class BackOfficeService {
     @InjectRepository(PrizeAlgo)
     private prizeAlgoRepository: Repository<PrizeAlgo>,
     private walletService: WalletService,
+    private claimService: ClaimService,
   ) {}
 
   async getUsers(page: number = 1, limit: number = 10): Promise<any> {
@@ -637,6 +639,74 @@ export class BackOfficeService {
     return {
       data: resultByDate,
     };
+  }
+
+  async salesReportByEpoch(epoch: number) {
+    const betOrders = await this.betOrderRepository
+      .createQueryBuilder('betOrder')
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('betOrder.game', 'game')
+      .where('game.epoch = :epoch', { epoch })
+      .getMany();
+
+    if (betOrders.length === 0) {
+      // no bet in this epoch
+      return {
+        data: null,
+      };
+    }
+
+    const drawResults = await this.drawResultRepository.find({
+      where: {
+        gameId: betOrders[0].gameId,
+      },
+    });
+
+    if (drawResults.length === 0) {
+      // draw result for this epoch haven't come out yet
+      return {
+        data: null,
+      };
+    }
+
+    let result = {
+      totalBetUser: 0,
+      totalBetCount: 0,
+      totalBetAmount: 0,
+      totalCreditUsed: 0,
+      totalWinCount: 0,
+      totalWinAmount: 0,
+      totalProfit: 0,
+    };
+
+    let totalBetUser = new Set();
+    for (const betOrder of betOrders) {
+      totalBetUser.add(betOrder.walletTx.userWallet.userId);
+      result.totalBetCount += 1;
+      const betAmount = betOrder.bigForecastAmount + betOrder.smallForecastAmount;
+      result.totalBetAmount += betAmount;
+      result.totalCreditUsed += betOrder.creditWalletTx.amount;
+      result.totalWinCount += betOrder.availableClaim ? 1 : 0;
+      const winAmount = betOrder.availableClaim ? this.getWinAmount(betOrder, drawResults) : 0;
+      result.totalWinAmount += winAmount;
+      result.totalProfit += betAmount - winAmount;
+    }
+
+    result.totalBetUser = totalBetUser.size;
+
+    return {
+      data: result,
+    };
+  }
+
+  private getWinAmount(betOrder: BetOrder, drawResults: DrawResult[]): number {
+    const drawResult = drawResults.find(
+      (drawResult) => drawResult.numberPair === betOrder.numberPair,
+    );
+    // drawResult must not null because betOrder.availableClaim is true in parent function
+    const winAmount = this.claimService.calculateWinningAmount(betOrder, drawResult);
+    return winAmount.bigForecastWinAmount + winAmount.smallForecastWinAmount;
   }
 
   async getCurrentPrizeAlgo() {
