@@ -61,7 +61,7 @@ export class GameService implements OnModuleInit {
     });
   }
 
-  @Cron('0 0 */1 * * *', { utcOffset: 0 }) // every hour UTC time
+  @Cron('0 0 */1 * * *') // every hour UTC time
   async setBetClose(): Promise<void> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
