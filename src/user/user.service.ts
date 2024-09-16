@@ -677,6 +677,9 @@ export class UserService {
 
     const user = await queryRunner.manager
       .createQueryBuilder(User, 'user')
+      .addSelect('user.isReset')
+      .addSelect('user.verificationCode')
+      .addSelect('user.loginAttempt')
       .where('user.phoneNumber = :phoneNumber', {
         phoneNumber: payload.phoneNumber,
       })
