@@ -250,6 +250,20 @@ export class BackOfficeController {
   }
 
   @SecureEJS(null, UserRole.ADMIN)
+  @Get('sales-report-epoch')
+  @Render('sales-report-epoch')
+  async salesReportByEpoch(
+    @Query('epoch') epoch: number,
+  ) {
+    const result = await this.backOfficeService.salesReportByEpoch(epoch);
+    return {
+      data: {
+        bets: result.data,
+      },
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('credit-txns-listing')
   @Render('credit-txns-listing')
   async creditTxns(
@@ -323,7 +337,7 @@ export class BackOfficeController {
   ) {
     const onlyNumber = (name: string, value: any): number => {
       if (isNaN(Number(value))) throw new BadRequestException(`${name} must be a number`);
-      if (name === 'fixedNumberIndex' && Number(value) < 0 || Number(value) > 32) throw new BadRequestException('fixedNumberIndex must be between 0 and 32');
+      if (name === 'fixedNumberIndex' && (Number(value) < 0 || Number(value) > 32)) throw new BadRequestException('fixedNumberIndex must be between 0 and 32');
       return Number(value);
     }
 
