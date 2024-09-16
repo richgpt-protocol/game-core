@@ -712,6 +712,7 @@ export class UserService {
       user.verificationCode = null;
       user.otpGenerateTime = null;
       user.loginAttempt = 0;
+      await queryRunner.manager.save(user);
 
       if (
         user.status === UserStatus.UNVERIFIED ||
@@ -731,6 +732,7 @@ export class UserService {
         user.status = UserStatus.ACTIVE;
         user.isMobileVerified = true;
         user.updatedBy = UtilConstant.SELF;
+        await queryRunner.manager.save(user);
 
         // Handle referral logic if applicable
         if (user.referralUserId) {
@@ -756,7 +758,6 @@ export class UserService {
         );
       }
 
-      await queryRunner.manager.save(user);
       await queryRunner.commitTransaction();
       return { error: null, data: user };
     } catch (err) {
