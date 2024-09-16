@@ -703,6 +703,7 @@ export class UserService {
 
     user.verificationCode = null;
     user.otpGenerateTime = null;
+    user.loginAttempt = 0;
     await this.userRepository.save(user);
 
     if (
