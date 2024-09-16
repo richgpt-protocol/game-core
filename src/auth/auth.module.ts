@@ -12,7 +12,6 @@ import { PermissionModule } from 'src/permission/permission.module';
 import { UserModule } from 'src/user/user.module';
 import { SharedModule } from 'src/shared/shared.module';
 import { CookieStrategy } from './cookie.strategy';
-import { UserService } from 'src/user/user.service';
 import { User } from 'src/user/entities/user.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
@@ -53,7 +52,7 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
       },
     }),
   ],
-  providers: [AuthService, JwtStrategy, CookieStrategy, UserService],
+  providers: [AuthService, JwtStrategy, CookieStrategy],
   controllers: [AuthController],
   exports: [PassportModule.register({ defaultStrategy: 'jwt' })],
 })
