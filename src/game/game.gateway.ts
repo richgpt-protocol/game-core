@@ -44,9 +44,10 @@ export class GameGateway {
       .sort((a, b) => b.id - a.id);
   }
 
-  @Cron('0 2 */1 * * *') // 2 minutes after every hour UTC time
+  @Cron('0 2 */1 * * *') // 2 minutes after every hour
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
+    console.log('emitDrawResult()', new Date());
     try {
       // get draw result from last game
       const lastGame = await this.gameRepository.findOne({
