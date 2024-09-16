@@ -30,6 +30,7 @@ import { UserService } from 'src/user/user.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
@@ -59,9 +60,10 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
     AdminModule,
     WalletModule,
     PointModule,
+    UserModule,
   ],
   controllers: [BackOfficeController],
-  providers: [BackOfficeService, CampaignService, WalletService, ClaimService, UserService],
+  providers: [BackOfficeService, CampaignService, WalletService, ClaimService],
   exports: [BackOfficeService],
 })
 export class BackOfficeModule {}
