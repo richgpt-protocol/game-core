@@ -682,11 +682,11 @@ export class BackOfficeService {
 
     let totalBetUser = new Set();
     for (const betOrder of betOrders) {
-      totalBetUser.add(betOrder.walletTx.userWallet.userId);
+      totalBetUser.add(betOrder.walletTx.userWalletId);
       result.totalBetCount += 1;
       const betAmount = betOrder.bigForecastAmount + betOrder.smallForecastAmount;
       result.totalBetAmount += betAmount;
-      result.totalCreditUsed += betOrder.creditWalletTx.amount;
+      result.totalCreditUsed += betOrder.creditWalletTx ? betOrder.creditWalletTx.amount : 0;
       result.totalWinCount += betOrder.availableClaim ? 1 : 0;
       const winAmount = betOrder.availableClaim ? this.getWinAmount(betOrder, drawResults) : 0;
       result.totalWinAmount += winAmount;
