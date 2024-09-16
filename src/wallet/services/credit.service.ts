@@ -81,7 +81,7 @@ export class CreditService {
       }
 
       const today = new Date();
-      const expirationDate = new Date(today.setDate(today.getDate() + 60));
+      const expirationDate = new Date(today.setDate(today.getDate() + 90));
 
       //update or insert credit wallet tx
       const creditWalletTx = new CreditWalletTx();
