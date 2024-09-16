@@ -44,7 +44,7 @@ export class GameGateway {
       .sort((a, b) => b.id - a.id);
   }
 
-  @Cron('0 2 */1 * * *', { utcOffset: 0 }) // 2 minutes after every hour UTC time
+  @Cron('0 2 */1 * * *') // 2 minutes after every hour UTC time
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
     try {
