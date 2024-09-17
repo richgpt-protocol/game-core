@@ -259,6 +259,7 @@ export class CreditService {
         .createQueryBuilder('gameUsdTx')
         .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
         .where('gameUsdTx.status = :status', { status: 'P' })
+        .andWhere('creditWalletTx.txType = :txType', { txType: 'CREDIT' })
         .andWhere('gameUsdTx.retryCount < 5')
         .andWhere('creditWalletTxId IS NOT NULL')
         .getMany();

@@ -17,7 +17,8 @@ export class WalletService {
   ) {
     for (let i = 1; i <= 100; i++) {
       const xp = Math.floor(50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i));
-      this.levelMap.push({ xp, level: i });
+      const prev = this.levelMap.length > 0 ? this.levelMap[i - 2].xp : 0;
+      this.levelMap.push({ xp: xp + prev, level: i });
     }
   }
 
@@ -34,7 +35,10 @@ export class WalletService {
     // input point 1 will result 0 in below calculation
     // input point > 1 will result in normal
     const level1 = this.levelMap.find((level) => level.level === 1);
-    if (point < level1.xp) return 0;
+    const maxLevel = this.levelMap[this.levelMap.length - 1];
+    if (point < level1.xp) return 1;
+
+    if (point >= maxLevel.xp) return maxLevel.level;
     // const f = 50 * a^3 + 1000 * exp(0.1 * a)
 
     // exponential growth xp calculation, refer
@@ -42,7 +46,7 @@ export class WalletService {
     // const growthFactor = 1.584893192;
     // const level = Math.log(point) / Math.log(growthFactor);
 
-    const level = this.levelMap.find((level) => level.xp <= point).level;
+    const level = this.levelMap.find((level) => level.xp > point).level - 1;
     return level;
   }
 
