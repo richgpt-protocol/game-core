@@ -70,11 +70,19 @@ export class InternalTransferService {
       }
 
       await this.validateLevel(senderWallet);
-      const pendingTransferAmount = await this.getPendingAmount(senderWallet);
+      const pendingAmountResult = await queryRunner.manager.query(
+        `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
+          WHERE
+            userWalletId = ${userId} AND
+            txType IN ('REDEEM', 'PLAY', 'INTERNAL_TRANSFER') AND
+            status IN ('P', 'PD', 'PA')`,
+      );
+
+      const pendingAmount = Number(pendingAmountResult[0]?.pendingAmount) || 0;
       const availableBalance =
-        senderWallet.walletBalance > pendingTransferAmount
-          ? senderWallet.walletBalance - pendingTransferAmount
-          : 0;
+        pendingAmount >= senderWallet.walletBalance
+          ? 0
+          : senderWallet.walletBalance - pendingAmount;
 
       if (
         senderWallet.walletBalance == 0 ||

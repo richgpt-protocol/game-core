@@ -136,13 +136,18 @@ export class WithdrawService implements OnModuleInit {
         };
       }
 
-      const pendingAmount = await queryRunner.manager.query(
-        `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx WHERE userWalletId = ${userId} AND txType = 'REDEEM' AND status IN ('P', 'PD', 'PA')`,
+      const pendingAmountResult = await queryRunner.manager.query(
+        `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx 
+          WHERE
+            userWalletId = ${userId} AND 
+            txType IN ('REDEEM', 'PLAY', 'INTERNAL_TRANSFER') AND
+            status IN ('P', 'PD', 'PA')`,
       );
+      const pendingAmount = Number(pendingAmountResult[0]?.pendingAmount) || 0;
       const actualWalletBalance =
-        Number(pendingAmount[0].pendingAmount) >= userWallet.walletBalance
+        pendingAmount >= userWallet.walletBalance
           ? 0
-          : userWallet.walletBalance - pendingAmount[0].pendingAmount;
+          : userWallet.walletBalance - pendingAmount;
       if (actualWalletBalance < payload.amount) {
         return {
           error: 'Insufficient redeemable balance',
