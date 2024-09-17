@@ -62,7 +62,7 @@ export class BackOfficeService {
       const users = data[0];
 
       const userInfo = users.map((user) => {
-        const walletAddress = user.wallet.walletAddress;
+        const walletAddress = user.wallet?.walletAddress || '';
         delete user.wallet;
         return {
           ...user,
@@ -594,11 +594,12 @@ export class BackOfficeService {
         userCount: 0,
         totalPayout: 0,
         totalPayoutRewards: 0,
-        commissionAmount:
-          Number(commissions.find(
+        commissionAmount: Number(
+          commissions.find(
             (_commision) =>
               _commision.createdDate.toDateString() === start.toDateString(),
-          )?.txAmount || 0),
+          )?.txAmount || 0,
+        ),
       };
       start.setDate(start.getDate() + 1);
     }
@@ -644,7 +645,7 @@ export class BackOfficeService {
 
     const game = await this.gameRepository.findOne({
       where: { isClosed: false },
-    })
+    });
 
     return {
       data: prizeAlgo,
@@ -652,11 +653,14 @@ export class BackOfficeService {
     };
   }
 
-  async updatePrizeAlgo(adminId: number, prizeAlgos: Array<{ key: string, value: any }>) {
+  async updatePrizeAlgo(
+    adminId: number,
+    prizeAlgos: Array<{ key: string; value: any }>,
+  ) {
     const existingPrizeAlgos = await this.prizeAlgoRepository.find();
-  
-    const prizeAlgoMap = new Map(prizeAlgos.map(item => [item.key, item]));
-  
+
+    const prizeAlgoMap = new Map(prizeAlgos.map((item) => [item.key, item]));
+
     for (const existingPrizeAlgo of existingPrizeAlgos) {
       const newPrizeAlgo = prizeAlgoMap.get(existingPrizeAlgo.key);
       if (newPrizeAlgo) {
@@ -665,10 +669,12 @@ export class BackOfficeService {
           existingPrizeAlgo.updatedBy = adminId;
         }
       } else {
-        throw new InternalServerErrorException(`Prize Algo with key ${existingPrizeAlgo.key} not found in the new prizeAlgos`);
+        throw new InternalServerErrorException(
+          `Prize Algo with key ${existingPrizeAlgo.key} not found in the new prizeAlgos`,
+        );
       }
     }
-  
+
     // existingPrizeAlgos is replaced with the updated prizeAlgos
     await this.prizeAlgoRepository.save(existingPrizeAlgos);
   }

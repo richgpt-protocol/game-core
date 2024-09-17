@@ -91,10 +91,11 @@ export class WithdrawService implements OnModuleInit {
 
   // how redeem & payout work
   // 1. user request redeem via /request-redeem
-  // 2. if redeem < $100, proceed with reviewRedeem(). else, pending admin to execute reviewRedeem()
-  // 3. local server redeem bot run every 5 minutes to check if any pending redeem request,
-  // generate signature for the redeem request & update directly through backend database
-  // 4. payout() run every 5 minutes to execute payout if any
+  // 2. if redeem < $100, proceed with processWithdraw() queue. else, pending admin to execute reviewAdmin()
+  // 3. processWithdraw() queue transfers the gameUSD from user wallet to us.
+  // 4. local server redeem bot run every 5 minutes to check if any pending redeem request,
+  //    generate signature for the redeem request & update directly through backend database
+  // 5. payout() run every 5 minutes to execute payout if any
 
   async requestRedeem(
     userId: number,
@@ -152,11 +153,10 @@ export class WithdrawService implements OnModuleInit {
         userWallet.pointBalance,
       );
       if (userLevel < 10) {
-        //TODO uncomment
-        // return {
-        //   error: 'Insufficient level to redeem',
-        //   data: null,
-        // };
+        return {
+          error: 'Insufficient level to redeem',
+          data: null,
+        };
       }
 
       const lastRedeemWalletTx = await queryRunner.manager.findOne(WalletTx, {
@@ -283,14 +283,14 @@ export class WithdrawService implements OnModuleInit {
       } else {
         walletTx.status = 'PA'; // pending for admin review
         await queryRunner.manager.save(walletTx);
+        await queryRunner.commitTransaction();
 
-        this.adminNotificationService.setAdminNotification(
+        await this.adminNotificationService.setAdminNotification(
           `User ${userId} has requested redeem for amount $${payload.amount}, please review. redeemTxId: ${redeemTx.id}`,
           'info',
           'Redeem Request',
           true,
         );
-        await queryRunner.commitTransaction();
       }
 
       return { error: null, data: redeemTx };
@@ -590,18 +590,8 @@ export class WithdrawService implements OnModuleInit {
           : await this.adminRepository.findOneBy({ id: adminId });
       redeemTx.reviewedBy = adminId;
       redeemTx.payoutCanProceed = payload.payoutCanProceed;
-
-      if (!redeemTx.payoutCanProceed) {
-        walletTx.status = 'F';
-        await queryRunner.manager.save(walletTx);
-
-        await this.userService.setUserNotification(walletTx.userWalletId, {
-          type: 'review redeem',
-          title: 'Redeem Request Rejected',
-          message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
-          walletTxId: walletTx.id,
-        });
-      }
+      walletTx.status = payload.payoutCanProceed ? 'P' : 'F';
+      await queryRunner.manager.save(walletTx);
 
       await queryRunner.manager.save(redeemTx);
       await queryRunner.commitTransaction();
@@ -618,8 +608,20 @@ export class WithdrawService implements OnModuleInit {
           chainId: redeemTx.chainId,
           queueType: 'PROCESS_WITHDRAW',
         });
+      } else {
+        await this.userService.setUserNotification(walletTx.userWalletId, {
+          type: 'review redeem',
+          title: 'Redeem Request Rejected',
+          message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
+          walletTxId: walletTx.id,
+        });
       }
+      return { error: null, data: redeemTx };
     } catch (error) {
+      console.error(error);
+      await queryRunner.rollbackTransaction();
+
+      return { error: 'Unable to process review', data: null };
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
@@ -653,11 +655,8 @@ export class WithdrawService implements OnModuleInit {
       });
 
       if (gameUsdTx.txHash) {
-        const jobId = `process_payout_${redeemTx.id}`;
-        await this.queueService.addJob('WITHDRAW_QUEUE', jobId, {
-          redeemTxId: redeemTx.id,
-          queueType: 'PROCESS_PAYOUT',
-        });
+        //This block is reached when the same redeemTxId is added to the queue again (by reviewAdmin())
+        return;
       }
 
       const usdtBalance = await this.getUsdtBalance(job.data.chainId);
@@ -683,6 +682,8 @@ export class WithdrawService implements OnModuleInit {
       redeemTx.payoutCheckedAt = new Date();
       await queryRunner.manager.save(redeemTx);
 
+      // throw new Error('Test Error');
+
       await this.approveGameUsdToken(
         walletTx.userWallet.walletAddress,
         Number(redeemTx.amount) + Number(redeemTx.fees),
@@ -698,6 +699,7 @@ export class WithdrawService implements OnModuleInit {
       }
 
       gameUsdTx.txHash = receipt.hash;
+      gameUsdTx.status = 'S';
       redeemTx.payoutStatus = 'P';
       redeemTx.payoutCanProceed = true;
       redeemTx.walletTx.status = 'P';
@@ -705,12 +707,6 @@ export class WithdrawService implements OnModuleInit {
       await queryRunner.manager.save(redeemTx);
       await queryRunner.manager.save(gameUsdTx);
       await queryRunner.commitTransaction();
-
-      const jobId = `process_payout_${redeemTx.id}`;
-      await this.queueService.addJob('WITHDRAW_QUEUE', jobId, {
-        redeemTxId: redeemTx.id,
-        queueType: 'PROCESS_PAYOUT',
-      });
     } catch (error) {
       console.error(error);
       await queryRunner.rollbackTransaction();
@@ -730,16 +726,20 @@ export class WithdrawService implements OnModuleInit {
     await queryRunner.connect();
     try {
       await queryRunner.startTransaction();
-      const redeemTx = await queryRunner.manager.findOne(RedeemTx, {
-        where: {
-          id: job.data.redeemTxId,
-          payoutSignature: Not(IsNull()),
+      const redeemTx = await queryRunner.manager
+        .createQueryBuilder(RedeemTx, 'redeemTx')
+        .leftJoinAndSelect('redeemTx.walletTx', 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .where('redeemTx.id = :redeemTxId', { redeemTxId: job.data.redeemTxId })
+        .andWhere('redeemTx.payoutSignature IS NOT NULL')
+        .andWhere('redeemTx.payoutStatus = :payoutStatus', {
           payoutStatus: 'P',
+        })
+        .andWhere('redeemTx.isPayoutTransferred = :isPayoutTransferred', {
           isPayoutTransferred: false,
-          reviewedBy: Not(IsNull()),
-        },
-        relations: { walletTx: true },
-      });
+        })
+        .andWhere('redeemTx.reviewedBy IS NOT NULL')
+        .getOne();
 
       if (!redeemTx) return;
 
@@ -752,12 +752,11 @@ export class WithdrawService implements OnModuleInit {
         redeemTx.payoutSignature,
       );
 
-      redeemTx.payoutTxHash = receipt.hash;
-      redeemTx.fromAddress = process.env.PAYOUT_BOT_ADDRESS;
-
       if (!receipt || receipt.status != 1) {
         redeemTx.isPayoutTransferred = false;
         redeemTx.walletTx.status = 'PD';
+
+        await queryRunner.commitTransaction();
 
         await this.adminNotificationService.setAdminNotification(
           `Payout for redeemTxId ${redeemTx.id} has failed. Please check.`,
@@ -768,6 +767,8 @@ export class WithdrawService implements OnModuleInit {
           redeemTx.walletTx.id,
         );
       } else {
+        redeemTx.payoutTxHash = receipt.hash;
+        redeemTx.fromAddress = process.env.PAYOUT_BOT_ADDRESS;
         const lastWalletTx = await queryRunner.manager.findOne(WalletTx, {
           where: {
             userWalletId: redeemTx.walletTx.userWalletId,
@@ -804,7 +805,7 @@ export class WithdrawService implements OnModuleInit {
       console.error(error);
       await queryRunner.rollbackTransaction();
 
-      throw error; //re-tried by queue
+      throw new Error('Handle Payout errored'); //re-tried by queue
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
@@ -871,7 +872,7 @@ export class WithdrawService implements OnModuleInit {
       const txResponse = await gameUsdTokenContract.approve(
         process.env.DEPOSIT_CONTRACT_ADDRESS,
         ethers.MaxUint256,
-        { gasLimit: estimatedGas + estimatedGas * BigInt(0.3) }, // increased by ~30% from actual gas used
+        { gasLimit: estimatedGas + (estimatedGas * BigInt(30)) / BigInt(100) }, // increased by ~30% from actual gas used
       );
       await txResponse.wait();
     }
@@ -905,7 +906,7 @@ export class WithdrawService implements OnModuleInit {
       from,
       ethers.parseEther(amount.toString()),
       ethers.parseEther(fee.toString()),
-      { gasLimit: gasUsed + gasUsed * BigInt(0.3) }, // increased by ~30% from actual gas used
+      { gasLimit: gasUsed + (gasUsed * BigInt(30)) / BigInt(100) }, // increased by ~30% from actual gas used
     );
     const txReceipt = await txResponse.wait();
 
@@ -1241,21 +1242,24 @@ export class WithdrawService implements OnModuleInit {
         payoutPoolContractAddress,
         payoutBot,
       );
-      const estimatedGas = await payoutPoolContract.payout.estimateGas(
-        ethers.parseEther(amount.toString()),
-        to,
-        signature,
-      );
+      // const estimatedGas = await payoutPoolContract.payout.estimateGas(
+      //   ethers.parseEther(amount.toString()),
+      //   to,
+      //   signature,
+      // );
       const txResponse = await payoutPoolContract.payout(
         ethers.parseEther(amount.toString()),
         to,
         signature,
-        { gasLimit: estimatedGas * estimatedGas * BigInt(0.3) }, // increased by ~30% from actual gas used
+        {
+          //if uncommented it throws "Exceeds block gas limit" error
+          // gasLimit: estimatedGas * ((estimatedGas * BigInt(30)) / BigInt(100)),
+        }, // increased by ~30% from actual gas used
       );
       const txReceipt = await txResponse.wait();
 
       // check native token balance for payout bot
-      this.eventEmitter.emit('gas.service.reload', payoutBot.address, 97);
+      this.eventEmitter.emit('gas.service.reload', payoutBot.address, chainId);
 
       return txReceipt;
     } catch (error) {
@@ -1265,6 +1269,7 @@ export class WithdrawService implements OnModuleInit {
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES, { utcOffset: 0 })
+  // @Cron('*/5 * * * * *', { utcOffset: 0 })
   async payoutCron() {
     const release = await this.payoutCronMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
@@ -1291,6 +1296,7 @@ export class WithdrawService implements OnModuleInit {
       }
     } catch (error) {
     } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
       release();
     }
   }
