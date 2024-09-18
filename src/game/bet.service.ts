@@ -976,7 +976,6 @@ export class BetService implements OnModuleInit {
       userWallet.pointBalance = pointTxEndingBalance;
       await queryRunner.manager.save(userWallet);
       await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
-      await queryRunner.commitTransaction();
 
       await this.handleReferralFlow(
         user.id,
@@ -995,6 +994,7 @@ export class BetService implements OnModuleInit {
           walletTxId: gameUsdTx.walletTxs[0].id,
         },
       );
+      await queryRunner.commitTransaction();
     } catch (error) {
       console.error(error);
       await queryRunner.rollbackTransaction();
