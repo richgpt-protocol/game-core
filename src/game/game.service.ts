@@ -244,7 +244,10 @@ export class GameService implements OnModuleInit {
       );
       const txReceipt = await txResponse.wait();
 
-      const game = await queryRunner.manager.findOneBy(Game, { id: gameId });
+      const game = await queryRunner.manager
+        .createQueryBuilder(Game, 'game')
+        .where('game.id = :id', { id: gameId })
+        .getOne();
       if (txReceipt.status === 1) {
         // on-chain tx success
         game.drawTxStatus = 'S';
@@ -253,15 +256,13 @@ export class GameService implements OnModuleInit {
 
         // find betOrder that numberPair matched and update availableClaim to true
         for (const result of drawResults) {
-          const betOrders = await queryRunner.manager.find(
-            BetOrder,
-            {
-              where: {
-                gameId,
-                numberPair: result.numberPair,
-              },
-            }
-          );
+          const betOrders = await queryRunner.manager
+            .createQueryBuilder(BetOrder, 'betOrder')
+            .where('betOrder.gameId = :gameId', { gameId })
+            .andWhere('betOrder.numberPair = :numberPair', {
+              numberPair: result.numberPair,
+            })
+            .getMany();
           // there might be more than 1 betOrder that numberPair matched
           for (const betOrder of betOrders) {
             betOrder.availableClaim = true;
