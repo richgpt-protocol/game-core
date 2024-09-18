@@ -678,19 +678,46 @@ export class BackOfficeService {
       totalWinCount: 0,
       totalWinAmount: 0,
       totalProfit: 0,
+      category: {
+        first: { count: 0, amount: 0 },
+        second: { count: 0, amount: 0 },
+        third: { count: 0, amount: 0 },
+        special: { count: 0, amount: 0 },
+        consolation: { count: 0, amount: 0 },
+      },
     };
 
     let totalBetUser = new Set();
     for (const betOrder of betOrders) {
       totalBetUser.add(betOrder.walletTx.userWalletId);
       result.totalBetCount += 1;
-      const betAmount = betOrder.bigForecastAmount + betOrder.smallForecastAmount;
+      const betAmount = Number(betOrder.bigForecastAmount) + Number(betOrder.smallForecastAmount);
       result.totalBetAmount += betAmount;
-      result.totalCreditUsed += betOrder.creditWalletTx ? betOrder.creditWalletTx.amount : 0;
+      result.totalCreditUsed += betOrder.creditWalletTx ? Number(betOrder.creditWalletTx.amount) : 0;
       result.totalWinCount += betOrder.availableClaim ? 1 : 0;
-      const winAmount = betOrder.availableClaim ? this.getWinAmount(betOrder, drawResults) : 0;
-      result.totalWinAmount += winAmount;
-      result.totalProfit += betAmount - winAmount;
+      if (betOrder.availableClaim) {
+        const { winAmount, prizeCategory } = this.getWinAmountAndPrizeCategory(betOrder, drawResults);
+        result.totalWinAmount += winAmount;
+        result.totalProfit += betAmount - winAmount;
+        if (prizeCategory === '1') {
+          result.category.first.count += 1;
+          result.category.first.amount += winAmount;
+        } else if (prizeCategory === '2') {
+          result.category.second.count += 1;
+          result.category.second.amount += winAmount;
+        } else if (prizeCategory === '3') {
+          result.category.third.count += 1;
+          result.category.third.amount += winAmount;
+        } else if (prizeCategory === 'S') {
+          result.category.special.count += 1;
+          result.category.special.amount += winAmount;
+        } else if (prizeCategory === 'C') {
+          result.category.consolation.count += 1;
+          result.category.consolation.amount += winAmount;
+        }
+      } else {
+        result.totalProfit += betAmount;
+      }
     }
 
     result.totalBetUser = totalBetUser.size;
@@ -700,13 +727,16 @@ export class BackOfficeService {
     };
   }
 
-  private getWinAmount(betOrder: BetOrder, drawResults: DrawResult[]): number {
+  private getWinAmountAndPrizeCategory(betOrder: BetOrder, drawResults: DrawResult[]): { winAmount: number, prizeCategory: string } {
     const drawResult = drawResults.find(
       (drawResult) => drawResult.numberPair === betOrder.numberPair,
     );
     // drawResult must not null because betOrder.availableClaim is true in parent function
     const winAmount = this.claimService.calculateWinningAmount(betOrder, drawResult);
-    return winAmount.bigForecastWinAmount + winAmount.smallForecastWinAmount;
+    return {
+      winAmount: winAmount.bigForecastWinAmount + winAmount.smallForecastWinAmount,
+      prizeCategory: drawResult.prizeCategory,
+    }
   }
 
   async getCurrentPrizeAlgo() {

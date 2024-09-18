@@ -291,13 +291,53 @@
           <% if (data && data.bets) { %>
             <h2>Sales Report</h2>
             <div>
-              <span>Total Bet User: <%- data.totalBetUser %></span><br />
-              <span>Total Bet Count: <%- data.totalBetCount %></span><br />
-              <span>Total Bet Amount: $<%- data.totalBetAmount %></span><br />
-              <span>Total Credit Used: $<%- data.totalCreditUsed %></span><br />
-              <span>Total Win Count: <%- data.totalWinCount %></span><br />
-              <span>Total Win Amount: $<%- data.totalWinAmount %></span><br />
-              <span>Total Profit: $<%- data.totalProfit %></span><br />
+              <span>Total Bet User: <%- data.bets.totalBetUser %></span><br />
+              <span>Total Bet Count: <%- data.bets.totalBetCount %></span><br />
+              <span>Total Bet Amount: $<%- data.bets.totalBetAmount %></span><br />
+              <span>Total Credit Used: $<%- data.bets.totalCreditUsed %></span><br />
+              <span>Total Win Count: <%- data.bets.totalWinCount %></span><br />
+              <span>Total Win Amount: $<%- data.bets.totalWinAmount %></span><br />
+              <span>Total Profit: $<%- data.bets.totalProfit %></span><br />
+            </div>
+            <br />
+            <h3>Win Count & Amount Based on Prize Category</h3>
+            <div>
+              <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Winning Bet Count</th>
+                        <th>Winning Bet Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>First</td>
+                    <td><%- data.bets.category.first.count %></td>
+                    <td>$<%- data.bets.category.first.amount %></td>
+                  </tr>
+                  <tr>
+                    <td>Second</td>
+                    <td><%- data.bets.category.second.count %></td>
+                    <td>$<%- data.bets.category.second.amount %></td>
+                  </tr>
+                  <tr>
+                    <td>Third</td>
+                    <td><%- data.bets.category.third.count %></td>
+                    <td>$<%- data.bets.category.third.amount %></td>
+                  </tr>
+                  <tr>
+                    <td>Special</td>
+                    <td><%- data.bets.category.special.count %></td>
+                    <td>$<%- data.bets.category.special.amount %></td>
+                  </tr>
+                  <tr>
+                    <td>Consolation</td>
+                    <td><%- data.bets.category.consolation.count %></td>
+                    <td>$<%- data.bets.category.consolation.amount %></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           <% } else { %>
             <p>No data available</p>
