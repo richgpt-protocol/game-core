@@ -73,7 +73,7 @@ export class LoginWithTelegramDTO {
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   photo_url: string;
 
   @ApiProperty()
