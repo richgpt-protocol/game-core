@@ -71,14 +71,13 @@ export class GameGateway {
       }
 
       // submit draw result to Core contract
-      // await this.gameService.updateDrawResult(drawResults, lastGame.id);
       const jobId = `submitDrawResult-${lastGame.id}`;
       await this.queueService.addJob(
         'GAME_QUEUE',
         jobId,
         {
           drawResults: drawResults,
-          lastGameId: lastGame.id,
+          gameId: lastGame.id,
           queueType: 'SUBMIT_DRAW_RESULT',
         },
         0, // no delay

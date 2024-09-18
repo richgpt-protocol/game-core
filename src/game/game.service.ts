@@ -250,6 +250,7 @@ export class GameService implements OnModuleInit {
         .getOne();
       if (txReceipt.status === 1) {
         // on-chain tx success
+        // MUST NOT ERROR FROM HERE else setDrawResults() will be called again in next job
         game.drawTxStatus = 'S';
         game.drawTxHash = txReceipt.hash;
         await queryRunner.manager.save(game);
