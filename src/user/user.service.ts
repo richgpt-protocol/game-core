@@ -867,23 +867,27 @@ export class UserService {
   }
 
   async setUserNotification(userId: number, _notification: NotificationDto) {
-    const notification = this.notificationRepository.create({
-      type: _notification.type,
-      title: _notification.title,
-      message: _notification.message,
-    });
-    if (_notification.walletTxId) {
-      notification.walletTx = await this.walletTxRepository.findOneBy({
-        id: _notification.walletTxId,
+    try {
+      const notification = this.notificationRepository.create({
+        type: _notification.type,
+        title: _notification.title,
+        message: _notification.message,
       });
-    }
-    await this.notificationRepository.save(notification);
+      if (_notification.walletTxId) {
+        notification.walletTx = await this.walletTxRepository.findOneBy({
+          id: _notification.walletTxId,
+        });
+      }
+      await this.notificationRepository.save(notification);
 
-    const userNotification = this.userNotificationRepository.create({
-      user: await this.userRepository.findOneBy({ id: userId }),
-      notification: notification,
-    });
-    await this.userNotificationRepository.save(userNotification);
+      const userNotification = this.userNotificationRepository.create({
+        user: await this.userRepository.findOneBy({ id: userId }),
+        notification: notification,
+      });
+      await this.userNotificationRepository.save(userNotification);
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   async updateUserNotification(userId: number) {

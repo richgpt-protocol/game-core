@@ -984,6 +984,7 @@ export class BetService implements OnModuleInit {
         gameUsdTx.walletTxs[0].id,
         queryRunner,
       );
+      await queryRunner.commitTransaction();
 
       await this.userService.setUserNotification(
         gameUsdTx.walletTxs[0].userWallet.userId,
@@ -994,7 +995,6 @@ export class BetService implements OnModuleInit {
           walletTxId: gameUsdTx.walletTxs[0].id,
         },
       );
-      await queryRunner.commitTransaction();
     } catch (error) {
       console.error(error);
       await queryRunner.rollbackTransaction();
