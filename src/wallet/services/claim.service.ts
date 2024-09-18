@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Game } from 'src/game/entities/game.entity';
 import { DataSource, In, Not, Repository } from 'typeorm';
@@ -8,7 +8,7 @@ import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { WalletTx } from '../entities/wallet-tx.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { ethers } from 'ethers';
-import { Core__factory } from 'src/contract';
+import { Core__factory, Deposit__factory } from 'src/contract';
 import { ICore } from 'src/contract/Core';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
@@ -16,6 +16,11 @@ import { AdminNotificationService } from 'src/shared/services/admin-notification
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
 import { UserService } from 'src/user/user.service';
 import { MPC } from 'src/shared/mpc';
+import { Job } from 'bullmq';
+import { PointService } from 'src/point/point.service';
+import { WalletService } from '../wallet.service';
+import { User } from 'src/user/entities/user.entity';
+import { QueueService } from 'src/queue/queue.service';
 
 type ClaimResponse = {
   error: string;
@@ -31,7 +36,7 @@ type ClaimEvent = {
 };
 
 @Injectable()
-export class ClaimService {
+export class ClaimService implements OnModuleInit {
   provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
 
   constructor(
@@ -55,7 +60,21 @@ export class ClaimService {
     private adminNotificationService: AdminNotificationService,
     private eventEmitter: EventEmitter2,
     private userService: UserService,
+    private readonly pointService: PointService,
+    private readonly walletService: WalletService,
+    private readonly queueService: QueueService,
   ) {}
+
+  onModuleInit() {
+    this.queueService.registerHandler(
+      'CLAIM_REFERRAL_BONUS',
+      'WINNING_REFERRAL_BONUS',
+      {
+        jobHandler: this.transferReferrerBonus.bind(this),
+        failureHandler: this.onReferralBonusFailure.bind(this),
+      },
+    );
+  }
 
   async claim(userId: number): Promise<ClaimResponse> {
     // claim is not available within 5 minutes after last game ended
@@ -368,6 +387,44 @@ export class ClaimService {
     return { error: null, data: { walletTx: walletTx } };
   }
 
+  async reProcessReferralBonus(walletTxId: number): Promise<void> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      await queryRunner.startTransaction();
+      const walletTx = await queryRunner.manager.findOne(WalletTx, {
+        where: { id: walletTxId },
+        relations: { userWallet: true },
+      });
+
+      if (!walletTx) {
+        throw new BadRequestException('WalletTx not found');
+      }
+
+      await queryRunner.release();
+
+      const jobId = `processWinReferralBonus_${walletTx.id}`;
+      await this.queueService.addJob('CLAIM_REFERRAL_BONUS', jobId, {
+        claimAmount: walletTx.txAmount,
+        userId: walletTx.userWallet.userId,
+        walletTxId: walletTx.id,
+        queueType: 'WINNING_REFERRAL_BONUS',
+      });
+
+      return;
+    } catch (error) {
+      console.error('Error in reProcessReferralBonus', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      } else {
+        throw new BadRequestException('Error in reProcessReferralBonus');
+      }
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
   @OnEvent('wallet.claim', { async: true })
   async handleClaimEvent(payload: ClaimEvent): Promise<void> {
     // fetch txResponse from hash and wait for txReceipt
@@ -418,6 +475,15 @@ export class ClaimService {
         userWallet.pointBalance =
           Number(userWallet.pointBalance) + totalPointAmount;
         await queryRunner.manager.save(userWallet);
+        await queryRunner.commitTransaction();
+
+        const jobId = `processWinReferralBonus_${walletTx.id}`;
+        await this.queueService.addJob('CLAIM_REFERRAL_BONUS', jobId, {
+          claimAmount: walletTx.txAmount,
+          userId: payload.userId,
+          walletTxId: walletTx.id,
+          queueType: 'WINNING_REFERRAL_BONUS',
+        });
       } else {
         // txReceipt.status === 0
         // inform admin for failed on-chain claim tx
@@ -430,8 +496,6 @@ export class ClaimService {
           walletTx.id,
         );
       }
-
-      await queryRunner.commitTransaction();
     } catch (err) {
       // rollback queryRunner
       await queryRunner.rollbackTransaction();
@@ -459,6 +523,125 @@ export class ClaimService {
         message: 'Your claim has been successfully processed',
         walletTxId: walletTx.id,
       });
+    }
+  }
+
+  async transferReferrerBonus(
+    job: Job<{
+      claimAmount: number;
+      userId: number;
+      walletTxId: number;
+    }>,
+  ): Promise<void> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      const { claimAmount, userId } = job.data;
+      if (claimAmount === 0) return;
+
+      const userInfo = await queryRunner.manager
+        .createQueryBuilder(User, 'user')
+        .leftJoinAndSelect('user.referralUser', 'referralUser')
+        .leftJoinAndSelect('referralUser.wallet', 'wallet')
+        .where('user.id = :userId', { userId })
+        .getOne();
+
+      if (!userInfo || !userInfo.referralUser) {
+        return;
+      }
+      const level = await this.walletService.calculateLevel(
+        userInfo.referralUser.wallet.pointBalance,
+      );
+
+      const bonusPerc =
+        await this.pointService.getReferralPrizeBonusTier(level);
+
+      if (!bonusPerc || bonusPerc === 0) {
+        return;
+      }
+
+      const bonusAmount = claimAmount * (bonusPerc / 100);
+
+      const lastValidWalletTx = await queryRunner.manager.findOne(WalletTx, {
+        where: {
+          userWalletId: userInfo.referralUser.wallet.id,
+          status: 'S',
+        },
+        order: { id: 'DESC' },
+      });
+
+      const walletTx = new WalletTx();
+      walletTx.txType = 'REFERRAL';
+      walletTx.txAmount = bonusAmount;
+      walletTx.status = 'S';
+
+      const chainId = Number(process.env.BASE_CHAIN_ID);
+      const depositContract = Deposit__factory.connect(
+        process.env.DEPOSIT_CONTRACT_ADDRESS,
+        new ethers.Wallet(
+          await MPC.retrievePrivateKey(process.env.DEPOSIT_BOT_ADDRESS),
+          new ethers.JsonRpcProvider(
+            process.env[`PROVIDER_RPC_URL_${chainId}`],
+          ),
+        ),
+      );
+
+      //TODO deposit to referral wallet
+
+      const gameUsdTx = new GameUsdTx();
+      gameUsdTx.amount = bonusAmount;
+      gameUsdTx.chainId = chainId;
+      gameUsdTx.status = 'S';
+      gameUsdTx.txHash = null; //TODO
+      gameUsdTx.senderAddress = process.env.DEPOSIT_BOT_ADDRESS; //TODO
+      gameUsdTx.receiverAddress = userInfo.referralUser.wallet.walletAddress;
+      gameUsdTx.retryCount = 0;
+      await queryRunner.manager.save(gameUsdTx);
+
+      walletTx.gameUsdTx = gameUsdTx;
+      walletTx.startingBalance = lastValidWalletTx
+        ? lastValidWalletTx.endingBalance
+        : 0;
+      walletTx.endingBalance =
+        Number(walletTx.startingBalance) + Number(bonusAmount);
+      walletTx.userWalletId = userInfo.referralUser.wallet.id;
+      await queryRunner.manager.save(walletTx);
+      userInfo.referralUser.wallet.walletBalance =
+        Number(userInfo.referralUser.wallet.walletBalance) + bonusAmount;
+      await queryRunner.manager.save(walletTx);
+      await queryRunner.manager.save(userInfo.referralUser.wallet);
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      console.error('Error in transferReferrerBonus', error);
+      await queryRunner.rollbackTransaction();
+
+      throw new Error('Error in transferReferrerBonus');
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  private async onReferralBonusFailure(
+    job: Job<{
+      claimAmount: number;
+      userId: number;
+      walletTxId: number;
+    }>,
+  ): Promise<void> {
+    try {
+      const { walletTxId } = job.data;
+
+      await this.adminNotificationService.setAdminNotification(
+        `Error Transferring winning referral bonus. WalletTxId: ${walletTxId}`,
+        'transferReferrerBonusError',
+        'Transfer Referrer Bonus Error',
+        true,
+        false,
+      );
+    } catch (error) {
+      console.error('Error in onReferralBonusFailure', error);
     }
   }
 
