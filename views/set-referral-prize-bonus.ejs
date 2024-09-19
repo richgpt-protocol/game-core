@@ -257,33 +257,45 @@
           <input type="number" name="referralPrizeBonusTier10" value="<%= data.referralPrizeBonusTier10 || 0 %>" required/>
         </div>
         
-        <button>Set Winning Referral Commision</button>
+        <button type="submit">Set Winning Referral Commision</button>
       </form>
-
-      <!-- <script>
-        document.getElementById('referralPrizeBonusForm').addEventListener('submit', function(event) {
-          event.preventDefault(); // Prevent the default form submission
-      
-          const formData = new FormData(this);
-      
-          fetch('/api/v1/point/set-referral-prize-bonus', {
-            method: 'POST',
-            body: formData
-          })
-          .then(response => response.json())
-          .then(data => {
-            // Handle the response data here
-            console.log(data);
-            alert('Referral prize bonus updated successfully!');
-          })
-          .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while updating the referral prize bonus.');
-          });
-        });
-      </script> -->
+      <div id="responseMessage"></div>
     </div>
   </div>
+
+  <script>
+    document.getElementById('referralPrizeBonusForm').addEventListener('submit', async function(event) {
+      event.preventDefault();
+
+      const form = event.target;
+      const formData = new FormData(form);
+      const jsonData = {};
+        formData.forEach((value, key) => {
+        jsonData[key] = value;
+      });
+
+      try {
+        const response = await fetch(form.action, {
+          method: form.method,
+          headers: {
+          'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(jsonData),
+        });
+
+        const result = await response.json();
+        const responseMessage = document.getElementById('responseMessage');
+
+        if (response.ok) {
+          responseMessage.innerHTML = `<p style="color: green;">${result.message}</p>`;
+        } else {
+          responseMessage.innerHTML = `<p style="color: red;">${result.message}</p>`;
+        }
+      } catch (error) {
+        document.getElementById('responseMessage').innerHTML = `<p style="color: red;">An error occurred: ${error.message}</p>`;
+      }
+    });
+  </script>
 
   <!-- <img src="/logo.svg">  -->
   <div class="bg"></div>
