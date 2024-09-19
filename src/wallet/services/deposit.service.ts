@@ -140,7 +140,7 @@ export class DepositService {
       await queryRunner.manager.save(depositTx);
 
       // reload user wallet if needed
-      if (payload.chainId != Number(process.env.BASE_CHAIN_ID)) {
+      if (payload.chainId !== Number(process.env.BASE_CHAIN_ID)) {
         // reload user wallet on deposit chain if needed
         this.eventEmitter.emit(
           'gas.service.reload',
@@ -294,6 +294,7 @@ export class DepositService {
             error,
           );
           depositTx.retryCount += 1;
+          await queryRunner.manager.save(depositTx);
           // finally block will do queryRunner.release() & cronMutex.release()
 
         } finally {
