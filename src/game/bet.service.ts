@@ -1,18 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import {
-  BadRequestException,
-  Injectable,
-  OnModuleInit,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  In,
-  Repository,
-  DataSource,
-  QueryRunner,
-  Not,
-} from 'typeorm';
+import { In, Repository, DataSource, QueryRunner, Not } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { BetDto, EstimateBetResponseDTO } from 'src/game/dto/Bet.dto';
 import { Game } from './entities/game.entity';
@@ -46,7 +36,6 @@ import { MPC } from 'src/shared/mpc';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
-
 
 interface SubmitBetJobDTO {
   walletTxId: number;
@@ -398,7 +387,8 @@ export class BetService implements OnModuleInit {
         }
 
         if (
-          (new Date().getUTCDate() - allGamesObj[epoch].endDate.getTime()) / 1000 >
+          (new Date().getUTCDate() - allGamesObj[epoch].endDate.getTime()) /
+            1000 >
           this.maskingIntervalInSeconds
         ) {
           throw new BadRequestException(
@@ -474,7 +464,7 @@ export class BetService implements OnModuleInit {
     const maxAllowedCreditAmount =
       this.configService.get('MAX_CREDIT_AMOUNT') || 1;
     let totalBetAmount = 0;
-    let creditRemaining = totalCredits;
+    let creditRemaining = Number(totalCredits);
     let totalCreditUsed = 0;
     let walletBalanceUsed = 0;
 
@@ -482,7 +472,8 @@ export class BetService implements OnModuleInit {
 
     bets.forEach((bet) => {
       if (creditRemaining > 0) {
-        const betAmonut = bet.bigForecastAmount + bet.smallForecastAmount;
+        const betAmonut =
+          Number(bet.bigForecastAmount) + Number(bet.smallForecastAmount);
         const creditAvailable =
           creditRemaining > +maxAllowedCreditAmount
             ? +maxAllowedCreditAmount
@@ -710,10 +701,7 @@ export class BetService implements OnModuleInit {
         }
       });
 
-      await this._checkAllowanceAndApprove(
-        userSigner,
-        ethers.MaxUint256,
-      );
+      await this._checkAllowanceAndApprove(userSigner, ethers.MaxUint256);
 
       const gasLimit = await coreContract
         .connect(userSigner)
@@ -785,7 +773,9 @@ export class BetService implements OnModuleInit {
       }
 
       const provider = new JsonRpcProvider(
-        this.configService.get(`PROVIDER_RPC_URL_${this.configService.get('BASE_CHAIN_ID')}`),
+        this.configService.get(
+          `PROVIDER_RPC_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+        ),
       );
       const userSigner = new Wallet(
         await MPC.retrievePrivateKey(userWallet.walletAddress),
@@ -1015,7 +1005,6 @@ export class BetService implements OnModuleInit {
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
-
     try {
       const userInfo = await queryRunner.manager
         .createQueryBuilder(User, 'user')
@@ -1041,7 +1030,7 @@ export class BetService implements OnModuleInit {
         .where(
           'walletTx.userWalletId = :userWalletId AND walletTx.status = :status',
           {
-            userWalletId: userInfo.referralUserId,
+            userWalletId: referralUserInfo.wallet.id,
             status: 'S',
           },
         )
@@ -1087,7 +1076,11 @@ export class BetService implements OnModuleInit {
           await MPC.retrievePrivateKey(
             this.configService.get('DEPOSIT_BOT_ADDRESS'),
           ),
-          new JsonRpcProvider(this.configService.get('PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'))),
+          new JsonRpcProvider(
+            this.configService.get(
+              'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
+            ),
+          ),
         ),
       );
 
