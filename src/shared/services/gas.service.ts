@@ -137,6 +137,7 @@ export class GasService {
           }
 
         } catch (error) {
+          console.log('handlePendingReloadTx() error, error:', error);
           reloadTx.status = 'F';
           reloadTx.retryCount++;
         }
