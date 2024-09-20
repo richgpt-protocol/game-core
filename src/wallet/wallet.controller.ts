@@ -188,7 +188,7 @@ export class WalletController {
     @Body() payload: ReviewRedeemDto,
   ): Promise<ResponseVo<any>> {
     try {
-      const res = await this.withdrawService.reviewRedeem(
+      const res = await this.withdrawService.reviewAdmin(
         Number(req.user.userId),
         payload,
       );
