@@ -68,13 +68,12 @@ export class LoginWithTelegramDTO {
   hash: string;
 
   @ApiProperty()
-  @IsNumber()
   @IsNotEmpty()
-  id: number;
+  id: string;
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   photo_url: string;
 
   @ApiProperty()

@@ -5,6 +5,7 @@ import { User } from 'src/user/entities/user.entity';
 import { Telegraf } from 'telegraf';
 import { Repository } from 'typeorm';
 import { AdminNotificationService } from './admin-notification.service';
+import { UserStatus } from '../enum/status.enum';
 
 @Injectable()
 export class TelegramService {
@@ -26,6 +27,7 @@ export class TelegramService {
 
     this.telegramOTPBot = new Telegraf(telegramOTPBotToken);
     this.telegramOTPBot.start((ctx) => this.handleStartCommand(ctx));
+    this.telegramOTPBot.on('contact', (ctx) => this.handleContactSharing(ctx));
     this.telegramOTPBot.launch();
   }
 
@@ -56,10 +58,10 @@ export class TelegramService {
         return await ctx.reply('Invalid request');
       }
 
-      if (user.tgId && user.tgUsername) {
+      if (user.tgId && user.status == 'A') {
         //Login OTP
-        if (user.tgUsername != username) {
-          return await ctx.reply('Invalid Username');
+        if (user.tgId != id) {
+          return await ctx.reply('Invalid Telegram account');
         }
 
         return await ctx.reply(
@@ -81,19 +83,34 @@ export class TelegramService {
           ],
         });
 
-        if (existing) {
-          return await ctx.reply('Telegram already linked to an account');
+        if (
+          existing &&
+          existing.status != UserStatus.UNVERIFIED &&
+          existing.status != UserStatus.PENDING
+        ) {
+          return await ctx.reply('Please Contact Admin');
         }
 
         user.tgId = id;
         user.tgUsername = username;
 
         await this.userRepository.save(user);
-
-        await ctx.reply(
-          `Please use the code - ${user.verificationCode} to verify your mobile number for ${this.configService.get(
-            'APP_NAME',
-          )} user registration.`,
+        const requestContactKeyboard = {
+          reply_markup: {
+            keyboard: [
+              [
+                {
+                  text: 'Share Contact',
+                  request_contact: true,
+                },
+              ],
+            ],
+            one_time_keyboard: true,
+          },
+        };
+        return await ctx.reply(
+          'Please share your contact information:',
+          requestContactKeyboard,
         );
       }
     } catch (error) {
@@ -105,5 +122,63 @@ export class TelegramService {
         true,
       );
     }
+  }
+
+  private async handleContactSharing(ctx) {
+    const { id, username } = ctx.update.message.from;
+    const { contact } = ctx.update.message;
+
+    // If user uploads contact manually
+    if (!contact || !contact.phone_number || !contact.user_id) {
+      return await ctx.reply('Invalid request: contact is missing');
+    }
+    if (contact.user_id != id) {
+      return await ctx.reply('Invalid contact');
+    }
+    if (contact.vcard) {
+      return await ctx.reply('Please use the Button to share contact');
+    }
+
+    const user = await this.userRepository.findOne({
+      where: {
+        tgId: id,
+      },
+      select: [
+        'id',
+        'verificationCode',
+        'tgUsername',
+        'tgId',
+        'status',
+        'isReset',
+        'phoneNumber',
+      ],
+    });
+
+    console.log(user);
+
+    if (!user) {
+      return await ctx.reply('Invalid request');
+    }
+
+    // if (user.phoneNumber != contact.phone_number) {
+    //   return await ctx.reply('Invalid phone number');
+    // }
+
+    if (
+      user.tgId != id ||
+      user.tgUsername != username ||
+      user.phoneNumber != contact.phone_number
+    ) {
+      user.tgUsername = null;
+      user.tgId = null;
+      await this.userRepository.save(user);
+      return await ctx.reply('Invalid Data. Please try to register again');
+    }
+
+    await ctx.reply(
+      `Please use the code - ${user.verificationCode} to verify your mobile number for ${this.configService.get(
+        'APP_NAME',
+      )} user registration.`,
+    );
   }
 }

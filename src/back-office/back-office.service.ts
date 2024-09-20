@@ -10,6 +10,7 @@ import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
+import { ClaimService } from 'src/wallet/services/claim.service';
 import { WalletService } from 'src/wallet/wallet.service';
 import { Between, In, Repository } from 'typeorm';
 
@@ -37,6 +38,7 @@ export class BackOfficeService {
     @InjectRepository(PrizeAlgo)
     private prizeAlgoRepository: Repository<PrizeAlgo>,
     private walletService: WalletService,
+    private claimService: ClaimService,
   ) {}
 
   async getUsers(page: number = 1, limit: number = 10): Promise<any> {
@@ -62,7 +64,7 @@ export class BackOfficeService {
       const users = data[0];
 
       const userInfo = users.map((user) => {
-        const walletAddress = user.wallet.walletAddress;
+        const walletAddress = user.wallet?.walletAddress || '';
         delete user.wallet;
         return {
           ...user,
@@ -560,13 +562,14 @@ export class BackOfficeService {
     };
   }
 
-  async salesReport(startDate: Date, endDate: Date) {
+  async salesReport(startDate: string, endDate: string) {
     const betOrders = await this.betOrderRepository
       .createQueryBuilder('betOrder')
       .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .leftJoinAndSelect('betOrder.claimDetail', 'claimDetail')
       .where('betOrder.createdDate BETWEEN :startDate AND :endDate', {
+        // need to pass as string instead of Date object because of the timezone issue
         startDate,
         endDate,
       })
@@ -585,19 +588,20 @@ export class BackOfficeService {
       .getRawMany();
 
     const resultByDate = {};
-    const start = startDate;
-    while (start < endDate) {
+    const start = new Date(startDate);
+    while (start < new Date(endDate)) {
       resultByDate[start.toDateString()] = {
         totalBetAmount: 0,
         betCount: 0,
         userCount: 0,
         totalPayout: 0,
         totalPayoutRewards: 0,
-        commissionAmount:
+        commissionAmount: Number(
           commissions.find(
             (_commision) =>
               _commision.createdDate.toDateString() === start.toDateString(),
           )?.txAmount || 0,
+        ),
       };
       start.setDate(start.getDate() + 1);
     }
@@ -638,14 +642,110 @@ export class BackOfficeService {
     };
   }
 
-  async getCurrentPrizeAlgo() {
-    const prizeAlgo = await this.prizeAlgoRepository.findOne({
-      where: { id: 1 }
+  async salesReportByEpoch(epoch: number) {
+    const betOrders = await this.betOrderRepository
+      .createQueryBuilder('betOrder')
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('betOrder.game', 'game')
+      .where('game.epoch = :epoch', { epoch })
+      .getMany();
+
+    if (betOrders.length === 0) {
+      // no bet in this epoch
+      return {
+        data: null,
+      };
+    }
+
+    const drawResults = await this.drawResultRepository.find({
+      where: {
+        gameId: betOrders[0].gameId,
+      },
     });
+
+    if (drawResults.length === 0) {
+      // draw result for this epoch haven't come out yet
+      return {
+        data: null,
+      };
+    }
+
+    let result = {
+      totalBetUser: 0,
+      totalBetCount: 0,
+      totalBetAmount: 0,
+      totalCreditUsed: 0,
+      totalWinCount: 0,
+      totalWinAmount: 0,
+      totalProfit: 0,
+      category: {
+        first: { count: 0, amount: 0 },
+        second: { count: 0, amount: 0 },
+        third: { count: 0, amount: 0 },
+        special: { count: 0, amount: 0 },
+        consolation: { count: 0, amount: 0 },
+      },
+    };
+
+    let totalBetUser = new Set();
+    for (const betOrder of betOrders) {
+      totalBetUser.add(betOrder.walletTx.userWalletId);
+      result.totalBetCount += 1;
+      const betAmount = Number(betOrder.bigForecastAmount) + Number(betOrder.smallForecastAmount);
+      result.totalBetAmount += betAmount;
+      result.totalCreditUsed += betOrder.creditWalletTx ? Number(betOrder.creditWalletTx.amount) : 0;
+      result.totalWinCount += betOrder.availableClaim ? 1 : 0;
+      if (betOrder.availableClaim) {
+        const { winAmount, prizeCategory } = this.getWinAmountAndPrizeCategory(betOrder, drawResults);
+        result.totalWinAmount += winAmount;
+        result.totalProfit += betAmount - winAmount;
+        if (prizeCategory === '1') {
+          result.category.first.count += 1;
+          result.category.first.amount += winAmount;
+        } else if (prizeCategory === '2') {
+          result.category.second.count += 1;
+          result.category.second.amount += winAmount;
+        } else if (prizeCategory === '3') {
+          result.category.third.count += 1;
+          result.category.third.amount += winAmount;
+        } else if (prizeCategory === 'S') {
+          result.category.special.count += 1;
+          result.category.special.amount += winAmount;
+        } else if (prizeCategory === 'C') {
+          result.category.consolation.count += 1;
+          result.category.consolation.amount += winAmount;
+        }
+      } else {
+        result.totalProfit += betAmount;
+      }
+    }
+
+    result.totalBetUser = totalBetUser.size;
+
+    return {
+      data: result,
+    };
+  }
+
+  private getWinAmountAndPrizeCategory(betOrder: BetOrder, drawResults: DrawResult[]): { winAmount: number, prizeCategory: string } {
+    const drawResult = drawResults.find(
+      (drawResult) => drawResult.numberPair === betOrder.numberPair,
+    );
+    // drawResult must not null because betOrder.availableClaim is true in parent function
+    const winAmount = this.claimService.calculateWinningAmount(betOrder, drawResult);
+    return {
+      winAmount: winAmount.bigForecastWinAmount + winAmount.smallForecastWinAmount,
+      prizeCategory: drawResult.prizeCategory,
+    }
+  }
+
+  async getCurrentPrizeAlgo() {
+    const prizeAlgo = await this.prizeAlgoRepository.find();
 
     const game = await this.gameRepository.findOne({
       where: { isClosed: false },
-    })
+    });
 
     return {
       data: prizeAlgo,
@@ -653,18 +753,29 @@ export class BackOfficeService {
     };
   }
 
-  async updatePrizeAlgo(prizeAlgo: PrizeAlgo) {
-    const currentPrizeAlgo = await this.prizeAlgoRepository.findOne({
-      where: { id: 1 },
-    });
+  async updatePrizeAlgo(
+    adminId: number,
+    prizeAlgos: Array<{ key: string; value: any }>,
+  ) {
+    const existingPrizeAlgos = await this.prizeAlgoRepository.find();
 
-    if (!currentPrizeAlgo) {
-      throw new InternalServerErrorException('Prize Algo not found');
+    const prizeAlgoMap = new Map(prizeAlgos.map((item) => [item.key, item]));
+
+    for (const existingPrizeAlgo of existingPrizeAlgos) {
+      const newPrizeAlgo = prizeAlgoMap.get(existingPrizeAlgo.key);
+      if (newPrizeAlgo) {
+        if (existingPrizeAlgo.value !== newPrizeAlgo.value) {
+          existingPrizeAlgo.value = newPrizeAlgo.value;
+          existingPrizeAlgo.updatedBy = adminId;
+        }
+      } else {
+        throw new InternalServerErrorException(
+          `Prize Algo with key ${existingPrizeAlgo.key} not found in the new prizeAlgos`,
+        );
+      }
     }
 
-    await this.prizeAlgoRepository.save({
-      ...currentPrizeAlgo,
-      ...prizeAlgo,
-    });
+    // existingPrizeAlgos is replaced with the updated prizeAlgos
+    await this.prizeAlgoRepository.save(existingPrizeAlgos);
   }
 }

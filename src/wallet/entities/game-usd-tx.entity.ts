@@ -40,14 +40,16 @@ export class GameUsdTx {
   @Column()
   receiverAddress: string;
 
-  @Column()
+  @Column({
+    default: 0,
+  })
   retryCount: number;
 
   @Column({
     nullable: true,
   })
   walletTxId: number;
-
+  // TO DO: there is only 1 walletTxId, how come @OneToMany?
   @OneToMany(() => WalletTx, (walletTx) => walletTx.gameUsdTx)
   walletTxs: WalletTx[];
 

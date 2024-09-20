@@ -188,7 +188,7 @@ export class WalletController {
     @Body() payload: ReviewRedeemDto,
   ): Promise<ResponseVo<any>> {
     try {
-      const res = await this.withdrawService.reviewRedeem(
+      const res = await this.withdrawService.reviewAdmin(
         Number(req.user.userId),
         payload,
       );
@@ -465,7 +465,7 @@ export class WalletController {
     @Request() req,
     @Body() payload: TransferGameUSDDto,
   ): Promise<ResponseVo<any>> {
-    const userId = req.user.id;
+    const userId = req.user.userId;
     // const userId = 1;
     try {
       await this.internalTransferService.transferGameUSD(userId, payload);
@@ -576,5 +576,16 @@ export class WalletController {
     //   console.error(error);
     //   throw new InternalServerErrorException();
     // }
+  }
+
+  @Secure(null, UserRole.ADMIN)
+  @Post('retry-credit')
+  async retryCredit(@Body() payload: { creditWalletTxId: number }) {
+    await this.creditService.retryCreditTx(payload.creditWalletTxId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'retry credit process initiated',
+      data: {},
+    };
   }
 }

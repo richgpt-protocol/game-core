@@ -1,9 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsNotEmpty,
-  IsString,
-  IsNumber,
-} from 'class-validator';
+import { IsNotEmpty, IsString, IsNumber } from 'class-validator';
 
 export class RedeemDto {
   @ApiProperty()
@@ -30,4 +26,9 @@ export class RedeemDto {
   @IsString()
   @IsNotEmpty()
   receiverAddress: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  withdrawPin: string;
 }

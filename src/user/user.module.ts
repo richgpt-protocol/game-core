@@ -15,8 +15,8 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
-import { ConfigService } from 'src/config/config.service';
 import { ConfigModule } from 'src/config/config.module';
+import { ConfigService } from 'src/config/config.service';
 
 @Module({
   imports: [

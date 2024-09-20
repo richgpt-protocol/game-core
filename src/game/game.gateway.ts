@@ -4,10 +4,10 @@ import { Server } from 'socket.io';
 import { Game } from './entities/game.entity';
 import { Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GameService } from './game.service';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
+import { QueueService } from 'src/queue/queue.service';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class GameGateway {
@@ -23,6 +23,7 @@ export class GameGateway {
     private gameService: GameService,
     private cacheSettingService: CacheSettingService,
     private adminNotificationService: AdminNotificationService,
+    private readonly queueService: QueueService,
   ) {}
 
   @SubscribeMessage('liveDrawResult')
@@ -43,9 +44,10 @@ export class GameGateway {
       .sort((a, b) => b.id - a.id);
   }
 
-  @Cron('0 2 */1 * * *', { utcOffset: 0 }) // 2 minutes after every hour UTC time
+  @Cron('0 2 */1 * * *') // 2 minutes after every hour
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
+    console.log('emitDrawResult()', new Date());
     try {
       // get draw result from last game
       const lastGame = await this.gameRepository.findOne({
@@ -53,15 +55,12 @@ export class GameGateway {
         order: { id: 'DESC' },
         relations: { drawResult: true }
       });
-      console.log('lastGame:', lastGame)
-      const drawResult = lastGame.drawResult;
-      console.log('drawResult:', drawResult)
-      // current drawResult is in sequence(first, second...)
-      // loop through drawResult in reverse order(consolation, special...) and emit to client
-      for (let i = drawResult.length - 1; i >= 0; i--) {
+      const drawResults = lastGame.drawResult;
+      // current drawResults is in sequence(first, second...)
+      // loop through drawResults in reverse order(consolation, special...) and emit to client
+      for (let i = drawResults.length - 1; i >= 0; i--) {
         // omit unnecessary fields to reduce payload size
-        const {prizeIndex, createdDate, ...result} = drawResult[i];
-        console.log('result:', result)
+        const {prizeIndex, createdDate, ...result} = drawResults[i];
         // TODO: use return instead of emit, to utilize nestjs functions(i.e. interceptor)
         // return { event: 'events', data: result };
         this.server.emit('liveDrawResult', result);
@@ -72,7 +71,17 @@ export class GameGateway {
       }
 
       // submit draw result to Core contract
-      await this.gameService.updateDrawResult(drawResult, lastGame.id);
+      const jobId = `submitDrawResult-${lastGame.id}`;
+      await this.queueService.addJob(
+        'GAME_QUEUE',
+        jobId,
+        {
+          drawResults: drawResults,
+          gameId: lastGame.id,
+          queueType: 'SUBMIT_DRAW_RESULT',
+        },
+        0, // no delay
+      );
 
     } catch (err) {
       // inform admin

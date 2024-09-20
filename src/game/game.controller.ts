@@ -51,7 +51,7 @@ export class GameController {
     }
   }
 
-  @Secure(null, UserRole.USER)
+  // @Secure(null, UserRole.USER)
   @Get('get-available-games')
   async getAvailableGames() {
     try {
@@ -165,8 +165,35 @@ export class GameController {
   ): Promise<ResponseVo<any>> {
     try {
       const userId = req.user.userId;
-      // const userId = 1;
       const data = await this.betService.bet(userId, payload);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'bet success',
+      };
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Secure(null, UserRole.ADMIN)
+  @Post('restart-bet')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async restartBet(
+    @Request() req,
+    @Body() payload: { gameUsdId: number },
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.betService.restartBet(payload.gameUsdId);
       return {
         statusCode: HttpStatus.OK,
         data,
