@@ -11,6 +11,7 @@ import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { ConfigService } from 'src/config/config.service';
 import {
   ContractTransactionReceipt,
+  ethers,
   JsonRpcProvider,
   parseUnits,
   Wallet,
@@ -24,6 +25,7 @@ import { GameTx } from './entity/gameTx.entity';
 import { Mutex } from 'async-mutex';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import axios from 'axios';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class PublicService {
@@ -42,6 +44,7 @@ export class PublicService {
     @InjectRepository(GameTx)
     private gameTxRespository: Repository<GameTx>,
     private adminNotificationService: AdminNotificationService,
+    private eventEmitter: EventEmitter2,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
       'DEPOSIT_BOT_ADDRESS',
@@ -85,7 +88,7 @@ export class PublicService {
       const existUser = await this.userService.signInWithTelegram({
         auth_date: 0,
         first_name: payload.firstName,
-        id: Number(payload.tgId),
+        id: payload.tgId,
         hash: '',
         photo_url: payload.photoUrl,
         username: payload.username,
@@ -144,7 +147,7 @@ export class PublicService {
       await queryRunner.manager.save(tx);
 
       if (payload.usdtAmount > 0) {
-        await this.addGameUSD(payload.usdtAmount, userWallet, tx, queryRunner);
+        await this.addUSDT(payload.usdtAmount, userWallet, tx, queryRunner);
       }
 
       if (payload.gameUsdAmount > 0) {
@@ -258,7 +261,7 @@ export class PublicService {
       gameUsdTx.txHash = null;
       gameUsdTx.receiverAddress = creditWalletTx.userWallet.walletAddress;
       gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
-      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.creditWalletTx = creditWalletTx;
       gameUsdTx.retryCount = 0;
 
@@ -275,7 +278,7 @@ export class PublicService {
     }
   }
 
-  private async addGameUSD(
+  private async addUSDT(
     amount: number,
     userWallet: UserWallet,
     gameTx: GameTx,
@@ -295,17 +298,23 @@ export class PublicService {
       gameTx.walletTx = walletTx;
       await queryRunner.manager.save(gameTx);
 
+      const senderWallet = new Wallet(
+        this.configService.get('USDT_SENDER_PRIV_KEY'),
+      );
+
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = amount;
       gameUsdTx.status = 'P';
       gameUsdTx.txHash = null;
       gameUsdTx.retryCount = 0;
       gameUsdTx.receiverAddress = userWallet.walletAddress;
-      gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
-      gameUsdTx.chainId = +this.configService.get('GAMEUSD_CHAIN_ID');
+      gameUsdTx.senderAddress = await senderWallet.getAddress();
+      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.walletTxs = [walletTx];
       gameUsdTx.walletTxId = walletTx.id;
+      walletTx.gameUsdTx = gameUsdTx;
       await queryRunner.manager.save(gameUsdTx);
+      await queryRunner.manager.save(walletTx);
     } catch (error) {
       console.error('Public-service: Failed to add GameUSD', error);
       throw new Error(error.message);
@@ -450,29 +459,32 @@ export class PublicService {
   }
 
   @Cron(CronExpression.EVERY_SECOND)
-  async handleAddGameUSD() {
+  async handleAddUSDT() {
     const release = await this.AddGameUSDMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
-      const gameTx = await queryRunner.manager
-        .createQueryBuilder(GameTx, 'gameTx')
-        .leftJoinAndSelect('gameTx.walletTx', 'walletTx')
+      const walletTx = await queryRunner.manager
+        .createQueryBuilder(WalletTx, 'walletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
         .leftJoinAndSelect('walletTx.gameUsdTx', 'gameUsdTx')
-        .where('gameUsdTx.status = :status', { status: 'P' })
-        .andWhere('walletTx.status = :status', { status: 'P' })
+        .leftJoinAndSelect('walletTx.gameTx', 'gameTx')
+        .where('walletTx.status = :status', { status: 'P' })
+        .andWhere('walletTx.txType = :txType', {
+          txType: 'GAME_TRANSACTION',
+        })
         .getOne();
 
-      if (!gameTx) {
+      // console.log(walletTx);
+
+      if (!walletTx || !walletTx.gameTx) {
         if (!queryRunner.isReleased) await queryRunner.release();
 
         return;
       }
 
-      const walletTx = gameTx.walletTx;
       const gameUsdTx = walletTx.gameUsdTx;
       const userWallet = walletTx.userWallet;
 
@@ -482,20 +494,41 @@ export class PublicService {
         });
 
         await queryRunner.commitTransaction();
+
+        await this.adminNotificationService.setAdminNotification(
+          `Error processing addUSDT. WalletTx: ${walletTx.id}`,
+          'SYNCHRONISE_ADD_USDT',
+          'Error processing addUSDT',
+          false,
+        );
         return;
       }
 
       let receipt: ContractTransactionReceipt;
       try {
-        const signer = await this.getSigner(
-          gameUsdTx.chainId,
-          gameUsdTx.senderAddress,
+        const provider = new JsonRpcProvider(
+          this.configService.get(`PROVIDER_URL_${gameUsdTx.chainId}`),
+        );
+        const signer = new Wallet(
+          this.configService.get('USDT_SENDER_PRIV_KEY'),
+          provider,
         );
 
-        const onchainTx = await this.depositGameUSD(
+        this.eventEmitter.emit(
+          'gas.service.reload',
+          await signer.getAddress(),
+          gameUsdTx.chainId,
+        );
+
+        const tokenContract = new ethers.Contract(
+          this.configService.get('OPBNB_USDT_TOKEN_ADDRESS'),
+          ['function transfer(address to, uint256 amount) returns (bool)'],
+          signer,
+        );
+
+        const onchainTx = await tokenContract.transfer(
           gameUsdTx.receiverAddress,
           parseUnits(gameUsdTx.amount.toString(), 18),
-          signer,
         );
         receipt = await onchainTx.wait(2);
 
@@ -525,22 +558,23 @@ export class PublicService {
         },
       });
       walletTx.startingBalance = lastValidWalletTx?.endingBalance || 0;
-      walletTx.endingBalance =
-        Number(lastValidWalletTx?.endingBalance || 0) +
-        Number(gameUsdTx.amount);
+      //uses the lastValidWalletTx's endingBalance as starting and ending balance,
+      //This is becauses, It will trigger the deposit flow, which will use the starting and ending balance from walletTx table.
+      walletTx.endingBalance = Number(lastValidWalletTx?.endingBalance || 0);
       userWallet.walletBalance = walletTx.endingBalance;
+      walletTx.txHash = receipt.hash;
       walletTx.status = 'S';
       await queryRunner.manager.save(walletTx);
       await queryRunner.manager.save(userWallet);
       await queryRunner.commitTransaction();
     } catch (error) {
       console.error('error in handleAddGameUSD Cron', error);
-      await this.adminNotificationService.setAdminNotification(
-        error.message,
-        'SYNCHRONISE_ADD_GAMEUSD',
-        'Error processing addGameUSD',
-        false,
-      );
+      // await this.adminNotificationService.setAdminNotification(
+      //   error.message,
+      //   'SYNCHRONISE_ADD_GAMEUSD',
+      //   'Error processing addGameUSD',
+      //   false,
+      // );
 
       await queryRunner.rollbackTransaction();
     } finally {
@@ -574,10 +608,20 @@ export class PublicService {
 
       console.log('publicService: Updating status for gameTx', gameTxn.id);
 
-      if (
-        (!gameTxn.creditWalletTx || gameTxn.creditWalletTx.status === 'S') &&
-        (!gameTxn.walletTx || gameTxn.walletTx.status === 'S')
-      ) {
+      if (!gameTxn.creditWalletTx || gameTxn.creditWalletTx.status === 'S') {
+        //If USDT deposited, waits for the deposit to be successful
+        if (gameTxn.walletTx && gameTxn.usdtAmount > 0) {
+          const depositWalletTx = await queryRunner.manager.findOne(WalletTx, {
+            where: {
+              txHash: gameTxn.walletTx.txHash,
+              status: 'S',
+              txType: 'DEPOSIT',
+            },
+          });
+
+          if (!depositWalletTx) return;
+        }
+
         gameTxn.status = 'S';
         await queryRunner.manager.save(gameTxn);
       }
