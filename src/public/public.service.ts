@@ -112,6 +112,10 @@ export class PublicService {
       creditBalance: userWallet.creditBalance,
       userLevel: this.walletService.calculateLevel(userWallet.pointBalance),
       referralCode: user.referralCode, // Share the referral code across the apps
+      xpCap: this.walletService.getCurrentXpCap(userWallet.pointBalance),
+      previousXpCap: this.walletService.getPreviousXpCap(
+        userWallet.pointBalance,
+      ),
     };
   }
 
@@ -188,6 +192,8 @@ export class PublicService {
       tx.status = 'P';
       tx.userWallet = userWallet;
       tx.userWalletId = userWallet.id;
+      tx.isNotified =
+        payload.gameUsdAmount > 0 || payload.usdtAmount > 0 ? false : true; // Notify only if there is included gameUSD or USDT transfer transaction
       await queryRunner.manager.save(tx);
 
       if (payload.usdtAmount > 0) {
@@ -209,11 +215,14 @@ export class PublicService {
 
       await queryRunner.commitTransaction();
 
-      const xp = Number(userWallet.pointBalance) + payload.xp;
+      const xp = Number(userWallet.pointBalance); // Get the updated XP balance
+      console.log('total xp', xp);
       return {
         uid: user.uid,
         xp,
         level: this.walletService.calculateLevel(xp),
+        xpCap: this.walletService.getCurrentXpCap(xp),
+        previousXpCap: this.walletService.getPreviousXpCap(xp),
         gameSessionToken: payload.gameSessionToken,
       };
     } catch (error) {
@@ -651,6 +660,7 @@ export class PublicService {
           isNotified: false,
           status: 'S',
         },
+        relations: ['walletTx', 'creditWalletTx'],
       });
 
       if (gameTxns.length === 0) {
@@ -663,17 +673,17 @@ export class PublicService {
           // console.log('Notifying mini game', gameTxn.id);
           await axios.post(this.miniGameNotificationEndPoint, {
             gameSessionToken: gameTxn.gameSessionToken,
-            gameUsdAmount: gameTxn.creditAmount,
-            usdtAmount: gameTxn.usdtAmount,
+            gameUsdAmount: Number(gameTxn.creditAmount),
+            usdtAmount: Number(gameTxn.usdtAmount),
             xp: gameTxn.xp,
-            creditBalance: gameTxn.creditWalletTx?.endingBalance || 0,
-            walletBalance: gameTxn.walletTx?.endingBalance || 0,
+            creditBalance: Number(gameTxn.creditWalletTx?.endingBalance) || 0,
+            walletBalance: Number(gameTxn.walletTx?.endingBalance) || 0,
           });
           await this.dataSource.manager.update(GameTx, gameTxn.id, {
             isNotified: true,
           });
         } catch (error) {
-          // console.error('error notifing MiniGame Cron', gameTxn.id);
+          console.error('error notifing MiniGame Cron', error.response.data);
         }
       }
     } catch (error) {

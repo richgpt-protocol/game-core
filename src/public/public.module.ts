@@ -4,7 +4,6 @@ import { PublicService } from './public.service';
 import { WalletModule } from 'src/wallet/wallet.module';
 import { PublicController } from './public.controller';
 import { ConfigModule } from 'src/config/config.module';
-import { ConfigService } from 'src/config/config.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GameTx } from './entity/gameTx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
@@ -20,7 +19,7 @@ import { SharedModule } from 'src/shared/shared.module';
     ConfigModule,
     SharedModule,
   ],
-  providers: [PublicService, ConfigService],
+  providers: [PublicService],
   controllers: [PublicController],
   exports: [PublicService],
 })

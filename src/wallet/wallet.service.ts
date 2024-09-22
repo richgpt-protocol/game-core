@@ -46,8 +46,24 @@ export class WalletService {
     // const growthFactor = 1.584893192;
     // const level = Math.log(point) / Math.log(growthFactor);
 
-    const level = this.levelMap.find((level) => level.xp > point).level - 1;
+    const level = this.levelMap
+      .sort((a, b) => a.xp - b.xp)
+      .find((level) => level.xp > point).level;
     return level;
+  }
+
+  getCurrentXpCap(point: number): number {
+    return this.levelMap
+      .sort((a, b) => a.xp - b.xp)
+      .find((level) => level.xp > point).xp;
+  }
+
+  getPreviousXpCap(point: number): number {
+    const levelData = this.levelMap
+      .sort((a, b) => a.xp - b.xp)
+      .find((level) => level.xp > point);
+
+    return levelData.level === 1 ? 0 : this.levelMap[levelData.level - 2].xp;
   }
 
   async getWalletTx(userId: number, count: number) {
