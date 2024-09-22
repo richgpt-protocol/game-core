@@ -1,4 +1,9 @@
-import { forwardRef, Module } from '@nestjs/common';
+import {
+  forwardRef,
+  MiddlewareConsumer,
+  Module,
+  RequestMethod,
+} from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
 import { CreditWalletTx } from './entities/credit-wallet-tx.entity';
@@ -32,6 +37,7 @@ import { DepositService } from './services/deposit.service';
 import { PointModule } from 'src/point/point.module';
 import { ConfigModule } from 'src/config/config.module';
 import { CreditService } from './services/credit.service';
+import { IpWhitelistMiddleware } from './middleware/ip-whitelist.middleware';
 
 @Module({
   imports: [
@@ -74,4 +80,10 @@ import { CreditService } from './services/credit.service';
   controllers: [WalletController],
   exports: [WalletService, CreditService],
 })
-export class WalletModule {}
+export class WalletModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(IpWhitelistMiddleware)
+      .forRoutes({ path: 'api/v1/wallet/deposit', method: RequestMethod.POST });
+  }
+}

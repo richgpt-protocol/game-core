@@ -108,7 +108,7 @@ export class ClaimService {
     // create gameUsdTx
     const gameUsdTx = this.gameUsdTxRepository.create({
       amount: 0,
-      chainId: Number(process.env.OPBNB_CHAIN_ID),
+      chainId: Number(process.env.BASE_CHAIN_ID),
       status: 'P',
       txHash: null,
       senderAddress: userWallet.walletAddress,
@@ -339,7 +339,7 @@ export class ClaimService {
       this.eventEmitter.emit(
         'gas.service.reload',
         userWallet.walletAddress,
-        Number(process.env.OPBNB_CHAIN_ID),
+        Number(process.env.BASE_CHAIN_ID),
       );
 
       await queryRunner.commitTransaction();

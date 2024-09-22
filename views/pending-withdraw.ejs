@@ -260,7 +260,7 @@
             <tbody>
               <% for(var i=0; i<data.transactions.length; i++) {%>
                 <tr>
-                  <td class="id" data-id="<%= data.transactions[i].id %>"><%= data.transactions[i].depositTx.id %></td>
+                  <td class="id" data-id="<%= data.transactions[i].id %>"><%= data.transactions[i].redeemTx.id %></td>
                   <!-- <td><%= data.transactions[i].name %></td> -->
                   <td class="name" data-id="<%= data.transactions[i].id %>"><%= data.transactions[i].txType %></td>
                   <td><%= data.transactions[i].txAmount %></td>
@@ -281,7 +281,7 @@
                     </select>
                   </td>
                   <td>
-                    <button class="update-btn" data-id="<%= data.transactions[i].id %>">Update</button>
+                    <button class="update-btn" data-id="<%= data.transactions[i].id %>"  data-redeem-tx-id="<%= data.transactions[i].redeemTx.id %>" >Update</button>
                   </td>
                   <!-- <td><a href="/api/v1/admin/update-admin-view/<%= data.transactions[i].id %>">update</a></td> -->
                 </tr>
@@ -328,6 +328,7 @@
     document.querySelectorAll('.update-btn').forEach(function(button) {
       button.addEventListener('click', function() {
         const id = this.getAttribute('data-id');
+        const redeemTxId = this.getAttribute('data-redeem-tx-id');
         const status = document.querySelector('.status[data-id="' + id + '"]').value;
         const payoutNote = document.querySelector('.payoutNote[data-id="' + id + '"]').value;
 
@@ -338,7 +339,7 @@
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            redeemTxId: Number(id),
+            redeemTxId: Number(redeemTxId),
             payoutCanProceed: status == 'A' ? true : false,
             payoutNote: payoutNote
           }),

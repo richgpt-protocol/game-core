@@ -2,12 +2,18 @@ import { Column, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { WalletTx } from './wallet-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 
+/**
+ * DepositTx is used for record transaction of token received to escrow wallet
+ */
+
 @Entity()
 export class DepositTx {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({
+    comment: 'token address deposited'
+  })
   currency: string;
 
   @Column()
@@ -27,7 +33,9 @@ export class DepositTx {
   })
   status: string;
 
-  @Column()
+  @Column({
+    default: 0,
+  })
   retryCount: number;
 
   @Column({

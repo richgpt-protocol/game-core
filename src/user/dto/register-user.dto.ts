@@ -131,3 +131,10 @@ export class UpdateUserByAdminDto {
   @IsNotEmpty()
   status: string;
 }
+
+export class WithdrawlPinDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  pin: string;
+}

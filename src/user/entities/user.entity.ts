@@ -40,7 +40,12 @@ export class User {
     nullable: true,
     type: 'bigint',
   })
-  tgId: number;
+  withdrawPin: string;
+
+  @Column({
+    nullable: true,
+  })
+  tgId: string;
 
   @Column({ nullable: true })
   referralCode: string;

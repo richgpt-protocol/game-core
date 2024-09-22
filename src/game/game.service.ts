@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, LessThan, MoreThan, Repository } from 'typeorm';
+import { DataSource, In, LessThan, MoreThan, Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -14,61 +14,82 @@ import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { MPC } from 'src/shared/mpc';
-import * as dotenv from 'dotenv';
-dotenv.config();
+import { ConfigService } from 'src/config/config.service';
+import { QueueService } from 'src/queue/queue.service';
+import { Job } from 'bullmq';
+
+
+interface SubmitDrawResultDTO {
+  drawResults: DrawResult[];
+  gameId: number;
+}
 
 @Injectable()
-export class GameService {
-  provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
+export class GameService implements OnModuleInit {
+  provider = new ethers.JsonRpcProvider(this.configService.get('PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID')));
 
   constructor(
     @InjectRepository(Game)
     private gameRepository: Repository<Game>,
     @InjectRepository(DrawResult)
     private drawResultRepository: Repository<DrawResult>,
-    @InjectRepository(BetOrder)
-    private betOrderRepository: Repository<BetOrder>,
-    @InjectRepository(WalletTx)
-    private walletTxRepository: Repository<WalletTx>,
     @InjectRepository(UserWallet)
     private userWalletRepository: Repository<UserWallet>,
     @InjectRepository(ClaimDetail)
     private claimDetalRepository: Repository<ClaimDetail>,
     private adminNotificationService: AdminNotificationService,
     private cacheSettingService: CacheSettingService,
+    private configService: ConfigService,
+    private readonly queueService: QueueService,
+    private dataSource: DataSource,
   ) {}
+  
 
   // process of closing bet for current epoch, set draw result, and announce draw result
   // 1. GameService.setBetClose: scheduled at :00UTC, create new game, and also submit masked betOrder to Core contract
   // 2. Local script: cron at :01UTC create drawResult records and save directly into database
   // 3. GameGateway.emitDrawResult: scheduled at :02UTC, emit draw result to all connected clients
-  // 4. follow by GameService.updateDrawResult: submit draw result to Core contract
+  // 4. follow by job GameService.submitDrawResult: submit draw result to Core contract
   // 5. :05UTC, allow claim
 
-  @Cron('0 0 */1 * * *', { utcOffset: 0 }) // every hour UTC time
+  onModuleInit() {
+    this.queueService.registerHandler('GAME_QUEUE', 'SUBMIT_DRAW_RESULT', {
+      jobHandler: this.submitDrawResult.bind(this),
+
+      //Executed when onchain tx is failed for 5 times continously
+      failureHandler: this.onChainTxFailed.bind(this),
+    });
+  }
+
+  @Cron('0 0 */1 * * *') // every hour
   async setBetClose(): Promise<void> {
+    console.log('setBetClose()', new Date());
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
     try {
       // clear cache for handleLiveDrawResult() to return empty array
       this.cacheSettingService.clear();
 
       // set bet close in game record for current epoch
-      const game = await this.gameRepository.findOne({
-        where: { isClosed: false },
-      });
+      const game = await queryRunner.manager
+        .createQueryBuilder(Game, 'game')
+        .where('game.isClosed = :isClosed', { isClosed: false })
+        .getOne()
       game.isClosed = true;
-      await this.gameRepository.save(game);
+      await queryRunner.manager.save(game);
 
       // create new game record for future
-      const lastFutureGame = await this.gameRepository.findOne({
-        // findOne() must provide where option
-        where: { isClosed: false },
-        order: { id: 'DESC' },
-      });
-      await this.gameRepository.save(
-        this.gameRepository.create({
+      const lastFutureGame = await queryRunner.manager
+        .createQueryBuilder(Game, 'game')
+        .where('game.isClosed = :isClosed', { isClosed: false })
+        .orderBy('game.id', 'DESC')
+        .getOne();
+      await queryRunner.manager.save(
+        queryRunner.manager.create(Game, {
           epoch: (Number(lastFutureGame.epoch) + 1).toString(),
-          maxBetAmount: Number(process.env.MAX_BET_AMOUNT),
-          minBetAmount: Number(process.env.MIN_BET_AMOUNT),
+          maxBetAmount: Number(this.configService.get('MAX_BET_AMOUNT')),
+          minBetAmount: Number(this.configService.get('MIN_BET_AMOUNT')),
           drawTxHash: null,
           drawTxStatus: null,
           // startDate & endDate: previous date + 1 hour
@@ -79,20 +100,19 @@ export class GameService {
       );
 
       // submit masked betOrder on-chain
-      const betOrders = await this.betOrderRepository.find({
-        where: {
-          gameId: game.id,
-          isMasked: true,
-        },
-      });
+      const betOrders = await queryRunner.manager
+        .createQueryBuilder(BetOrder, 'betOrder')
+        .where('betOrder.gameId = :gameId', { gameId: game.id })
+        .andWhere('betOrder.isMasked = :isMasked', { isMasked: true })
+        .getMany();
       if (betOrders.length === 0) return; // no masked betOrder to submit
 
       const helperBot = new ethers.Wallet(
-        await MPC.retrievePrivateKey(process.env.HELPER_BOT_ADDRESS),
+        await MPC.retrievePrivateKey(this.configService.get('HELPER_BOT_ADDRESS')),
         this.provider,
       );
       const helperContract = Helper__factory.connect(
-        process.env.HELPER_CONTRACT_ADDRESS,
+        this.configService.get('HELPER_CONTRACT_ADDRESS'),
         helperBot,
       );
       // construct params for Helper.betLastMinutes()
@@ -100,10 +120,11 @@ export class GameService {
       const userBets: { [key: string]: ICore.BetParamsStruct[] } = {};
       for (let i = 0; i < betOrders.length; i++) {
         const betOrder = betOrders[i];
-        const walletTx = await this.walletTxRepository.findOne({
-          where: { id: betOrder.walletTxId },
-          relations: { userWallet: true },
-        });
+        const walletTx = await queryRunner.manager
+          .createQueryBuilder(WalletTx, 'walletTx')
+          .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+          .where('walletTx.id = :id', { id: betOrder.walletTxId })
+          .getOne();
         const userAddress = walletTx.userWallet.walletAddress;
         if (!userBets[userAddress]) userBets[userAddress] = [];
         // big forecast & small forecast is treat as separate bet in contract
@@ -127,8 +148,8 @@ export class GameService {
         }
       }
 
-      const walletTx = await this.walletTxRepository
-        .createQueryBuilder('walletTx')
+      const walletTx = await queryRunner.manager
+        .createQueryBuilder(WalletTx, 'walletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
         .where('walletTx.id = :id', { id: betOrders[0].walletTxId })
@@ -154,23 +175,27 @@ export class GameService {
         // tx success
         // update walletTx status & txHash for each betOrders
         for (const betOrder of betOrders) {
-          const walletTx = await this.walletTxRepository.findOne({
-            where: { id: betOrder.walletTxId },
-          });
+          const walletTx = await queryRunner.manager
+            .createQueryBuilder(WalletTx, 'walletTx')
+            .where('walletTx.id = :id', { id: betOrder.walletTxId })
+            .getOne();
           walletTx.txHash = txReceipt.hash;
           walletTx.status = 'S';
-          await this.walletTxRepository.save(walletTx);
+          await queryRunner.manager.save(walletTx);
         }
+        await queryRunner.commitTransaction();
       } else {
         // tx failed
         for (const betOrder of betOrders) {
           // only update txHash for each betOrders, status remain pending
-          const walletTx = await this.walletTxRepository.findOne({
-            where: { id: betOrder.walletTxId },
-          });
+          const walletTx = await queryRunner.manager
+            .createQueryBuilder(WalletTx, 'walletTx')
+            .where('walletTx.id = :id', { id: betOrder.walletTxId })
+            .getOne();
           walletTx.txHash = txReceipt.hash;
-          await this.walletTxRepository.save(walletTx);
+          await queryRunner.manager.save(walletTx);
         }
+        await queryRunner.commitTransaction();
 
         throw new Error(
           `betLastMinutes() on-chain transaction failed, txHash: ${txReceipt.hash}`,
@@ -184,68 +209,116 @@ export class GameService {
         'Execution Error in setBetClose()',
         true,
       );
+    } finally {
+      await queryRunner.release();
     }
   }
 
-  // this function called by emitDrawResult() in game.gateway
-  async updateDrawResult(payload: DrawResult[], gameId: number): Promise<void> {
+  async submitDrawResult(job: Job<SubmitDrawResultDTO>): Promise<void> {
+    const { drawResults, gameId } = job.data;
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
     try {
       // submit draw result to Core contract
       const setDrawResultBot = new ethers.Wallet(
-        await MPC.retrievePrivateKey(process.env.RESULT_BOT_ADDRESS),
+        await MPC.retrievePrivateKey(this.configService.get('RESULT_BOT_ADDRESS')),
         this.provider,
       );
       const coreContract = Core__factory.connect(
-        process.env.CORE_CONTRACT_ADDRESS,
+        this.configService.get('CORE_CONTRACT_ADDRESS'),
         setDrawResultBot,
       );
-      const numberPairs = payload.map((result) => result.numberPair);
+      const numberPairs = drawResults.map((result) => result.numberPair);
+      const estimatedGas = await coreContract.setDrawResults.estimateGas(
+        numberPairs,
+        ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
+        '0x',
+      );
       const txResponse = await coreContract.setDrawResults(
         numberPairs,
-        ethers.parseEther(process.env.MAX_BET_AMOUNT),
+        ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
         '0x',
-        { gasLimit: 1500000 },
+        { gasLimit: estimatedGas * ethers.toBigInt(130) / ethers.toBigInt(100) },
       );
       const txReceipt = await txResponse.wait();
 
-      // update txHash into game record
-      const game = await this.gameRepository.findOneBy({ id: gameId });
-      game.drawTxHash = txReceipt.hash;
-      game.drawTxStatus = 'P';
-      await this.gameRepository.save(game);
-
+      const game = await queryRunner.manager
+        .createQueryBuilder(Game, 'game')
+        .where('game.id = :id', { id: gameId })
+        .getOne();
       if (txReceipt.status === 1) {
         // on-chain tx success
+        // MUST NOT ERROR FROM HERE else setDrawResults() will be called again in next job
         game.drawTxStatus = 'S';
-        await this.gameRepository.save(game);
+        game.drawTxHash = txReceipt.hash;
+        await queryRunner.manager.save(game);
 
         // find betOrder that numberPair matched and update availableClaim to true
-        for (const result of payload) {
-          const betOrders = await this.betOrderRepository.find({
-            where: {
-              gameId,
+        for (const result of drawResults) {
+          const betOrders = await queryRunner.manager
+            .createQueryBuilder(BetOrder, 'betOrder')
+            .where('betOrder.gameId = :gameId', { gameId })
+            .andWhere('betOrder.numberPair = :numberPair', {
               numberPair: result.numberPair,
-            },
-          });
+            })
+            .getMany();
           // there might be more than 1 betOrder that numberPair matched
           for (const betOrder of betOrders) {
             betOrder.availableClaim = true;
-            await this.betOrderRepository.save(betOrder);
+            await queryRunner.manager.save(betOrder);
           }
         }
+        await queryRunner.commitTransaction();
       } else {
         // on-chain tx failed
+        game.drawTxStatus = 'P';
+        await queryRunner.manager.save(game);
+        await queryRunner.commitTransaction();
         throw new Error(
           `setDrawResults() on-chain transaction failed, txHash: ${txReceipt.hash}`,
         );
       }
     } catch (err) {
-      await this.adminNotificationService.setAdminNotification(
-        `Error in game.service.updateDrawResult, error: ${err}`,
-        'executionError',
-        'Execution Error in updateDrawResult()',
-        true,
-      );
+      console.error('Error in game.service.submitDrawResult:', err);
+
+      // await this.adminNotificationService.setAdminNotification(
+      //   `Error in game.service.submitDrawResult, error: ${err}`,
+      //   'executionError',
+      //   'Execution Error in submitDrawResult()',
+      //   true,
+      // );
+
+      throw new Error(err);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async onChainTxFailed(job: Job, error: Error) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      if (job.attemptsMade >= job.opts.attempts) {
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        const game = await queryRunner.manager.findOne(
+          Game,
+          {
+            where: {
+              id: job.data.gameId
+            }
+          }
+        );
+        game.drawTxStatus = 'F';
+        await queryRunner.manager.save(game);
+        await queryRunner.commitTransaction();
+      }
+    } catch (error) {
+      console.error('Error in game.service.onChainTxFailed, error:', error);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
