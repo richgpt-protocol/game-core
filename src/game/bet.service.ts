@@ -406,7 +406,8 @@ export class BetService implements OnModuleInit {
         }
 
         if (
-          (new Date().getUTCDate() - allGamesObj[epoch].endDate.getTime()) / 1000 >
+          (new Date().getUTCDate() - allGamesObj[epoch].endDate.getTime()) /
+            1000 >
           this.maskingIntervalInSeconds
         ) {
           throw new BadRequestException(
@@ -1049,7 +1050,7 @@ export class BetService implements OnModuleInit {
         .where(
           'walletTx.userWalletId = :userWalletId AND walletTx.status = :status',
           {
-            userWalletId: userInfo.referralUserId,
+            userWalletId: referralUserInfo.wallet.id,
             status: 'S',
           },
         )
