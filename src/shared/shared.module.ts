@@ -53,6 +53,7 @@ import { User } from 'src/user/entities/user.entity';
     CacheSettingService,
     AdminNotificationService,
     TelegramService,
+    GasService,
   ],
 })
 export class SharedModule {}
