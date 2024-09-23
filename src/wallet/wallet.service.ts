@@ -35,15 +35,11 @@ export class WalletService {
     // input point > 1 will result in normal
     const level1 = this.levelMap.find((level) => level.level === 1);
     if (point < level1.xp) return 0;
-    // const f = 50 * a^3 + 1000 * exp(0.1 * a)
-
-    // exponential growth xp calculation, refer
-    // https://chat.openai.com/share/f6ad93ae-048d-43bf-bca8-7804a347e6e9
-    // const growthFactor = 1.584893192;
-    // const level = Math.log(point) / Math.log(growthFactor);
-
-    const level = this.levelMap.find((level) => level.xp <= point).level;
-    return level;
+  
+    const levels = this.levelMap.filter((level) => level.xp <= point);
+    const highestLevel = levels[levels.length - 1].level;
+  
+    return highestLevel;
   }
 
   async getWalletTx(userId: number, count: number) {
