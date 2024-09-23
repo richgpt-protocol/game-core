@@ -17,7 +17,7 @@ import { MPC } from 'src/shared/mpc';
 import { ConfigService } from 'src/config/config.service';
 import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
-
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 
 interface SubmitDrawResultDTO {
   drawResults: DrawResult[];
@@ -26,7 +26,11 @@ interface SubmitDrawResultDTO {
 
 @Injectable()
 export class GameService implements OnModuleInit {
-  provider = new ethers.JsonRpcProvider(this.configService.get('PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID')));
+  provider = new ethers.JsonRpcProvider(
+    this.configService.get(
+      'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
+    ),
+  );
 
   constructor(
     @InjectRepository(Game)
@@ -43,7 +47,6 @@ export class GameService implements OnModuleInit {
     private readonly queueService: QueueService,
     private dataSource: DataSource,
   ) {}
-  
 
   // process of closing bet for current epoch, set draw result, and announce draw result
   // 1. GameService.setBetClose: scheduled at :00UTC, create new game, and also submit masked betOrder to Core contract
@@ -53,12 +56,16 @@ export class GameService implements OnModuleInit {
   // 5. :05UTC, allow claim
 
   onModuleInit() {
-    this.queueService.registerHandler('GAME_QUEUE', 'SUBMIT_DRAW_RESULT', {
-      jobHandler: this.submitDrawResult.bind(this),
+    this.queueService.registerHandler(
+      QueueName.GAME,
+      QueueType.SUBMIT_DRAW_RESULT,
+      {
+        jobHandler: this.submitDrawResult.bind(this),
 
-      //Executed when onchain tx is failed for 5 times continously
-      failureHandler: this.onChainTxFailed.bind(this),
-    });
+        //Executed when onchain tx is failed for 5 times continously
+        failureHandler: this.onChainTxFailed.bind(this),
+      },
+    );
   }
 
   @Cron('0 0 */1 * * *') // every hour
@@ -75,7 +82,7 @@ export class GameService implements OnModuleInit {
       const game = await queryRunner.manager
         .createQueryBuilder(Game, 'game')
         .where('game.isClosed = :isClosed', { isClosed: false })
-        .getOne()
+        .getOne();
       game.isClosed = true;
       await queryRunner.manager.save(game);
 
@@ -108,7 +115,9 @@ export class GameService implements OnModuleInit {
       if (betOrders.length === 0) return; // no masked betOrder to submit
 
       const helperBot = new ethers.Wallet(
-        await MPC.retrievePrivateKey(this.configService.get('HELPER_BOT_ADDRESS')),
+        await MPC.retrievePrivateKey(
+          this.configService.get('HELPER_BOT_ADDRESS'),
+        ),
         this.provider,
       );
       const helperContract = Helper__factory.connect(
@@ -223,7 +232,9 @@ export class GameService implements OnModuleInit {
     try {
       // submit draw result to Core contract
       const setDrawResultBot = new ethers.Wallet(
-        await MPC.retrievePrivateKey(this.configService.get('RESULT_BOT_ADDRESS')),
+        await MPC.retrievePrivateKey(
+          this.configService.get('RESULT_BOT_ADDRESS'),
+        ),
         this.provider,
       );
       const coreContract = Core__factory.connect(
@@ -240,7 +251,10 @@ export class GameService implements OnModuleInit {
         numberPairs,
         ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
         '0x',
-        { gasLimit: estimatedGas * ethers.toBigInt(130) / ethers.toBigInt(100) },
+        {
+          gasLimit:
+            (estimatedGas * ethers.toBigInt(130)) / ethers.toBigInt(100),
+        },
       );
       const txReceipt = await txResponse.wait();
 
@@ -303,14 +317,11 @@ export class GameService implements OnModuleInit {
         await queryRunner.connect();
         await queryRunner.startTransaction();
 
-        const game = await queryRunner.manager.findOne(
-          Game,
-          {
-            where: {
-              id: job.data.gameId
-            }
-          }
-        );
+        const game = await queryRunner.manager.findOne(Game, {
+          where: {
+            id: job.data.gameId,
+          },
+        });
         game.drawTxStatus = 'F';
         await queryRunner.manager.save(game);
         await queryRunner.commitTransaction();

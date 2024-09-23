@@ -242,7 +242,7 @@ export class WalletController {
   calculateLevel(@Query() payload: CalculateLevelDto): ResponseVo<any> {
     const level = this.walletService.calculateLevel(payload.point);
     return {
-      statusCode: HttpStatus.BAD_REQUEST,
+      statusCode: HttpStatus.OK,
       data: { level },
       message: '',
     };

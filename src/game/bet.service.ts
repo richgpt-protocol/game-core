@@ -36,6 +36,7 @@ import { MPC } from 'src/shared/mpc';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 
 interface SubmitBetJobDTO {
   walletTxId: number;
@@ -75,7 +76,7 @@ export class BetService implements OnModuleInit {
   ) {}
   onModuleInit() {
     //Tries to submit bet onchain
-    this.queueService.registerHandler('BET_QUEUE', 'SUBMIT_BET', {
+    this.queueService.registerHandler(QueueName.BET, QueueType.SUBMIT_BET, {
       jobHandler: this.submitBet.bind(this),
 
       //Executed when onchain tx is failed for 5 times continously
@@ -83,10 +84,14 @@ export class BetService implements OnModuleInit {
     });
 
     //Executed when onchain tx is successful
-    this.queueService.registerHandler('BET_QUEUE', 'SUBMIT_SUCCESS_PROCESS', {
-      jobHandler: this.handleTxSuccess.bind(this),
-      failureHandler: this.onOnchainTxFailed.bind(this),
-    });
+    this.queueService.registerHandler(
+      QueueName.BET,
+      QueueType.SUBMIT_SUCCESS_PROCESS,
+      {
+        jobHandler: this.handleTxSuccess.bind(this),
+        failureHandler: this.onOnchainTxFailed.bind(this),
+      },
+    );
   }
 
   maskingIntervalInSeconds = 120; //seconds before endTime of currentEpoch after which masking will start
@@ -287,13 +292,13 @@ export class BetService implements OnModuleInit {
 
       const jobId = `placeBet-${gameUsdTx.id}`;
       await this.queueService.addJob(
-        'BET_QUEUE',
+        QueueName.BET,
         jobId,
         {
           walletTxId: walletTx.id,
           betOrders: betOrders.map((bet) => bet.id),
           gameUsdTxId: gameUsdTx.id,
-          queueType: 'SUBMIT_BET',
+          queueType: QueueType.SUBMIT_BET,
         },
         // 3000, //starts processing after 3 seconds
       );
@@ -332,13 +337,13 @@ export class BetService implements OnModuleInit {
 
       const jobId = `placeBet-${gameusdTx.id}`;
       await this.queueService.addJob(
-        'BET_QUEUE',
+        QueueName.BET,
         jobId,
         {
           gameUsdTxId: gameusdTx.id,
           walletTxId: gameusdTx.walletTxId,
           betOrders: gameusdTx.walletTxs[0].betOrders.map((bet) => bet.id),
-          queueType: 'SUBMIT_BET',
+          queueType: QueueType.SUBMIT_BET,
         },
         3000, //starts processing after 3 seconds
       );
@@ -406,7 +411,8 @@ export class BetService implements OnModuleInit {
         }
 
         if (
-          (new Date().getUTCDate() - allGamesObj[epoch].endDate.getTime()) / 1000 >
+          (new Date().getUTCDate() - allGamesObj[epoch].endDate.getTime()) /
+            1000 >
           this.maskingIntervalInSeconds
         ) {
           throw new BadRequestException(
@@ -779,11 +785,11 @@ export class BetService implements OnModuleInit {
       if (gameUsdTx.txHash) {
         const jobId = `updateBetStatus-${gameUsdTx.id}`;
         await this.queueService.addJob(
-          'BET_QUEUE',
+          QueueName.BET,
           jobId,
           {
             gameUsdTxId: gameUsdTx.id,
-            queueType: 'SUBMIT_SUCCESS_PROCESS',
+            queueType: QueueType.SUBMIT_SUCCESS_PROCESS,
           },
           // 3000, //starts processing after 3 seconds
         );
@@ -820,11 +826,11 @@ export class BetService implements OnModuleInit {
 
       const jobId = `updateBetStatus-${gameUsdTx.id}`;
       await this.queueService.addJob(
-        'BET_QUEUE',
+        QueueName.BET,
         jobId,
         {
           gameUsdTxId: gameUsdTx.id,
-          queueType: 'SUBMIT_SUCCESS_PROCESS',
+          queueType: QueueType.SUBMIT_SUCCESS_PROCESS,
         },
         // 3000, //starts processing after 3 seconds
       );

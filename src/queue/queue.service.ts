@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Job, Queue, Worker } from 'bullmq';
 import { ConfigService } from 'src/config/config.service';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 
 interface QueueHandler {
   jobHandler: (job: Job) => Promise<any>;
@@ -44,8 +45,8 @@ export class QueueService {
   }
 
   async registerHandler(
-    queueName: string,
-    queueType: string,
+    queueName: QueueName,
+    queueType: QueueType,
     handlers: QueueHandler,
   ) {
     if (!this.handlers.has(queueName)) {
@@ -81,8 +82,8 @@ export class QueueService {
     const queue = new Queue(queueName, {
       connection: {
         host: this.redisHost,
-        port: this.redisPort
-      }
+        port: this.redisPort,
+      },
     });
     this.queues.set(queueName, queue);
 

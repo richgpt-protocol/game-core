@@ -1,5 +1,9 @@
 import { InjectRepository } from '@nestjs/typeorm';
-import { SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import {
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
+} from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { Game } from './entities/game.entity';
 import { Repository } from 'typeorm';
@@ -8,11 +12,11 @@ import { GameService } from './game.service';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { QueueService } from 'src/queue/queue.service';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class GameGateway {
-
-  delay = (ms: number) => new Promise(res => setTimeout(res, ms))
+  delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
   @WebSocketServer()
   server: Server;
@@ -30,18 +34,20 @@ export class GameGateway {
   async handleLiveDrawResult() {
     const currentResult = this.cacheSettingService.getAll();
     // return empty array if not in live results period
-    return Object.keys(currentResult)
-      .map(key => {
-        return {
-          id: Number(key),
-          prizeCategory: currentResult[key].prizeCategory,
-          numberPair: currentResult[key].numberPair,
-          gameId: currentResult[key].gameId,
-        }
-      })
-      // id is drawResult.id, drawResult record created from first prize to consolation prize,
-      // hence sort result descending to return array where index start from consolation prize
-      .sort((a, b) => b.id - a.id);
+    return (
+      Object.keys(currentResult)
+        .map((key) => {
+          return {
+            id: Number(key),
+            prizeCategory: currentResult[key].prizeCategory,
+            numberPair: currentResult[key].numberPair,
+            gameId: currentResult[key].gameId,
+          };
+        })
+        // id is drawResult.id, drawResult record created from first prize to consolation prize,
+        // hence sort result descending to return array where index start from consolation prize
+        .sort((a, b) => b.id - a.id)
+    );
   }
 
   @Cron('0 2 */1 * * *') // 2 minutes after every hour
@@ -53,14 +59,14 @@ export class GameGateway {
       const lastGame = await this.gameRepository.findOne({
         where: { isClosed: true },
         order: { id: 'DESC' },
-        relations: { drawResult: true }
+        relations: { drawResult: true },
       });
       const drawResults = lastGame.drawResult;
       // current drawResults is in sequence(first, second...)
       // loop through drawResults in reverse order(consolation, special...) and emit to client
       for (let i = drawResults.length - 1; i >= 0; i--) {
         // omit unnecessary fields to reduce payload size
-        const {prizeIndex, createdDate, ...result} = drawResults[i];
+        const { prizeIndex, createdDate, ...result } = drawResults[i];
         // TODO: use return instead of emit, to utilize nestjs functions(i.e. interceptor)
         // return { event: 'events', data: result };
         this.server.emit('liveDrawResult', result);
@@ -73,16 +79,15 @@ export class GameGateway {
       // submit draw result to Core contract
       const jobId = `submitDrawResult-${lastGame.id}`;
       await this.queueService.addJob(
-        'GAME_QUEUE',
+        QueueName.GAME,
         jobId,
         {
           drawResults: drawResults,
           gameId: lastGame.id,
-          queueType: 'SUBMIT_DRAW_RESULT',
+          queueType: QueueType.SUBMIT_DRAW_RESULT,
         },
         0, // no delay
       );
-
     } catch (err) {
       // inform admin
       await this.adminNotificationService.setAdminNotification(
