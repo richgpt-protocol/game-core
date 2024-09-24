@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
 import { WalletTx } from './entities/wallet-tx.entity';
 import * as dotenv from 'dotenv';
@@ -35,10 +35,10 @@ export class WalletService {
     // input point > 1 will result in normal
     const level1 = this.levelMap.find((level) => level.level === 1);
     if (point < level1.xp) return 0;
-  
+
     const levels = this.levelMap.filter((level) => level.xp <= point);
     const highestLevel = levels[levels.length - 1].level;
-  
+
     return highestLevel;
   }
 
@@ -47,6 +47,7 @@ export class WalletService {
       where: {
         userWalletId: userId,
         status: 'S',
+        txType: Not('GAME_TRANSACTION'),
       },
       order: { createdDate: 'DESC' },
     });
