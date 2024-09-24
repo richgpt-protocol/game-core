@@ -214,8 +214,23 @@ export class UserService {
       result.wallet = wallet as UserWallet;
     }
 
+    const pendingAmountResult = await this.dataSource.manager.query(
+      `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
+        WHERE
+          userWalletId = ${userId} AND
+          txType IN ('REDEEM', 'PLAY', 'INTERNAL_TRANSFER') AND
+          status IN ('P', 'PD', 'PA')`,
+    );
+
+    const pendingAmount = Number(pendingAmountResult[0]?.pendingAmount) || 0;
+    const withdrawableBalance =
+      pendingAmount >= result.wallet.walletBalance
+        ? 0
+        : result.wallet.walletBalance - pendingAmount;
+
     const response = {
       isWithdrawPasswordSet: !!withdrawPin,
+      withdrawableBalance: Math.floor(withdrawableBalance * 100) / 100,
       ...result,
     };
 
