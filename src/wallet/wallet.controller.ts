@@ -215,7 +215,7 @@ export class WalletController {
   }
 
   @Secure(null, UserRole.USER)
-  @Get('get-withdrawl-fee')
+  @Get('get-withdrawal-fee')
   async getWithdrawlFee(
     @Query('chainId') chainId: number,
   ): Promise<ResponseVo<any>> {
