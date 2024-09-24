@@ -380,6 +380,12 @@ export class InternalTransferService {
               walletTxId: receiverWalletTx.id,
             },
           );
+
+          this.eventEmitter.emit(
+            'gas.service.reload',
+            receiverUserWallet.walletAddress,
+            this.configService.get('BASE_CHAIN_ID'),
+          );
         } else {
           await this.adminNotificationService.setAdminNotification(
             `Error processing transfer for gameUsdTx : ${payload.gameUsdTx.id}.`,
