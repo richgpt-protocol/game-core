@@ -838,8 +838,7 @@ export class GameService implements OnModuleInit {
 
       const games = await this.gameRepository.find({
         where: {
-          startDate: Between(start, end),
-          // endDate: LessThan(end), startDate: MoreThan(start)
+          endDate: Between(start, end),
         },
         order: { id: 'DESC' },
       });
