@@ -113,43 +113,47 @@ export class InternalTransferService {
       }
 
       const senderWalletTx = new WalletTx();
-      senderWalletTx.txAmount = payload.amount;
       senderWalletTx.txType = 'INTERNAL_TRANSFER';
-      senderWalletTx.userWallet = senderWallet;
-      senderWalletTx.userWalletId = senderWallet.id;
-      senderWalletTx.txHash = '';
+      senderWalletTx.txAmount = payload.amount;
       senderWalletTx.status = 'P';
+      senderWalletTx.userWalletId = senderWallet.id;
+      senderWalletTx.userWallet = senderWallet;
+      await queryRunner.manager.save(senderWalletTx);
 
       const receiverWalletTx = new WalletTx();
-      receiverWalletTx.txAmount = payload.amount;
       receiverWalletTx.txType = 'INTERNAL_TRANSFER';
-      receiverWalletTx.userWallet = receiverWallet;
-      receiverWalletTx.userWalletId = receiverWallet.id;
-      receiverWalletTx.txHash = '';
+      receiverWalletTx.txAmount = payload.amount;
       receiverWalletTx.status = 'P';
-
-      await queryRunner.manager.save(senderWalletTx);
+      receiverWalletTx.userWalletId = receiverWallet.id;
+      receiverWalletTx.userWallet = receiverWallet;
       await queryRunner.manager.save(receiverWalletTx);
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = payload.amount;
+      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.status = 'P';
-      gameUsdTx.walletTxs = [senderWalletTx, receiverWalletTx];
-      gameUsdTx.walletTxId = senderWalletTx.id;
       gameUsdTx.senderAddress = senderWallet.walletAddress;
       gameUsdTx.receiverAddress = receiverWallet.walletAddress;
-      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.retryCount = 0;
-
+      gameUsdTx.walletTxId = senderWalletTx.id;
+      gameUsdTx.walletTxs = [senderWalletTx, receiverWalletTx];
       await queryRunner.manager.save(gameUsdTx);
 
       const internalTransfer = new InternalTransfer();
-      internalTransfer.receiverWalletTx = receiverWalletTx;
+      internalTransfer.senderWalletTxId = senderWalletTx.id;
       internalTransfer.senderWalletTx = senderWalletTx;
       internalTransfer.receiverWalletTxId = receiverWalletTx.id;
-      internalTransfer.senderWalletTxId = senderWalletTx.id;
-
+      internalTransfer.receiverWalletTx = receiverWalletTx;
       await queryRunner.manager.save(internalTransfer);
+
+      senderWalletTx.internalTransferSender = internalTransfer;
+      senderWalletTx.gameUsdTx = gameUsdTx;
+      await queryRunner.manager.save(senderWalletTx);
+
+      receiverWalletTx.internalTransferReceiver = internalTransfer;
+      receiverWalletTx.gameUsdTx = gameUsdTx;
+      await queryRunner.manager.save(receiverWalletTx);
+      
       await queryRunner.commitTransaction();
 
       this.eventEmitter.emit('internal-transfer', {
@@ -184,6 +188,12 @@ export class InternalTransferService {
     );
 
     if (!hasNativeBalance) {
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        senderWalletTx.userWallet.walletAddress,
+        this.configService.get('BASE_CHAIN_ID'),
+      );
+
       //increase retry count so that it will be picked up by retry cron
       gameUsdTx.retryCount += 1;
       await this.gameUsdTxRepository.save(gameUsdTx);
@@ -278,31 +288,22 @@ export class InternalTransferService {
     await queryRunner.startTransaction();
 
     try {
-      const lastValidWalletTxSender = await this.getLastValidWalletTx(
+      const senderLastValidWalletTx = await this.getLastValidWalletTx(
         senderWalletTx.userWalletId,
       );
-      const lastValidWalletTxReceiver = await this.getLastValidWalletTx(
+      const receiverLastValidWalletTx = await this.getLastValidWalletTx(
         receiverWalletTx.userWalletId,
       );
 
-      const senderUserWallet = await queryRunner.manager.findOne(UserWallet, {
-        where: {
-          id: senderWalletTx.userWalletId,
-        },
-      });
-
-      const receiverUserWallet = await queryRunner.manager.findOne(UserWallet, {
-        where: {
-          id: receiverWalletTx.userWalletId,
-        },
-      });
+      const senderUserWallet = senderWalletTx.userWallet;
+      const receiverUserWallet = receiverWalletTx.userWallet;
 
       const provider = new JsonRpcProvider(
-        this.configService.get('OPBNB_PROVIDER_RPC_URL'),
+        this.configService.get('PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID')),
       );
 
       const userSigner = new Wallet(
-        await MPC.retrievePrivateKey(senderWalletTx.userWallet.walletAddress),
+        await MPC.retrievePrivateKey(senderUserWallet.walletAddress),
         provider,
       );
 
@@ -315,23 +316,20 @@ export class InternalTransferService {
 
       const amountParsed = parseUnits(gameUsdTx.amount.toString(), decimals);
       const estimatedGas = await gameUSDContract.transfer.estimateGas(
-        receiverWalletTx.userWallet.walletAddress,
+        receiverUserWallet.walletAddress,
         amountParsed,
       );
 
-      let tx;
       try {
-        tx = await gameUSDContract.transfer(
-          receiverWalletTx.userWallet.walletAddress,
+        const tx = await gameUSDContract.transfer(
+          receiverUserWallet.walletAddress,
           amountParsed,
           {
-            gasLimit: estimatedGas + (estimatedGas * BigInt(10)) / BigInt(100),
+            gasLimit: estimatedGas + (estimatedGas * BigInt(30)) / BigInt(100),
           },
         );
+        const receipt = await tx.wait();
 
-        await tx.wait();
-
-        const receipt = await provider.getTransactionReceipt(tx.hash);
         if (receipt && receipt.status == 1) {
           senderWalletTx.status = 'S';
           receiverWalletTx.status = 'S';
@@ -340,17 +338,15 @@ export class InternalTransferService {
 
           senderWalletTx.txHash = tx.hash;
           receiverWalletTx.txHash = tx.hash;
-          senderWalletTx.gameUsdTx = gameUsdTx;
-          receiverWalletTx.gameUsdTx = gameUsdTx;
 
           senderWalletTx.startingBalance =
-            lastValidWalletTxSender.endingBalance;
+            senderLastValidWalletTx.endingBalance;
           senderWalletTx.endingBalance =
-            Number(lastValidWalletTxSender.endingBalance) -
+            Number(senderLastValidWalletTx.endingBalance) -
             Number(senderWalletTx.txAmount);
 
-          receiverWalletTx.startingBalance = lastValidWalletTxReceiver
-            ? lastValidWalletTxReceiver.endingBalance
+          receiverWalletTx.startingBalance = receiverLastValidWalletTx
+            ? receiverLastValidWalletTx.endingBalance
             : 0;
           receiverWalletTx.endingBalance =
             Number(receiverWalletTx.startingBalance) +
@@ -364,12 +360,15 @@ export class InternalTransferService {
             Number(receiverUserWallet.walletBalance) +
             Number(senderWalletTx.txAmount);
 
-          await this.userService.setUserNotification(senderUserWallet.userId, {
-            type: 'Transfer',
-            title: 'Transfer Processed Successfully',
-            message: 'Your Transfer has been successfully processed',
-            walletTxId: senderWalletTx.id,
-          });
+          await this.userService.setUserNotification(
+            senderUserWallet.userId,
+            {
+              type: 'Transfer',
+              title: 'Transfer Processed Successfully',
+              message: 'Your Transfer has been successfully processed',
+              walletTxId: senderWalletTx.id,
+            }
+          );
 
           await this.userService.setUserNotification(
             receiverUserWallet.userId,
