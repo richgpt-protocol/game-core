@@ -417,7 +417,7 @@ export class PointService {
     return setting ? +setting.value : 0;
   }
 
-  @Cron('* * * * * *', { utcOffset: 0 }) // every hour UTC time
+  @Cron('* * * * *') // check every minute
   async checkLevelUp(): Promise<void> {
     // start queryRunner
     const queryRunner = this.dataSource.createQueryRunner();
@@ -442,7 +442,7 @@ export class PointService {
           await this.userService.setUserNotification(pointTx.walletId, {
             type: 'point',
             title: 'Congratulations on Level Up',
-            message: `You have level up from ${levelBefore} to level ${levelAfter}.`,
+            message: `You just level up from ${levelBefore} to level ${levelAfter}!`,
             walletTxId: pointTx.walletTxId,
           });
 
