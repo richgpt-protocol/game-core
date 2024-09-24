@@ -1,6 +1,13 @@
 import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, LessThan, MoreThan, Repository } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  In,
+  LessThan,
+  MoreThan,
+  Repository,
+} from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -785,7 +792,10 @@ export class GameService implements OnModuleInit {
       const end = new Date(Number(endDate));
 
       const games = await this.gameRepository.find({
-        where: { endDate: LessThan(end), startDate: MoreThan(start) },
+        where: {
+          startDate: Between(start, end),
+          // endDate: LessThan(end), startDate: MoreThan(start)
+        },
         order: { id: 'DESC' },
       });
 
