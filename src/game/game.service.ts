@@ -16,8 +16,8 @@ import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { MPC } from 'src/shared/mpc';
 import { ConfigService } from 'src/config/config.service';
 import { QueueService } from 'src/queue/queue.service';
-import { delay, Job } from 'bullmq';
-import { User } from 'src/user/entities/user.entity';
+import { Job } from 'bullmq';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { WalletService } from 'src/wallet/wallet.service';
 import { PointService } from 'src/point/point.service';
@@ -63,16 +63,20 @@ export class GameService implements OnModuleInit {
   // 5. :05UTC, allow claim
 
   onModuleInit() {
-    this.queueService.registerHandler('GAME_QUEUE', 'SUBMIT_DRAW_RESULT', {
-      jobHandler: this.submitDrawResult.bind(this),
+    this.queueService.registerHandler(
+      QueueName.GAME,
+      QueueType.SUBMIT_DRAW_RESULT,
+      {
+        jobHandler: this.submitDrawResult.bind(this),
 
-      //Executed when onchain tx is failed for 5 times continously
-      failureHandler: this.onChainTxFailed.bind(this),
-    });
+        //Executed when onchain tx is failed for 5 times continously
+        failureHandler: this.onChainTxFailed.bind(this),
+      },
+    );
 
     this.queueService.registerHandler(
-      'TRANSFER_REFERRAL_BONUS',
-      'WINNING_REFERRAL_BONUS',
+      QueueName.REFERRAL_BONUS,
+      QueueType.WINNING_REFERRAL_BONUS,
       {
         jobHandler: this.transferReferrerBonus.bind(this),
         failureHandler: this.onReferralBonusFailed.bind(this),
@@ -301,10 +305,10 @@ export class GameService implements OnModuleInit {
               const totalAmount =
                 Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
               const jobId = `processWinReferralBonus_${betOrder.id}`;
-              await this.queueService.addJob('TRANSFER_REFERRAL_BONUS', jobId, {
+              await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
                 prizeAmount: totalAmount,
                 betOrderId: betOrder.id,
-                queueType: 'WINNING_REFERRAL_BONUS',
+                queueType: QueueType.WINNING_REFERRAL_BONUS,
                 // delay: 2000,
               });
             } catch (error) {
@@ -385,10 +389,10 @@ export class GameService implements OnModuleInit {
       const totalAmount =
         Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
       const jobId = `processWinReferralBonus_${betOrder.id}`;
-      await this.queueService.addJob('TRANSFER_REFERRAL_BONUS', jobId, {
+      await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
         prizeAmount: totalAmount,
         betOrderId: betOrder.id,
-        queueType: 'WINNING_REFERRAL_BONUS',
+        queueType: QueueType.WINNING_REFERRAL_BONUS,
         // delay: 2000,
       });
 

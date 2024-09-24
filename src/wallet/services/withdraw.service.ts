@@ -29,6 +29,7 @@ import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
 import { Mutex } from 'async-mutex';
 import { ReviewRedeemDto } from '../dto/ReviewRedeem.dto';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 dotenv.config();
 
 type RedeemResponse = {
@@ -78,15 +79,23 @@ export class WithdrawService implements OnModuleInit {
   }
 
   onModuleInit() {
-    this.queueService.registerHandler('WITHDRAW_QUEUE', 'PROCESS_WITHDRAW', {
-      jobHandler: this.processWithdraw.bind(this),
-      failureHandler: this.onJobFailed.bind(this),
-    });
+    this.queueService.registerHandler(
+      QueueName.WITHDRAW,
+      QueueType.PROCESS_WITHDRAW,
+      {
+        jobHandler: this.processWithdraw.bind(this),
+        failureHandler: this.onJobFailed.bind(this),
+      },
+    );
 
-    this.queueService.registerHandler('WITHDRAW_QUEUE', 'PROCESS_PAYOUT', {
-      jobHandler: this.handlePayout.bind(this),
-      failureHandler: this.onJobFailed.bind(this),
-    });
+    this.queueService.registerHandler(
+      QueueName.WITHDRAW,
+      QueueType.PROCESS_PAYOUT,
+      {
+        jobHandler: this.handlePayout.bind(this),
+        failureHandler: this.onJobFailed.bind(this),
+      },
+    );
   }
 
   // how redeem & payout work
@@ -268,7 +277,7 @@ export class WithdrawService implements OnModuleInit {
         await queryRunner.commitTransaction();
 
         const jobId = `process_withdraw_${walletTx.id}`;
-        await this.queueService.addJob('WITHDRAW_QUEUE', jobId, {
+        await this.queueService.addJob(QueueName.WITHDRAW, jobId, {
           userId,
           payoutNote: 'This request redeem proceed automatically(criteria met)',
           reviewedBy: 999, // system auto payout
@@ -276,7 +285,7 @@ export class WithdrawService implements OnModuleInit {
           walletTxId: walletTx.id,
           gameUsdTxId: gameUsdTx.id,
           chainId: payload.chainId,
-          queueType: 'PROCESS_WITHDRAW',
+          queueType: QueueType.PROCESS_WITHDRAW,
         });
 
         await this.userService.setUserNotification(userId, {
@@ -355,7 +364,7 @@ export class WithdrawService implements OnModuleInit {
 
       if (payload.payoutCanProceed) {
         const jobId = `process_withdraw_${redeemTx.walletTx.id}`;
-        await this.queueService.addJob('WITHDRAW_QUEUE', jobId, {
+        await this.queueService.addJob(QueueName.WITHDRAW, jobId, {
           userId: userWallet.userId,
           payoutNote: payload.payoutNote,
           reviewedBy: 999, // system auto payout
@@ -363,7 +372,7 @@ export class WithdrawService implements OnModuleInit {
           walletTxId: walletTx.id,
           gameUsdTxId: walletTx.gameUsdTx.id,
           chainId: redeemTx.chainId,
-          queueType: 'PROCESS_WITHDRAW',
+          queueType: QueueType.PROCESS_WITHDRAW,
         });
       } else {
         await this.userService.setUserNotification(walletTx.userWalletId, {
@@ -772,9 +781,9 @@ export class WithdrawService implements OnModuleInit {
 
       for (const tx of redeemTxs) {
         const jobId = `process_payout_${tx.id}`;
-        await this.queueService.addJob('WITHDRAW_QUEUE', jobId, {
+        await this.queueService.addJob(QueueName.WITHDRAW, jobId, {
           redeemTxId: tx.id,
-          queueType: 'PROCESS_PAYOUT',
+          queueType: QueueType.PROCESS_PAYOUT,
         });
       }
     } catch (error) {

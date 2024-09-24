@@ -17,12 +17,11 @@ import { MPC } from 'src/shared/mpc';
 import { Mutex } from 'async-mutex';
 import { Job } from 'bullmq';
 import { QueueService } from 'src/queue/queue.service';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 @Injectable()
 export class CreditService {
   GAMEUSD_TRANFER_INITIATOR: string;
   private readonly cronMutex: Mutex = new Mutex();
-  QUEUE_NAME = 'CreditQueue';
-  QUEUE_TYPE = 'CREDIT';
   constructor(
     @InjectRepository(UserWallet)
     private readonly userWalletRepository: Repository<UserWallet>,
@@ -44,10 +43,14 @@ export class CreditService {
   }
 
   onModuleInit() {
-    this.queueService.registerHandler(this.QUEUE_NAME, this.QUEUE_TYPE, {
-      jobHandler: this.process.bind(this),
-      failureHandler: this.onFailed.bind(this),
-    });
+    this.queueService.registerHandler(
+      QueueName.CREDIT,
+      QueueType.SUBMIT_CREDIT,
+      {
+        jobHandler: this.process.bind(this),
+        failureHandler: this.onFailed.bind(this),
+      },
+    );
   }
 
   // async getCreditBalance(userId: number): Promise<number> {
@@ -119,11 +122,11 @@ export class CreditService {
 
       const jobId = `addCredit-${creditWalletTx.id}`;
       await this.queueService.addJob(
-        this.QUEUE_NAME,
+        QueueName.CREDIT,
         jobId,
         {
           creditWalletTxId: creditWalletTx.id,
-          queueType: this.QUEUE_TYPE,
+          queueType: QueueType.SUBMIT_CREDIT,
         },
         3000,
       );
@@ -152,11 +155,11 @@ export class CreditService {
       }
 
       await this.queueService.addJob(
-        this.QUEUE_NAME,
+        QueueName.CREDIT,
         `addCredit-${creditWalletTx.id}`,
         {
           creditWalletTxId: creditWalletTx.id,
-          queueType: this.QUEUE_TYPE,
+          queueType: QueueType.SUBMIT_CREDIT,
         },
         3000,
       );
