@@ -87,8 +87,7 @@ Today date: ${new Date().toDateString()}.`;
       ]);
 
     } else {
-      // naively update initialCotent to latest one in database
-      // TODO: if today date is same, no need update database
+      // update latest initialContent into database
       await this.chatLogRepository.update(
         chatLog[0].id,
         { content: initialContent },
@@ -110,7 +109,6 @@ Today date: ${new Date().toDateString()}.`;
       role: 'user',
       content: payload.message,
     });
-
 
     // submit to chatCompletion
     const completion = await openai.chat.completions.create({
