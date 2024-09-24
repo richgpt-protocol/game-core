@@ -60,6 +60,8 @@ export class GameService implements OnModuleInit {
     private readonly walletService: WalletService,
     private readonly pointService: PointService,
     private readonly claimService: ClaimService,
+    @InjectRepository(BetOrder)
+    private betOrderRepository: Repository<BetOrder>,
   ) {}
 
   // process of closing bet for current epoch, set draw result, and announce draw result
@@ -652,15 +654,14 @@ export class GameService implements OnModuleInit {
   async getLeaderboard(count: number) {
     // TODO: use better sql query
 
-    // only betOrder that had claimed will be counted
-    const claimDetails = await this.claimDetalRepository.find({
-      relations: {
-        walletTx: {
-          userWallet: true,
-        },
-        betOrder: true,
-      },
-    });
+    const betOrdersWithAvailableClaim = await this.betOrderRepository
+      .createQueryBuilder('betOrder')
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .where('betOrder.availableClaim = :availableClaim', {
+        availableClaim: true,
+      })
+      .getMany();
 
     const maskValue = (value: string) => {
       const mask = value.slice(0, 3) + '****' + value.slice(value.length - 3);
@@ -668,10 +669,21 @@ export class GameService implements OnModuleInit {
     };
 
     const allObj: { [key: string]: number } = {};
-    for (const claimDetail of claimDetails) {
-      const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+    for (const betOrder of betOrdersWithAvailableClaim) {
+      const walletAddress = betOrder.walletTx.userWallet.walletAddress;
       if (!allObj.hasOwnProperty(walletAddress)) allObj[walletAddress] = 0;
-      allObj[walletAddress] += Number(claimDetail.claimAmount);
+      const drawResult = await this.drawResultRepository
+        .createQueryBuilder('drawResult')
+        .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+        .andWhere('drawResult.numberPair = :numberPair', {
+          numberPair: betOrder.numberPair,
+        })
+        .getOne();
+      const winningAmount = this.claimService.calculateWinningAmount(
+        betOrder,
+        drawResult,
+      );
+      allObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
     }
     let total = [];
     for (const walletAddress in allObj) {
@@ -691,15 +703,26 @@ export class GameService implements OnModuleInit {
     const currentDate = new Date();
 
     const dailyObj: { [key: string]: number } = {};
-    for (const claimDetail of claimDetails) {
+    for (const betOrder of betOrdersWithAvailableClaim) {
       if (
-        claimDetail.betOrder.createdDate.getTime() >
+        betOrder.createdDate.getTime() >
         currentDate.getTime() - 24 * 60 * 60 * 1000
       ) {
-        const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+        const walletAddress = betOrder.walletTx.userWallet.walletAddress;
         if (!dailyObj.hasOwnProperty(walletAddress))
           dailyObj[walletAddress] = 0;
-        dailyObj[walletAddress] += Number(claimDetail.claimAmount);
+        const drawResult = await this.drawResultRepository
+        .createQueryBuilder('drawResult')
+        .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+        .andWhere('drawResult.numberPair = :numberPair', {
+          numberPair: betOrder.numberPair,
+        })
+        .getOne();
+        const winningAmount = this.claimService.calculateWinningAmount(
+          betOrder,
+          drawResult,
+        );
+        dailyObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
       }
     }
     let daily = [];
@@ -718,15 +741,26 @@ export class GameService implements OnModuleInit {
     daily = daily.sort((a, b) => b.amount - a.amount).slice(0, count);
 
     const weeklyObj: { [key: string]: number } = {};
-    for (const claimDetail of claimDetails) {
+    for (const betOrder of betOrdersWithAvailableClaim) {
       if (
-        claimDetail.betOrder.createdDate.getTime() >
+        betOrder.createdDate.getTime() >
         currentDate.getTime() - 7 * 24 * 60 * 60 * 1000
       ) {
-        const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+        const walletAddress = betOrder.walletTx.userWallet.walletAddress;
         if (!weeklyObj.hasOwnProperty(walletAddress))
           weeklyObj[walletAddress] = 0;
-        weeklyObj[walletAddress] += Number(claimDetail.claimAmount);
+        const drawResult = await this.drawResultRepository
+          .createQueryBuilder('drawResult')
+          .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+          .andWhere('drawResult.numberPair = :numberPair', {
+            numberPair: betOrder.numberPair,
+          })
+          .getOne();
+        const winningAmount = this.claimService.calculateWinningAmount(
+          betOrder,
+          drawResult,
+        );
+        weeklyObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
       }
     }
     let weekly = [];
@@ -745,15 +779,26 @@ export class GameService implements OnModuleInit {
     weekly = weekly.sort((a, b) => b.amount - a.amount).slice(0, count);
 
     const monthlyObj: { [key: string]: number } = {};
-    for (const claimDetail of claimDetails) {
+    for (const betOrder of betOrdersWithAvailableClaim) {
       if (
-        claimDetail.betOrder.createdDate.getTime() >
+        betOrder.createdDate.getTime() >
         currentDate.getTime() - 30 * 24 * 60 * 60 * 1000
       ) {
-        const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+        const walletAddress = betOrder.walletTx.userWallet.walletAddress;
         if (!monthlyObj.hasOwnProperty(walletAddress))
           monthlyObj[walletAddress] = 0;
-        monthlyObj[walletAddress] += Number(claimDetail.claimAmount);
+        const drawResult = await this.drawResultRepository
+          .createQueryBuilder('drawResult')
+          .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+          .andWhere('drawResult.numberPair = :numberPair', {
+            numberPair: betOrder.numberPair,
+          })
+          .getOne();
+        const winningAmount = this.claimService.calculateWinningAmount(
+          betOrder,
+          drawResult,
+        );
+        monthlyObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
       }
     }
     let monthly = [];
