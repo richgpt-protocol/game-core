@@ -24,9 +24,7 @@ import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { WalletModule } from 'src/wallet/wallet.module';
 import { PointModule } from 'src/point/point.module';
-import { ClaimService } from 'src/wallet/services/claim.service';
 import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
-import { UserService } from 'src/user/user.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
@@ -63,7 +61,7 @@ import { UserModule } from 'src/user/user.module';
     UserModule,
   ],
   controllers: [BackOfficeController],
-  providers: [BackOfficeService, CampaignService, WalletService, ClaimService],
+  providers: [BackOfficeService, CampaignService, WalletService],
   exports: [BackOfficeService],
 })
 export class BackOfficeModule {}

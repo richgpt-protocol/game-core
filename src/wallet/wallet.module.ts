@@ -78,7 +78,7 @@ import { IpWhitelistMiddleware } from './middleware/ip-whitelist.middleware';
     CreditService,
   ],
   controllers: [WalletController],
-  exports: [WalletService, CreditService],
+  exports: [WalletService, CreditService, ClaimService],
 })
 export class WalletModule {
   configure(consumer: MiddlewareConsumer) {

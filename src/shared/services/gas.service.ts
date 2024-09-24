@@ -55,7 +55,7 @@ export class GasService {
             status: 'P',
             chainId,
             currency: 'BNB',
-            amountInUSD: await this._getAmountInUSD(amount),
+            amountInUSD: await this.getAmountInUSD(amount),
             txHash: null,
             retryCount: 0,
             userWallet,
@@ -190,16 +190,33 @@ export class GasService {
   }
 
   // fetch bnb price through defillama
-  private async _getAmountInUSD(amount: string): Promise<number> {
+  async getAmountInUSD(amount: string): Promise<number> {
     const wbnbAddress = 'bsc:0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
     const requestUrl = `https://coins.llama.fi/prices/current/${wbnbAddress}`;
     const { data } = await firstValueFrom(
       this.httpService.get(requestUrl).pipe(
         catchError((error) => {
-          throw new Error(`Error in GasService._getAmountInUSD, error: ${error}`);
+          throw new Error(`Error in GasService.getAmountInUSD, error: ${error}`);
         })
       )
     );
     return Number(amount) * data.coins[wbnbAddress].price;
+  }
+
+  async reloadNative(walletAddress: string, chainId: number): Promise<ethers.TransactionReceipt> {
+    const provider_rpc_url = this.configService.get(
+      `PROVIDER_RPC_URL_${chainId.toString()}`,
+    );
+    const provider = new ethers.JsonRpcProvider(provider_rpc_url);
+    const supplyAccount = new ethers.Wallet(
+      await MPC.retrievePrivateKey(this.configService.get('SUPPLY_ACCOUNT_ADDRESS')),
+      provider
+    );
+    const txResponse = await supplyAccount.sendTransaction({
+      to: walletAddress,
+      value: ethers.parseEther('0.001')
+    });
+    const txReceipt = await txResponse.wait();
+    return txReceipt;
   }
 }

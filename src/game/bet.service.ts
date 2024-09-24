@@ -1055,7 +1055,7 @@ export class BetService implements OnModuleInit {
         .where(
           'walletTx.userWalletId = :userWalletId AND walletTx.status = :status',
           {
-            userWalletId: userInfo.referralUserId,
+            userWalletId: referralUserInfo.wallet.id,
             status: 'S',
           },
         )

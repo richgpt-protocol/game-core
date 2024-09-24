@@ -205,6 +205,37 @@ export class GameController {
     }
   }
 
+  @Secure(null, UserRole.ADMIN)
+  @Post('restart-winning-bonus')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async reProcessReferralBonus(
+    @Request() req,
+    @Body() payload: { gameId: number; betOrderId: number },
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.gameService.reProcessReferralBonus(
+        payload.gameId,
+        payload.betOrderId,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Processing referral bonus',
+      };
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException(error.message);
+    }
+  }
+
   @Secure(null, UserRole.USER)
   @Get('recent-bets')
   @ApiResponse({

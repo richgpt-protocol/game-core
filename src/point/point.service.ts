@@ -406,7 +406,8 @@ export class PointService {
     return Object.assign({}, ...setting.map((s) => ({ [s.key]: +s.value })));
   }
 
-  async getReferralPrizeBonusTier(tier: number): Promise<number> {
+  async getReferralPrizeBonusTier(level: number): Promise<number> {
+    const tier = Math.ceil(level / 10); //each tier has 10 levels
     const setting = await this.settingRepository.findOne({
       where: {
         key: `referralPrizeBonusTier${tier}`,

@@ -11,7 +11,9 @@ import { join } from 'path';
 import { ConfigService } from './config/config.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    logger: console,
+  });
   setupSwagger(app);
   app.enableCors();
   app.useGlobalPipes(
