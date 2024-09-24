@@ -63,7 +63,7 @@ export class QueueService {
       const handler = queueHandlers.get(job.data.queueType);
       if (handler) {
         console.log(
-          `Processing ${job.queueName} Job ${job.id}. Attempts ${job.attemptsMade}`,
+          `Processing ${job.queueName} - ${job.data.queueType} Job ${job.id}. Attempts ${job.attemptsMade}`,
         );
         return await handler.jobHandler(job);
       } else {
