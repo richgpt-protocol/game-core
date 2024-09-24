@@ -43,7 +43,9 @@ export class ChatbotService {
     const chatLog = await this.chatLogRepository.findBy({ userId });
     // extract chat completion message from chatLog
     // @ts-ignore
-    let messages: Array<ChatCompletionMessageParam> = chatLog.map(log => ({ role: log.role, content: log.content }));
+    let messages: Array<ChatCompletionMessageParam> = chatLog
+      .map(log => ({ role: log.role, content: log.content }))
+      .filter(log => log.role !== 'tool');
 
     const initialContent = 
 `You are a human named Professor Rich, please reply in casual conversation in simple English under 3 sentences.
