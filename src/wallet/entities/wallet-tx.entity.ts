@@ -19,6 +19,7 @@ import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { InternalTransfer } from './internal-transfer.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
+import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
 
 @Entity()
 export class WalletTx {
@@ -123,4 +124,8 @@ export class WalletTx {
   @OneToOne(() => GameTx, (gameTx) => gameTx.walletTx)
   @JoinColumn()
   gameTx: GameTx;
+
+  @OneToOne(() => UsdtTx, (usdtTx) => usdtTx.walletTx)
+  @JoinColumn()
+  usdtTx: UsdtTx;
 }

@@ -1,6 +1,13 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { UserWallet } from '../entities/user-wallet.entity';
-import { DataSource, MoreThan, Not, Repository } from 'typeorm';
+import {
+  DataSource,
+  In,
+  MoreThan,
+  Not,
+  QueryRunner,
+  Repository,
+} from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
@@ -63,6 +70,54 @@ export class CreditService {
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+
+      const creditWalletTx = await this._addCredit(payload, queryRunner);
+      await queryRunner.commitTransaction();
+
+      await this.addToQueue(creditWalletTx.id);
+
+      return creditWalletTx;
+    } catch (error) {
+      console.log('catch block');
+      console.error(error);
+      await queryRunner.rollbackTransaction();
+      throw new BadRequestException(error.message);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  /// IMPORTANT: this.addToQueue(creditWalletTx.id); SHOULD BE CALLED AFTER THIS METHOD and COMMITING THE TRANSACTION
+  async addCreditMiniGame(payload: AddCreditDto, queryRunner: QueryRunner) {
+    try {
+      return await this._addCredit(payload, queryRunner, true);
+    } catch (error) {
+      console.error(error);
+      throw new Error(error.message);
+    }
+  }
+
+  async addToQueue(creditWalletTxId: number) {
+    const jobId = `addCredit-${creditWalletTxId}`;
+    await this.queueService.addJob(
+      this.QUEUE_NAME,
+      jobId,
+      {
+        creditWalletTxId: creditWalletTxId,
+        queueType: this.QUEUE_TYPE,
+      },
+      3000,
+    );
+    return true;
+  }
+
+  /// IMPORTANT: this.addToQueue(creditWalletTx.id); SHOULD BE CALLED COMMITING THE TRANSACTION
+  private async _addCredit(
+    payload: AddCreditDto,
+    queryRunner: QueryRunner,
+    isGameTx: boolean = false,
+  ) {
+    try {
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
         where: { walletAddress: payload.walletAddress },
       });
@@ -86,7 +141,7 @@ export class CreditService {
       //update or insert credit wallet tx
       const creditWalletTx = new CreditWalletTx();
       creditWalletTx.amount = payload.amount;
-      creditWalletTx.txType = 'CREDIT';
+      creditWalletTx.txType = isGameTx ? 'GAME_TRANSACTION' : 'CREDIT';
       creditWalletTx.status = 'P';
       creditWalletTx.walletId = userWallet.id;
       creditWalletTx.userWallet = userWallet;
@@ -115,29 +170,14 @@ export class CreditService {
       creditWalletTx.gameUsdTx = [gameUsdTx];
       await queryRunner.manager.save(creditWalletTx);
 
-      await queryRunner.commitTransaction();
-
-      const jobId = `addCredit-${creditWalletTx.id}`;
-      await this.queueService.addJob(
-        this.QUEUE_NAME,
-        jobId,
-        {
-          creditWalletTxId: creditWalletTx.id,
-          queueType: this.QUEUE_TYPE,
-        },
-        3000,
-      );
+      return creditWalletTx;
     } catch (error) {
-      console.log('catch block');
       console.error(error);
-      await queryRunner.rollbackTransaction();
       if (error instanceof BadRequestException) {
         throw new BadRequestException(error.message);
       } else {
         throw new BadRequestException('Failed to add credit');
       }
-    } finally {
-      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
@@ -453,7 +493,9 @@ export class CreditService {
         .where('creditWalletTx.expirationDate < :expirationDate', {
           expirationDate: new Date(),
         })
-        .andWhere('creditWalletTx.txType = :type', { type: 'CREDIT' })
+        .andWhere('creditWalletTx.txType IN (:...types)', {
+          types: ['CREDIT', 'GAME_TRANSACTION'],
+        })
         .andWhere('creditWalletTx.status = :status', { status: 'S' })
         .groupBy('userWallet.id')
         .getRawMany();
@@ -489,7 +531,11 @@ export class CreditService {
 
           await queryRunner.manager.update(
             CreditWalletTx,
-            { walletId: tx.walletId, status: 'S', txType: 'CREDIT' },
+            {
+              walletId: tx.walletId,
+              status: 'S',
+              txType: In(['CREDIT', 'GAME_TRANSACTION']),
+            },
             {
               status: 'E',
             },
