@@ -212,7 +212,7 @@ export class WithdrawService implements OnModuleInit {
         receiverAddress: payload.receiverAddress,
         isPayoutTransferred: false,
         chainId: payload.chainId,
-        fees: Number(payload.amount) * Number(setting.value),
+        fees: Number(setting?.value) || 0,
         tokenSymbol: payload.tokenSymbol,
         tokenAddress: payload.tokenAddress,
         amount: payload.amount,
