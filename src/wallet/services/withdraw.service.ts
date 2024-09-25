@@ -30,6 +30,7 @@ import { Job } from 'bullmq';
 import { Mutex } from 'async-mutex';
 import { ReviewRedeemDto } from '../dto/ReviewRedeem.dto';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { ConfigService } from 'src/config/config.service';
 dotenv.config();
 
 type RedeemResponse = {
@@ -74,6 +75,7 @@ export class WithdrawService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
     private userService: UserService,
     private readonly queueService: QueueService,
+    private configService: ConfigService,
   ) {
     this.payoutCronMutex = new Mutex();
   }
@@ -719,33 +721,32 @@ export class WithdrawService implements OnModuleInit {
     signature: BytesLike,
   ): Promise<ethers.TransactionReceipt> {
     try {
-      const providerUrl = process.env.OPBNB_PROVIDER_RPC_URL;
+      const providerUrl = this.configService.get('PROVIDER_RPC_URL_' + chainId);
       const provider = new ethers.JsonRpcProvider(providerUrl);
       const payoutBot = new ethers.Wallet(
         await MPC.retrievePrivateKey(process.env.PAYOUT_BOT_ADDRESS),
         provider,
       );
 
-      this.eventEmitter.emit('gas.service.reload', payoutBot.address, chainId);
+      const payoutPoolContractAddress = chainId === 56 || chainId === 97
+        ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
+        : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
 
-      const payoutPoolContractAddress =
-        process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
       const payoutPoolContract = Payout__factory.connect(
         payoutPoolContractAddress,
         payoutBot,
       );
-      // const estimatedGas = await payoutPoolContract.payout.estimateGas(
-      //   ethers.parseEther(amount.toString()),
-      //   to,
-      //   signature,
-      // );
+      const estimatedGas = await payoutPoolContract.payout.estimateGas(
+        ethers.parseEther(amount.toString()),
+        to,
+        signature,
+      );
       const txResponse = await payoutPoolContract.payout(
         ethers.parseEther(amount.toString()),
         to,
         signature,
         {
-          //if uncommented it throws "Exceeds block gas limit" error
-          // gasLimit: estimatedGas * ((estimatedGas * BigInt(30)) / BigInt(100)),
+          gasLimit: estimatedGas * ((estimatedGas * BigInt(30)) / BigInt(100)),
         }, // increased by ~30% from actual gas used
       );
       const txReceipt = await txResponse.wait();
