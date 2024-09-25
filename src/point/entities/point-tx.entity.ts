@@ -1,5 +1,4 @@
 import { Campaign } from 'src/campaign/entities/campaign.entity';
-import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
@@ -47,6 +46,11 @@ export class PointTx {
     default: 0,
   })
   endingBalance: number;
+
+  @Column({
+    nullable: true,
+  })
+  taskId: number;
 
   @CreateDateColumn()
   createdDate: Date;

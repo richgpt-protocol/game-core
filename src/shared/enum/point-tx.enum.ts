@@ -1,0 +1,10 @@
+export enum PointTxType {
+  GAME_TRANSACTION = 'GAME_TRANSACTION',
+  CLAIM = 'CLAIM',
+  CAMPAIGN = 'CAMPAIGN',
+  DEPOSIT = 'DEPOSIT',
+  BET = 'BET',
+  CHAT = 'CHAT',
+  REFERRAL = 'REFERRAL',
+  QUEST = 'QUEST',
+}

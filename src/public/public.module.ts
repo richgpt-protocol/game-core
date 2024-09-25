@@ -9,6 +9,7 @@ import { GameTx } from './entity/gameTx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { NotificationModule } from 'src/notification/notification.module';
 import { SharedModule } from 'src/shared/shared.module';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SharedModule } from 'src/shared/shared.module';
     WalletModule,
     ConfigModule,
     SharedModule,
+    CacheModule.register(),
   ],
   providers: [PublicService],
   controllers: [PublicController],

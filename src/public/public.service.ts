@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { UserService } from 'src/user/user.service';
 import { WalletService } from 'src/wallet/wallet.service';
 import { GetProfileDto } from './dtos/get-profile.dto';
@@ -28,6 +28,12 @@ import { Mutex } from 'async-mutex';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import axios from 'axios';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { PointTxType } from 'src/shared/enum/point-tx.enum';
+import { GetOttDto } from './dtos/get-ott.dto';
+import * as crypto from 'crypto';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
+import { UserStatus } from 'src/shared/enum/status.enum';
 
 @Injectable()
 export class PublicService {
@@ -38,6 +44,7 @@ export class PublicService {
   AddGameUSDMutex: Mutex;
   StatusUpdaterMutex: Mutex;
   CronMutex: Mutex;
+
   constructor(
     private userService: UserService,
     private walletService: WalletService,
@@ -47,6 +54,7 @@ export class PublicService {
     private gameTxRespository: Repository<GameTx>,
     private adminNotificationService: AdminNotificationService,
     private eventEmitter: EventEmitter2,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
       'DEPOSIT_BOT_ADDRESS',
@@ -127,23 +135,50 @@ export class PublicService {
   }
 
   async updateTaskXP(payload: UpdateTaskXpDto) {
-    const user = await this.userService.findByCriteria('uid', payload.uid);
-    if (!user) {
-      throw new BadRequestException('User not found');
-    }
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
 
-    const userWallet = await this.walletService.getWalletInfo(user.id);
-    if (!userWallet) {
-      throw new BadRequestException('User wallet not found');
-    }
+    try {
+      const user = await this.userService.findByCriteria('uid', payload.uid);
+      if (!user) {
+        throw new BadRequestException('User not found');
+      }
 
-    // TODO: Synchronise user points - Seshanth
-    const xp = Number(userWallet.pointBalance) + payload.xp;
-    return {
-      uid: user.uid,
-      xp,
-      level: this.walletService.calculateLevel(xp),
-    };
+      const userWallet = await this.walletService.getWalletInfo(user.id);
+      if (!userWallet) {
+        throw new BadRequestException('User wallet not found');
+      }
+
+      await queryRunner.startTransaction();
+
+      if (payload.xp > 0) {
+        await this.addXP(
+          payload.xp,
+          PointTxType.QUEST,
+          userWallet,
+          null,
+          payload.taskId,
+          queryRunner,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+      const xp = Number(userWallet.pointBalance); // Get the updated XP balance
+
+      return {
+        uid: user.uid,
+        xp,
+        level: this.walletService.calculateLevel(xp),
+        xpCap: this.walletService.getCurrentXpCap(xp),
+        previousXpCap: this.walletService.getPreviousXpCap(xp),
+      };
+    } catch (error) {
+      console.error('Public-service: Failed to update task', error);
+      await queryRunner.rollbackTransaction();
+      const errorMessage =
+        error instanceof BadRequestException ? error.message : 'Error occurred';
+      throw new BadRequestException(errorMessage);
+    }
   }
 
   async updateUserTelegram(payload: UpdateUserTelegramDto) {
@@ -213,13 +248,19 @@ export class PublicService {
       }
 
       if (payload.xp > 0) {
-        await this.addXP(payload.xp, userWallet, tx, queryRunner);
+        await this.addXP(
+          payload.xp,
+          PointTxType.GAME_TRANSACTION,
+          userWallet,
+          tx,
+          null,
+          queryRunner,
+        );
       }
 
       await queryRunner.commitTransaction();
 
       const xp = Number(userWallet.pointBalance); // Get the updated XP balance
-      console.log('total xp', xp);
       return {
         uid: user.uid,
         xp,
@@ -237,10 +278,27 @@ export class PublicService {
     }
   }
 
+  async createOtt(payload: GetOttDto) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new BadRequestException('User is not active');
+    }
+
+    const ott = crypto.randomBytes(32).toString('hex');
+    await this.cacheManager.set(`ott_${user.uid}`, ott, 30000);
+    return ott;
+  }
+
   private async addXP(
     xpAmount: number,
+    txType: string,
     userWallet: UserWallet,
     gameTx: GameTx,
+    taskId: number,
     queryRunner: QueryRunner,
   ) {
     try {
@@ -260,14 +318,24 @@ export class PublicService {
       pointTx.endingBalance =
         Number(lastValidPointTx?.endingBalance || 0) + Number(xpAmount);
       pointTx.userWallet = userWallet;
-      pointTx.txType = 'GAME_TRANSACTION';
-      pointTx.gameTx = gameTx;
+      pointTx.txType = txType;
+
+      if (gameTx) {
+        pointTx.gameTx = gameTx;
+      }
+
+      if (taskId) {
+        pointTx.taskId = taskId;
+      }
+
       userWallet.pointBalance = pointTx.endingBalance;
       await queryRunner.manager.save(pointTx);
       await queryRunner.manager.save(userWallet);
 
-      gameTx.pointTx = pointTx;
-      await queryRunner.manager.save(gameTx);
+      if (gameTx) {
+        gameTx.pointTx = pointTx;
+        await queryRunner.manager.save(gameTx);
+      }
     } catch (error) {
       console.error('Public-service: Failed to add XP', error);
       throw new Error(error.message);

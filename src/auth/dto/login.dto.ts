@@ -86,3 +86,10 @@ export class LoginWithTelegramDTO {
   @IsOptional()
   referralCode: string;
 }
+
+export class GetOttDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  uid: string;
+}

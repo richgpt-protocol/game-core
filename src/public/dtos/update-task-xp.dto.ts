@@ -9,4 +9,8 @@ export class UpdateTaskXpDto {
   @ApiProperty()
   @IsString()
   uid: string;
+
+  @ApiProperty()
+  @IsNumber()
+  taskId: number;
 }

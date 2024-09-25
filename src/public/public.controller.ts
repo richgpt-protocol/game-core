@@ -16,6 +16,7 @@ import { GetProfileDto } from './dtos/get-profile.dto';
 import { UpdateUserGameDto } from './dtos/update-user-game.dto';
 import { UpdateTaskXpDto } from './dtos/update-task-xp.dto';
 import { UpdateUserTelegramDto } from './dtos/update-user-telegram.dto';
+import { GetOttDto } from './dtos/get-ott.dto';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
@@ -132,6 +133,22 @@ export class PublicController {
     return {
       statusCode: HttpStatus.OK,
       data: null,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('create-ott')
+  @ApiResponse({
+    status: 200,
+    description: 'Create OTT for user',
+    type: ResponseVo,
+  })
+  async createOtt(@Body() payload: GetOttDto): Promise<ResponseVo<any>> {
+    const data = await this.publicService.createOtt(payload);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
       message: 'Success',
     };
   }
