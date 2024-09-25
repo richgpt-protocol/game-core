@@ -736,18 +736,10 @@ export class WithdrawService implements OnModuleInit {
         payoutPoolContractAddress,
         payoutBot,
       );
-      const estimatedGas = await payoutPoolContract.payout.estimateGas(
-        ethers.parseEther(amount.toString()),
-        to,
-        signature,
-      );
       const txResponse = await payoutPoolContract.payout(
         ethers.parseEther(amount.toString()),
         to,
         signature,
-        {
-          gasLimit: estimatedGas * ((estimatedGas * BigInt(30)) / BigInt(100)),
-        }, // increased by ~30% from actual gas used
       );
       const txReceipt = await txResponse.wait();
 
