@@ -42,6 +42,26 @@ export class WalletService {
     return highestLevel;
   }
 
+  calculateLevelAndPercentage(point: number): { level: number; percentage: number } {
+    const level1 = this.levelMap.find((level) => level.level === 1);
+    if (point < level1.xp) return { level: 0, percentage: 0 };
+
+    const levels = this.levelMap.filter((level) => level.xp <= point);
+    const highestLevel = levels[levels.length - 1].level;
+    // highestLevel is the current level
+
+    // Find the next and previous level
+    const nextLevel = this.levelMap.find((level) => level.level === highestLevel + 1);
+    const previousLevel = this.levelMap.find((level) => level.level === highestLevel);
+
+    // Calculate the percentage towards the next level
+    const xpForCurrentLevel = point - previousLevel.xp;
+    const xpForNextLevel = nextLevel.xp - previousLevel.xp;
+    const percentage = Math.floor((xpForCurrentLevel / xpForNextLevel) * 100);
+
+    return { level: highestLevel, percentage };
+  }
+
   async getWalletTx(userId: number, count: number) {
     const walletTxs = await this.walletTxRepository.find({
       where: {
