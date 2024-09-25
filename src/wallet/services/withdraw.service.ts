@@ -175,7 +175,7 @@ export class WithdrawService implements OnModuleInit {
         };
       }
 
-      const lastRedeemWalletTx = await queryRunner.manager.findOne(WalletTx, {
+      const lastPendingRedeemWalletTx = await queryRunner.manager.findOne(WalletTx, {
         where: [
           {
             txType: 'REDEEM',
@@ -195,7 +195,7 @@ export class WithdrawService implements OnModuleInit {
         ],
       });
 
-      if (lastRedeemWalletTx) {
+      if (lastPendingRedeemWalletTx) {
         return { error: 'Another Redeem Tx is pending', data: null };
       }
 
@@ -268,9 +268,8 @@ export class WithdrawService implements OnModuleInit {
       );
       const isFirstRedeem = lastSuccessfulRedeemWalletTx === null;
       const isLastRedeemAfter24Hours =
-        lastRedeemWalletTx !== null &&
-        lastRedeemWalletTx.updatedDate <
-          new Date(Date.now() - 24 * 60 * 60 * 1000);
+        lastSuccessfulRedeemWalletTx !== null &&
+        lastSuccessfulRedeemWalletTx.updatedDate < new Date(Date.now() - 24 * 60 * 60 * 1000);
 
       if (
         redeemTx.amount < 100 &&
