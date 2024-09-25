@@ -29,6 +29,7 @@ import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { WalletService } from 'src/wallet/wallet.service';
 import { PointService } from 'src/point/point.service';
 import { ClaimService } from 'src/wallet/services/claim.service';
+import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 
 interface SubmitDrawResultDTO {
   drawResults: DrawResult[];
@@ -432,7 +433,6 @@ export class GameService implements OnModuleInit {
       const { prizeAmount, betOrderId } = job.data;
       if (prizeAmount === 0) return;
 
-      // throw new Error('test error');
       const betOrder = await queryRunner.manager
         .createQueryBuilder(BetOrder, 'betOrder')
         .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
@@ -452,7 +452,7 @@ export class GameService implements OnModuleInit {
         return;
       }
 
-      const level = await this.walletService.calculateLevel(
+      const level = this.walletService.calculateLevel(
         referralUser.wallet.pointBalance,
       );
       const bonusPerc =
@@ -474,17 +474,28 @@ export class GameService implements OnModuleInit {
       walletTx.txType = 'REFERRAL';
       walletTx.txAmount = bonusAmount;
       walletTx.status = 'S';
+      walletTx.startingBalance = lastValidWalletTx
+        ? lastValidWalletTx.endingBalance
+        : 0;
+      walletTx.endingBalance =
+        Number(walletTx.startingBalance) + Number(bonusAmount);
+      walletTx.userWalletId = referralUser.wallet.id;
+      await queryRunner.manager.save(walletTx);
 
-      const chainId = Number(process.env.BASE_CHAIN_ID);
+      const chainId = this.configService.get('BASE_CHAIN_ID');
       const provider = new ethers.JsonRpcProvider(
-        process.env[`PROVIDER_RPC_URL_${chainId}`],
+        this.configService.get(
+          'PROVIDER_RPC_URL_' + chainId,
+        ),
       );
       const signer = new ethers.Wallet(
-        await MPC.retrievePrivateKey(process.env.DEPOSIT_BOT_ADDRESS),
+        await MPC.retrievePrivateKey(
+          this.configService.get('DEPOSIT_BOT_ADDRESS'),
+        ),
         provider,
       );
       const depositContract = Deposit__factory.connect(
-        process.env.DEPOSIT_CONTRACT_ADDRESS,
+        this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
         signer,
       );
 
@@ -495,7 +506,7 @@ export class GameService implements OnModuleInit {
 
       const receipt = await onchainTx.wait();
 
-      console.log('receipt', receipt);
+      // console.log('receipt', receipt);
 
       if (receipt.status !== 1) {
         throw new Error(
@@ -505,7 +516,7 @@ export class GameService implements OnModuleInit {
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = bonusAmount;
-      gameUsdTx.chainId = chainId;
+      gameUsdTx.chainId = +chainId;
       gameUsdTx.status = 'S';
       gameUsdTx.txHash = onchainTx.hash;
       gameUsdTx.senderAddress = process.env.DEPOSIT_BOT_ADDRESS;
@@ -513,22 +524,31 @@ export class GameService implements OnModuleInit {
       gameUsdTx.retryCount = 0;
       await queryRunner.manager.save(gameUsdTx);
 
+      const referralTx = new ReferralTx();
+      referralTx.rewardAmount = bonusAmount;
+      referralTx.referralType = 'PRIZE';
+      referralTx.txHash = onchainTx.hash;
+      referralTx.status = 'S';
+      referralTx.userId = referralUser.id;
+      referralTx.user = referralUser;
+      referralTx.referralUserId = betOrder.walletTx.userWallet.user.id;
+      referralTx.referralUser = betOrder.walletTx.userWallet.user;
+      referralTx.walletTx = walletTx;
+      await queryRunner.manager.save(referralTx);
+
       walletTx.txHash = onchainTx.hash;
       walletTx.gameUsdTx = gameUsdTx;
-      walletTx.startingBalance = lastValidWalletTx
-        ? lastValidWalletTx.endingBalance
-        : 0;
-      walletTx.endingBalance =
-        Number(walletTx.startingBalance) + Number(bonusAmount);
-      walletTx.userWalletId = referralUser.wallet.id;
+      walletTx.referralTx = referralTx;
       await queryRunner.manager.save(walletTx);
+
       referralUser.wallet.walletBalance =
         Number(referralUser.wallet.walletBalance) + bonusAmount;
-      await queryRunner.manager.save(walletTx);
       await queryRunner.manager.save(referralUser.wallet);
+
       gameUsdTx.walletTxId = walletTx.id;
       gameUsdTx.walletTxs = [walletTx];
       await queryRunner.manager.save(gameUsdTx);
+
       await queryRunner.commitTransaction();
     } catch (error) {
       console.error('Error in transferReferrerBonus', error);
