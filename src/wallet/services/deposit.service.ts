@@ -37,6 +37,7 @@ import { Deposit__factory } from 'src/contract';
 @Injectable()
 export class DepositService {
   private readonly cronMutex: Mutex = new Mutex();
+  private readonly miniGameUSDTSender: string;
 
   constructor(
     @InjectRepository(DepositTx)
@@ -49,7 +50,12 @@ export class DepositService {
     private readonly pointService: PointService,
     private readonly userService: UserService,
     private eventEmitter: EventEmitter2,
-  ) {}
+  ) {
+    const senderWallet = new ethers.Wallet(
+      this.configService.get('USDT_SENDER_PRIV_KEY'),
+    );
+    this.miniGameUSDTSender = senderWallet.address;
+  }
 
   async getAllAddress(page: number = 1, limit: number = 100) {
     const wallets = await this.userWalletRepository
@@ -82,7 +88,11 @@ export class DepositService {
       });
       if (!userWallet) return;
 
-      if (payload.amount < 1) {
+      if (
+        payload.amount < 1 &&
+        payload.depositerAddress.toLowerCase() !==
+          this.miniGameUSDTSender.toLowerCase()
+      ) {
         // deposit amount less than $1, inform admin and do nothing
         await this.adminNotificationService.setAdminNotification(
           `Error processing deposit for wallet: ${payload.walletAddress} \n

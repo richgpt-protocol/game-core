@@ -7,9 +7,7 @@ import { UpdateTaskXpDto } from './dtos/update-task-xp.dto';
 import { UpdateUserTelegramDto } from './dtos/update-user-telegram.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
-import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { DataSource, Not, QueryRunner, Repository } from 'typeorm';
-import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { ConfigService } from 'src/config/config.service';
 import {
   ContractTransactionReceipt,
@@ -18,8 +16,6 @@ import {
   parseUnits,
   Wallet,
 } from 'ethers';
-import { Deposit__factory } from 'src/contract';
-import { MPC } from 'src/shared/mpc';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -35,6 +31,8 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { UserStatus } from 'src/shared/enum/status.enum';
 
+import { UsdtTx } from './entity/usdt-tx.entity';
+import { CreditService } from 'src/wallet/services/credit.service';
 @Injectable()
 export class PublicService {
   GAMEUSD_TRANFER_INITIATOR: string;
@@ -45,10 +43,12 @@ export class PublicService {
   StatusUpdaterMutex: Mutex;
   CronMutex: Mutex;
 
+  NotifierMutex: Mutex;
   constructor(
     private userService: UserService,
     private walletService: WalletService,
     private configService: ConfigService,
+    private creditService: CreditService,
     private dataSource: DataSource,
     @InjectRepository(GameTx)
     private gameTxRespository: Repository<GameTx>,
@@ -74,6 +74,7 @@ export class PublicService {
     this.AddXpMutex = new Mutex();
     this.AddGameUSDMutex = new Mutex();
     this.StatusUpdaterMutex = new Mutex();
+    this.NotifierMutex = new Mutex();
   }
 
   async findUser(payload: GetProfileDto) {
@@ -238,8 +239,9 @@ export class PublicService {
         await this.addUSDT(payload.usdtAmount, userWallet, tx, queryRunner);
       }
 
+      let creditWalletTx;
       if (payload.gameUsdAmount > 0) {
-        await this.addCredit(
+        creditWalletTx = await this.addCredit(
           payload.gameUsdAmount,
           userWallet.id,
           tx.id,
@@ -258,9 +260,14 @@ export class PublicService {
         );
       }
 
+      const xp = Number(userWallet.pointBalance); // Get the updated XP balance
       await queryRunner.commitTransaction();
 
-      const xp = Number(userWallet.pointBalance); // Get the updated XP balance
+      //Should be done after the transaction is committed
+      if (payload.gameUsdAmount > 0 && creditWalletTx) {
+        await this.creditService.addToQueue(creditWalletTx.id);
+      }
+
       return {
         uid: user.uid,
         xp,
@@ -364,37 +371,18 @@ export class PublicService {
         },
       });
 
-      const today = new Date();
-      const expirationDate = new Date(today.setDate(today.getDate() + 60));
-      const creditWalletTx = new CreditWalletTx();
-      creditWalletTx.amount = creditAmount;
-      creditWalletTx.txType = 'GAME_TRANSACTION';
-      creditWalletTx.status = 'P';
-      creditWalletTx.walletId = userWallet.id;
-      creditWalletTx.userWallet = userWallet;
-      creditWalletTx.expirationDate = expirationDate;
-      creditWalletTx.gameTx = gameTx;
-      await queryRunner.manager.save(creditWalletTx);
+      const creditWalletTx = await this.creditService.addCreditMiniGame(
+        {
+          amount: creditAmount,
+          walletAddress: userWallet.walletAddress,
+        },
+        queryRunner,
+      );
 
       gameTx.creditWalletTx = creditWalletTx;
       await queryRunner.manager.save(gameTx);
 
-      const gameUsdTx = new GameUsdTx();
-      gameUsdTx.amount = creditWalletTx.amount;
-      gameUsdTx.status = 'P';
-      gameUsdTx.txHash = null;
-      gameUsdTx.receiverAddress = creditWalletTx.userWallet.walletAddress;
-      gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
-      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-      gameUsdTx.creditWalletTx = creditWalletTx;
-      gameUsdTx.retryCount = 0;
-
-      await queryRunner.manager.save(gameUsdTx);
-      creditWalletTx.gameUsdTx = [gameUsdTx];
-
-      await queryRunner.manager.save(creditWalletTx);
-
-      // await queryRunner.commitTransaction();
+      return creditWalletTx;
     } catch (error) {
       // await queryRunner.rollbackTransaction();
       console.error('Public-service: Failed to add credit', error);
@@ -426,159 +414,22 @@ export class PublicService {
         this.configService.get('USDT_SENDER_PRIV_KEY'),
       );
 
-      const gameUsdTx = new GameUsdTx();
-      gameUsdTx.amount = amount;
-      gameUsdTx.status = 'P';
-      gameUsdTx.txHash = null;
-      gameUsdTx.retryCount = 0;
-      gameUsdTx.receiverAddress = userWallet.walletAddress;
-      gameUsdTx.senderAddress = await senderWallet.getAddress();
-      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-      gameUsdTx.walletTxs = [walletTx];
-      gameUsdTx.walletTxId = walletTx.id;
-      walletTx.gameUsdTx = gameUsdTx;
-      await queryRunner.manager.save(gameUsdTx);
+      const usdtTx = new UsdtTx();
+      usdtTx.amount = amount;
+      usdtTx.status = 'P';
+      usdtTx.txHash = null;
+      usdtTx.retryCount = 0;
+      usdtTx.receiverAddress = userWallet.walletAddress;
+      usdtTx.senderAddress = await senderWallet.getAddress();
+      usdtTx.chainId = +this.configService.get('BASE_CHAIN_ID');
+      usdtTx.walletTx = walletTx;
+      usdtTx.walletTxId = walletTx.id;
+      walletTx.usdtTx = usdtTx;
+      await queryRunner.manager.save(usdtTx);
       await queryRunner.manager.save(walletTx);
     } catch (error) {
       console.error('Public-service: Failed to add GameUSD', error);
       throw new Error(error.message);
-    }
-  }
-
-  private async getSigner(chainId: number, address: string): Promise<Wallet> {
-    const providerUrl = this.configService.get(`PROVIDER_URL_${chainId}`);
-    const provider = new JsonRpcProvider(providerUrl);
-    const signerPrivKey = await MPC.retrievePrivateKey(address);
-
-    return new Wallet(signerPrivKey, provider);
-  }
-
-  private async depositGameUSD(to: string, amount: bigint, signer: Wallet) {
-    const depositContractAddress = this.configService.get(
-      'DEPOSIT_CONTRACT_ADDRESS',
-    );
-    const depositContract = Deposit__factory.connect(
-      depositContractAddress,
-      signer,
-    );
-    const gasLimit = await depositContract.deposit.estimateGas(to, amount);
-    return await depositContract.deposit(to, amount, {
-      gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
-    });
-  }
-
-  @Cron(CronExpression.EVERY_SECOND)
-  async handleAddCreditTransactions() {
-    const release = await this.AddCreditMutex.acquire();
-    const queryRunner = this.dataSource.createQueryRunner();
-
-    try {
-      await queryRunner.connect();
-      await queryRunner.startTransaction();
-
-      const creditWalletTxn = await queryRunner.manager
-        .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
-        .leftJoinAndSelect('creditWalletTx.gameTx', 'gameTx')
-        .leftJoinAndSelect('creditWalletTx.gameUsdTx', 'gameUsdTx')
-        .leftJoinAndSelect('creditWalletTx.userWallet', 'userWallet')
-        .where('creditWalletTx.status = :status', { status: 'P' })
-        .andWhere('gameUsdTx.status = :status', { status: 'P' })
-        .andWhere('creditWalletTx.txType = :txType', {
-          txType: 'GAME_TRANSACTION',
-        })
-        .getOne();
-
-      if (!creditWalletTxn) {
-        // console.log('No credit transactions found');
-        if (!queryRunner.isReleased) await queryRunner.release();
-
-        return;
-      }
-
-      const gameUsdTx = creditWalletTxn.gameUsdTx[0];
-
-      if (gameUsdTx.retryCount >= 3) {
-        await queryRunner.manager.update(GameUsdTx, gameUsdTx.id, {
-          status: 'PD',
-        });
-
-        await queryRunner.commitTransaction();
-        return;
-      }
-
-      let receipt: ContractTransactionReceipt;
-      try {
-        const signer = await this.getSigner(
-          gameUsdTx.chainId,
-          gameUsdTx.senderAddress,
-        );
-        const onchainTx = await this.depositGameUSD(
-          gameUsdTx.receiverAddress,
-          parseUnits(gameUsdTx.amount.toString(), 18),
-          signer,
-        );
-
-        receipt = await onchainTx.wait(2);
-
-        if (receipt && receipt.status != 1) {
-          creditWalletTxn.gameTx.retryCount =
-            creditWalletTxn.gameTx.retryCount + 1;
-          gameUsdTx.retryCount = gameUsdTx.retryCount + 1;
-
-          throw new Error('Transaction failed');
-        }
-      } catch (error) {
-        console.error('error in handleAddCreditTransactions Cron', error);
-        gameUsdTx.retryCount = gameUsdTx.retryCount + 1;
-        await queryRunner.manager.save(gameUsdTx);
-        await queryRunner.manager.save(creditWalletTxn);
-        await queryRunner.commitTransaction();
-
-        return;
-      }
-
-      gameUsdTx.txHash = receipt.hash;
-      gameUsdTx.status = 'S';
-      creditWalletTxn.status = 'S';
-
-      const lastValidCreditWalletTx = await queryRunner.manager.findOne(
-        CreditWalletTx,
-        {
-          where: {
-            userWallet: creditWalletTxn.userWallet,
-            status: 'S',
-            id: Not(creditWalletTxn.id),
-          },
-          order: {
-            updatedDate: 'DESC',
-          },
-        },
-      );
-      creditWalletTxn.startingBalance =
-        lastValidCreditWalletTx?.endingBalance || 0;
-      const endingBalance =
-        Number(lastValidCreditWalletTx?.endingBalance || 0) +
-        Number(gameUsdTx.amount);
-      creditWalletTxn.endingBalance = endingBalance;
-      creditWalletTxn.userWallet.creditBalance = endingBalance;
-
-      await queryRunner.manager.save(gameUsdTx);
-      await queryRunner.manager.save(creditWalletTxn);
-      await queryRunner.manager.save(creditWalletTxn.userWallet);
-      await queryRunner.commitTransaction();
-    } catch (error) {
-      console.error('error processing addCredit', error);
-      await queryRunner.rollbackTransaction();
-
-      await this.adminNotificationService.setAdminNotification(
-        error.message,
-        'SYNCHRONISE_ADD_CREDIT',
-        'Error processing addCredit',
-        false,
-      );
-    } finally {
-      if (!queryRunner.isReleased) await queryRunner.release();
-      release();
     }
   }
 
@@ -593,7 +444,7 @@ export class PublicService {
       const walletTx = await queryRunner.manager
         .createQueryBuilder(WalletTx, 'walletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-        .leftJoinAndSelect('walletTx.gameUsdTx', 'gameUsdTx')
+        .leftJoinAndSelect('walletTx.usdtTx', 'usdtTx')
         .leftJoinAndSelect('walletTx.gameTx', 'gameTx')
         .where('walletTx.status = :status', { status: 'P' })
         .andWhere('walletTx.txType = :txType', {
@@ -609,11 +460,11 @@ export class PublicService {
         return;
       }
 
-      const gameUsdTx = walletTx.gameUsdTx;
+      const usdtTx = walletTx.usdtTx;
       const userWallet = walletTx.userWallet;
 
-      if (gameUsdTx.retryCount >= 3) {
-        await queryRunner.manager.update(GameUsdTx, gameUsdTx.id, {
+      if (usdtTx.retryCount >= 3) {
+        await queryRunner.manager.update(UsdtTx, usdtTx.id, {
           status: 'PD',
         });
 
@@ -631,7 +482,7 @@ export class PublicService {
       let receipt: ContractTransactionReceipt;
       try {
         const provider = new JsonRpcProvider(
-          this.configService.get(`PROVIDER_URL_${gameUsdTx.chainId}`),
+          this.configService.get(`PROVIDER_URL_${usdtTx.chainId}`),
         );
         const signer = new Wallet(
           this.configService.get('USDT_SENDER_PRIV_KEY'),
@@ -641,7 +492,7 @@ export class PublicService {
         this.eventEmitter.emit(
           'gas.service.reload',
           await signer.getAddress(),
-          gameUsdTx.chainId,
+          usdtTx.chainId,
         );
 
         const tokenContract = new ethers.Contract(
@@ -651,8 +502,8 @@ export class PublicService {
         );
 
         const onchainTx = await tokenContract.transfer(
-          gameUsdTx.receiverAddress,
-          parseUnits(gameUsdTx.amount.toString(), 18),
+          usdtTx.receiverAddress,
+          parseUnits(usdtTx.amount.toString(), 18),
         );
         receipt = await onchainTx.wait(2);
 
@@ -661,15 +512,15 @@ export class PublicService {
         }
       } catch (error) {
         console.error('publicService: error Adding gameUSD onchain', error);
-        gameUsdTx.retryCount = gameUsdTx.retryCount + 1;
-        await queryRunner.manager.save(gameUsdTx);
+        usdtTx.retryCount = usdtTx.retryCount + 1;
+        await queryRunner.manager.save(usdtTx);
         await queryRunner.commitTransaction();
         return;
       }
 
-      gameUsdTx.txHash = receipt.hash;
-      gameUsdTx.status = 'S';
-      await queryRunner.manager.save(gameUsdTx);
+      usdtTx.txHash = receipt.hash;
+      usdtTx.status = 'S';
+      await queryRunner.manager.save(usdtTx);
 
       const lastValidWalletTx = await queryRunner.manager.findOne(WalletTx, {
         where: {
@@ -766,14 +617,19 @@ export class PublicService {
 
   @Cron(CronExpression.EVERY_SECOND)
   async notifyMiniGame() {
+    const release = await this.NotifierMutex.acquire();
+    const queryRunner = this.dataSource.createQueryRunner();
     try {
-      const gameTxns = await this.dataSource.manager.find(GameTx, {
-        where: {
-          isNotified: false,
-          status: 'S',
-        },
-        relations: ['walletTx', 'creditWalletTx'],
-      });
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const gameTxns = await queryRunner.manager
+        .createQueryBuilder(GameTx, 'gameTx')
+        .leftJoinAndSelect('gameTx.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('gameTx.walletTx', 'walletTx')
+        .leftJoinAndSelect('gameTx.userWallet', 'userWallet')
+        .where('gameTx.isNotified = :isNotified', { isNotified: false })
+        .andWhere('gameTx.status = :status', { status: 'S' })
+        .getMany();
 
       if (gameTxns.length === 0) {
         // console.log('No game transactions found for notification');
@@ -783,23 +639,53 @@ export class PublicService {
       for (const gameTxn of gameTxns) {
         try {
           // console.log('Notifying mini game', gameTxn.id);
+          let walletBalance = 0;
+          let creditBalance = 0;
+          if (gameTxn.walletTx && gameTxn.usdtAmount > 0) {
+            const depositWalletTx = await queryRunner.manager.findOne(
+              WalletTx,
+              {
+                where: {
+                  txHash: gameTxn.walletTx.txHash,
+                  status: 'S',
+                  txType: 'DEPOSIT',
+                },
+              },
+            );
+
+            walletBalance = depositWalletTx?.endingBalance || 0;
+          } else {
+            walletBalance = gameTxn.userWallet.walletBalance;
+          }
+
+          if (gameTxn.creditWalletTx) {
+            creditBalance = gameTxn.creditWalletTx.endingBalance;
+          } else {
+            creditBalance = gameTxn.userWallet.creditBalance;
+          }
+
           await axios.post(this.miniGameNotificationEndPoint, {
             gameSessionToken: gameTxn.gameSessionToken,
             gameUsdAmount: Number(gameTxn.creditAmount),
             usdtAmount: Number(gameTxn.usdtAmount),
             xp: gameTxn.xp,
-            creditBalance: Number(gameTxn.creditWalletTx?.endingBalance) || 0,
-            walletBalance: Number(gameTxn.walletTx?.endingBalance) || 0,
+            creditBalance,
+            walletBalance,
           });
-          await this.dataSource.manager.update(GameTx, gameTxn.id, {
+          await queryRunner.manager.update(GameTx, gameTxn.id, {
             isNotified: true,
           });
         } catch (error) {
           console.error('error notifing MiniGame Cron', error.response.data);
         }
       }
+
+      await queryRunner.commitTransaction();
     } catch (error) {
       console.error('error in notifyMiniGame Cron', error);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+      release();
     }
   }
 }
