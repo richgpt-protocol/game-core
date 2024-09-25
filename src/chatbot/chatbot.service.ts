@@ -288,23 +288,17 @@ Today date: ${new Date().toDateString()}.`;
     // only once xp reward per utc day
     if (userMessageCount === 2 && assistantMessageCount >= 2) {
       const userWallet = await this.userWalletRepository.findOneBy({ userId });
-      
-      // create pointTx
-      const pointTx = this.pointTxRepository.create({
-        txType: 'CHAT',
-        amount: 1,
-        startingBalance: 0,
-        endingBalance: 0,
-        walletId: userWallet.id,
-      });
-      await this.pointTxRepository.save(pointTx);
 
       const lastPointTx = await this.pointTxRepository.findOne({
         where: { walletId: userWallet.id },
         order: { id: 'DESC' },
       })
-
-      // update pointTx
+      
+      const pointTx = this.pointTxRepository.create({
+        txType: 'CHAT',
+        amount: 1,
+        walletId: userWallet.id,
+      });
       pointTx.startingBalance = Number(lastPointTx.endingBalance);
       pointTx.endingBalance = Number(pointTx.startingBalance) + 1;
       await this.pointTxRepository.save(pointTx);
