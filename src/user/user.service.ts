@@ -930,6 +930,10 @@ export class UserService {
           referralUserId: userId,
           referralType: 'BET',
         },
+        {
+          referralUserId: userId,
+          referralType: 'PRIZE',
+        },
       ],
       relations: { user: true },
       order: { createdDate: 'DESC' },
