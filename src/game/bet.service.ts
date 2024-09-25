@@ -264,6 +264,7 @@ export class BetService implements OnModuleInit {
         betOrders,
       );
       await queryRunner.manager.save(creditWalletTxns);
+      await queryRunner.manager.save(betOrders);
 
       walletTx.txAmount = walletBalanceUsed + creditBalanceUsed;
       walletTx.betOrders = betOrders;
