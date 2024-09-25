@@ -399,7 +399,7 @@ export class PointService {
   async getAllReferralPrizeBonus() {
     const setting = await this.settingRepository.find({
       where: {
-        key: Like('referralPrizeBonusTier%'),
+        key: Like('REFERRAL_PRIZE_BONUS_TIER_%'),
       },
     });
 
@@ -410,7 +410,7 @@ export class PointService {
     const tier = Math.ceil(level / 10); //each tier has 10 levels
     const setting = await this.settingRepository.findOne({
       where: {
-        key: `referralPrizeBonusTier${tier}`,
+        key: `REFERRAL_PRIZE_BONUS_TIER_${tier}`,
       },
     });
 
