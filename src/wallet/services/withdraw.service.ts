@@ -306,6 +306,7 @@ export class WithdrawService implements OnModuleInit {
           'info',
           'Redeem Request',
           true,
+          true,
         );
       }
 
@@ -369,7 +370,7 @@ export class WithdrawService implements OnModuleInit {
         await this.queueService.addJob(QueueName.WITHDRAW, jobId, {
           userId: userWallet.userId,
           payoutNote: payload.payoutNote,
-          reviewedBy: 999, // system auto payout
+          reviewedBy: adminId,
           redeemTxId: redeemTx.id,
           walletTxId: walletTx.id,
           gameUsdTxId: walletTx.gameUsdTx.id,
@@ -697,15 +698,15 @@ export class WithdrawService implements OnModuleInit {
 
   private async getUsdtBalance(chainId: number): Promise<bigint> {
     const providerUrl =
-      chainId === 56
+      chainId === 56 || chainId === 97
         ? process.env.BNB_PROVIDER_RPC_URL
         : process.env.OPBNB_PROVIDER_RPC_URL;
     const tokenAddress =
-      chainId === 56
+      chainId === 56 || chainId === 97
         ? process.env.BNB_USDT_TOKEN_ADDRESS
         : process.env.OPBNB_USDT_TOKEN_ADDRESS;
     const payoutPoolAddress =
-      chainId === 56
+      chainId === 56 || chainId === 97
         ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
         : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
 
@@ -748,7 +749,7 @@ export class WithdrawService implements OnModuleInit {
 
       return txReceipt;
     } catch (error) {
-      console.error(error);
+      console.error('payoutUSDT() error:', error);
       return null;
     }
   }
