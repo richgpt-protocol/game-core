@@ -482,7 +482,7 @@ export class PublicService {
       let receipt: ContractTransactionReceipt;
       try {
         const provider = new JsonRpcProvider(
-          this.configService.get(`PROVIDER_URL_${usdtTx.chainId}`),
+          this.configService.get(`PROVIDER_RPC_URL_${usdtTx.chainId}`),
         );
         const signer = new Wallet(
           this.configService.get('USDT_SENDER_PRIV_KEY'),
@@ -669,8 +669,8 @@ export class PublicService {
             gameUsdAmount: Number(gameTxn.creditAmount),
             usdtAmount: Number(gameTxn.usdtAmount),
             xp: gameTxn.xp,
-            creditBalance,
-            walletBalance,
+            creditBalance: Number(creditBalance),
+            walletBalance: Number(walletBalance),
           });
           await queryRunner.manager.update(GameTx, gameTxn.id, {
             isNotified: true,

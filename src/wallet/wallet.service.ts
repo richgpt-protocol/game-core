@@ -16,9 +16,9 @@ export class WalletService {
     private walletTxRepository: Repository<WalletTx>,
   ) {
     for (let i = 1; i <= 100; i++) {
-      const xp = 50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i);
+      const xp = Math.floor(50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i));
       const prev = this.levelMap.length > 0 ? this.levelMap[i - 2].xp : 0;
-      this.levelMap.push({ xp: xp + prev, level: i + 1 });
+      this.levelMap.push({ xp: xp + prev, level: i });
     }
   }
 
@@ -32,11 +32,11 @@ export class WalletService {
 
   calculateLevel(point: number): number {
     // minimum level 1
-    const level2 = this.levelMap.find((level) => level.level === 2);
+    const level1 = this.levelMap.find((level) => level.level === 1);
     const maxLevel = this.levelMap[this.levelMap.length - 1];
-    if (point < level2.xp) return 1;
+    if (point < level1.xp) return 1;
 
-    if (point >= maxLevel.xp) return maxLevel.level - 1;
+    if (point >= maxLevel.xp) return maxLevel.level;
 
     const level = this.levelMap
       .sort((a, b) => a.xp - b.xp)
