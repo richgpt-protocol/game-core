@@ -1,6 +1,13 @@
 import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, LessThan, MoreThan, Repository } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  In,
+  LessThan,
+  MoreThan,
+  Repository,
+} from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -16,12 +23,13 @@ import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { MPC } from 'src/shared/mpc';
 import { ConfigService } from 'src/config/config.service';
 import { QueueService } from 'src/queue/queue.service';
-import { delay, Job } from 'bullmq';
-import { User } from 'src/user/entities/user.entity';
+import { Job } from 'bullmq';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { WalletService } from 'src/wallet/wallet.service';
 import { PointService } from 'src/point/point.service';
 import { ClaimService } from 'src/wallet/services/claim.service';
+import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 
 interface SubmitDrawResultDTO {
   drawResults: DrawResult[];
@@ -53,6 +61,8 @@ export class GameService implements OnModuleInit {
     private readonly walletService: WalletService,
     private readonly pointService: PointService,
     private readonly claimService: ClaimService,
+    @InjectRepository(BetOrder)
+    private betOrderRepository: Repository<BetOrder>,
   ) {}
 
   // process of closing bet for current epoch, set draw result, and announce draw result
@@ -63,16 +73,20 @@ export class GameService implements OnModuleInit {
   // 5. :05UTC, allow claim
 
   onModuleInit() {
-    this.queueService.registerHandler('GAME_QUEUE', 'SUBMIT_DRAW_RESULT', {
-      jobHandler: this.submitDrawResult.bind(this),
+    this.queueService.registerHandler(
+      QueueName.GAME,
+      QueueType.SUBMIT_DRAW_RESULT,
+      {
+        jobHandler: this.submitDrawResult.bind(this),
 
-      //Executed when onchain tx is failed for 5 times continously
-      failureHandler: this.onChainTxFailed.bind(this),
-    });
+        //Executed when onchain tx is failed for 5 times continously
+        failureHandler: this.onChainTxFailed.bind(this),
+      },
+    );
 
     this.queueService.registerHandler(
-      'TRANSFER_REFERRAL_BONUS',
-      'WINNING_REFERRAL_BONUS',
+      QueueName.REFERRAL_BONUS,
+      QueueType.WINNING_REFERRAL_BONUS,
       {
         jobHandler: this.transferReferrerBonus.bind(this),
         failureHandler: this.onReferralBonusFailed.bind(this),
@@ -301,10 +315,10 @@ export class GameService implements OnModuleInit {
               const totalAmount =
                 Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
               const jobId = `processWinReferralBonus_${betOrder.id}`;
-              await this.queueService.addJob('TRANSFER_REFERRAL_BONUS', jobId, {
+              await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
                 prizeAmount: totalAmount,
                 betOrderId: betOrder.id,
-                queueType: 'WINNING_REFERRAL_BONUS',
+                queueType: QueueType.WINNING_REFERRAL_BONUS,
                 // delay: 2000,
               });
             } catch (error) {
@@ -385,10 +399,10 @@ export class GameService implements OnModuleInit {
       const totalAmount =
         Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
       const jobId = `processWinReferralBonus_${betOrder.id}`;
-      await this.queueService.addJob('TRANSFER_REFERRAL_BONUS', jobId, {
+      await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
         prizeAmount: totalAmount,
         betOrderId: betOrder.id,
-        queueType: 'WINNING_REFERRAL_BONUS',
+        queueType: QueueType.WINNING_REFERRAL_BONUS,
         // delay: 2000,
       });
 
@@ -419,7 +433,6 @@ export class GameService implements OnModuleInit {
       const { prizeAmount, betOrderId } = job.data;
       if (prizeAmount === 0) return;
 
-      // throw new Error('test error');
       const betOrder = await queryRunner.manager
         .createQueryBuilder(BetOrder, 'betOrder')
         .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
@@ -439,7 +452,7 @@ export class GameService implements OnModuleInit {
         return;
       }
 
-      const level = await this.walletService.calculateLevel(
+      const level = this.walletService.calculateLevel(
         referralUser.wallet.pointBalance,
       );
       const bonusPerc =
@@ -461,17 +474,28 @@ export class GameService implements OnModuleInit {
       walletTx.txType = 'REFERRAL';
       walletTx.txAmount = bonusAmount;
       walletTx.status = 'S';
+      walletTx.startingBalance = lastValidWalletTx
+        ? lastValidWalletTx.endingBalance
+        : 0;
+      walletTx.endingBalance =
+        Number(walletTx.startingBalance) + Number(bonusAmount);
+      walletTx.userWalletId = referralUser.wallet.id;
+      await queryRunner.manager.save(walletTx);
 
-      const chainId = Number(process.env.BASE_CHAIN_ID);
+      const chainId = this.configService.get('BASE_CHAIN_ID');
       const provider = new ethers.JsonRpcProvider(
-        process.env[`PROVIDER_RPC_URL_${chainId}`],
+        this.configService.get(
+          'PROVIDER_RPC_URL_' + chainId,
+        ),
       );
       const signer = new ethers.Wallet(
-        await MPC.retrievePrivateKey(process.env.DEPOSIT_BOT_ADDRESS),
+        await MPC.retrievePrivateKey(
+          this.configService.get('DEPOSIT_BOT_ADDRESS'),
+        ),
         provider,
       );
       const depositContract = Deposit__factory.connect(
-        process.env.DEPOSIT_CONTRACT_ADDRESS,
+        this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
         signer,
       );
 
@@ -482,7 +506,7 @@ export class GameService implements OnModuleInit {
 
       const receipt = await onchainTx.wait();
 
-      console.log('receipt', receipt);
+      // console.log('receipt', receipt);
 
       if (receipt.status !== 1) {
         throw new Error(
@@ -492,7 +516,7 @@ export class GameService implements OnModuleInit {
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = bonusAmount;
-      gameUsdTx.chainId = chainId;
+      gameUsdTx.chainId = +chainId;
       gameUsdTx.status = 'S';
       gameUsdTx.txHash = onchainTx.hash;
       gameUsdTx.senderAddress = process.env.DEPOSIT_BOT_ADDRESS;
@@ -500,22 +524,31 @@ export class GameService implements OnModuleInit {
       gameUsdTx.retryCount = 0;
       await queryRunner.manager.save(gameUsdTx);
 
+      const referralTx = new ReferralTx();
+      referralTx.rewardAmount = bonusAmount;
+      referralTx.referralType = 'PRIZE';
+      referralTx.txHash = onchainTx.hash;
+      referralTx.status = 'S';
+      referralTx.userId = referralUser.id;
+      referralTx.user = referralUser;
+      referralTx.referralUserId = betOrder.walletTx.userWallet.user.id;
+      referralTx.referralUser = betOrder.walletTx.userWallet.user;
+      referralTx.walletTx = walletTx;
+      await queryRunner.manager.save(referralTx);
+
       walletTx.txHash = onchainTx.hash;
       walletTx.gameUsdTx = gameUsdTx;
-      walletTx.startingBalance = lastValidWalletTx
-        ? lastValidWalletTx.endingBalance
-        : 0;
-      walletTx.endingBalance =
-        Number(walletTx.startingBalance) + Number(bonusAmount);
-      walletTx.userWalletId = referralUser.wallet.id;
+      walletTx.referralTx = referralTx;
       await queryRunner.manager.save(walletTx);
+
       referralUser.wallet.walletBalance =
         Number(referralUser.wallet.walletBalance) + bonusAmount;
-      await queryRunner.manager.save(walletTx);
       await queryRunner.manager.save(referralUser.wallet);
+
       gameUsdTx.walletTxId = walletTx.id;
       gameUsdTx.walletTxs = [walletTx];
       await queryRunner.manager.save(gameUsdTx);
+
       await queryRunner.commitTransaction();
     } catch (error) {
       console.error('Error in transferReferrerBonus', error);
@@ -641,15 +674,14 @@ export class GameService implements OnModuleInit {
   async getLeaderboard(count: number) {
     // TODO: use better sql query
 
-    // only betOrder that had claimed will be counted
-    const claimDetails = await this.claimDetalRepository.find({
-      relations: {
-        walletTx: {
-          userWallet: true,
-        },
-        betOrder: true,
-      },
-    });
+    const betOrdersWithAvailableClaim = await this.betOrderRepository
+      .createQueryBuilder('betOrder')
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .where('betOrder.availableClaim = :availableClaim', {
+        availableClaim: true,
+      })
+      .getMany();
 
     const maskValue = (value: string) => {
       const mask = value.slice(0, 3) + '****' + value.slice(value.length - 3);
@@ -657,10 +689,21 @@ export class GameService implements OnModuleInit {
     };
 
     const allObj: { [key: string]: number } = {};
-    for (const claimDetail of claimDetails) {
-      const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+    for (const betOrder of betOrdersWithAvailableClaim) {
+      const walletAddress = betOrder.walletTx.userWallet.walletAddress;
       if (!allObj.hasOwnProperty(walletAddress)) allObj[walletAddress] = 0;
-      allObj[walletAddress] += Number(claimDetail.claimAmount);
+      const drawResult = await this.drawResultRepository
+        .createQueryBuilder('drawResult')
+        .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+        .andWhere('drawResult.numberPair = :numberPair', {
+          numberPair: betOrder.numberPair,
+        })
+        .getOne();
+      const winningAmount = this.claimService.calculateWinningAmount(
+        betOrder,
+        drawResult,
+      );
+      allObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
     }
     let total = [];
     for (const walletAddress in allObj) {
@@ -680,15 +723,26 @@ export class GameService implements OnModuleInit {
     const currentDate = new Date();
 
     const dailyObj: { [key: string]: number } = {};
-    for (const claimDetail of claimDetails) {
+    for (const betOrder of betOrdersWithAvailableClaim) {
       if (
-        claimDetail.betOrder.createdDate.getTime() >
+        betOrder.createdDate.getTime() >
         currentDate.getTime() - 24 * 60 * 60 * 1000
       ) {
-        const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+        const walletAddress = betOrder.walletTx.userWallet.walletAddress;
         if (!dailyObj.hasOwnProperty(walletAddress))
           dailyObj[walletAddress] = 0;
-        dailyObj[walletAddress] += Number(claimDetail.claimAmount);
+        const drawResult = await this.drawResultRepository
+        .createQueryBuilder('drawResult')
+        .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+        .andWhere('drawResult.numberPair = :numberPair', {
+          numberPair: betOrder.numberPair,
+        })
+        .getOne();
+        const winningAmount = this.claimService.calculateWinningAmount(
+          betOrder,
+          drawResult,
+        );
+        dailyObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
       }
     }
     let daily = [];
@@ -707,15 +761,26 @@ export class GameService implements OnModuleInit {
     daily = daily.sort((a, b) => b.amount - a.amount).slice(0, count);
 
     const weeklyObj: { [key: string]: number } = {};
-    for (const claimDetail of claimDetails) {
+    for (const betOrder of betOrdersWithAvailableClaim) {
       if (
-        claimDetail.betOrder.createdDate.getTime() >
+        betOrder.createdDate.getTime() >
         currentDate.getTime() - 7 * 24 * 60 * 60 * 1000
       ) {
-        const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+        const walletAddress = betOrder.walletTx.userWallet.walletAddress;
         if (!weeklyObj.hasOwnProperty(walletAddress))
           weeklyObj[walletAddress] = 0;
-        weeklyObj[walletAddress] += Number(claimDetail.claimAmount);
+        const drawResult = await this.drawResultRepository
+          .createQueryBuilder('drawResult')
+          .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+          .andWhere('drawResult.numberPair = :numberPair', {
+            numberPair: betOrder.numberPair,
+          })
+          .getOne();
+        const winningAmount = this.claimService.calculateWinningAmount(
+          betOrder,
+          drawResult,
+        );
+        weeklyObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
       }
     }
     let weekly = [];
@@ -734,15 +799,26 @@ export class GameService implements OnModuleInit {
     weekly = weekly.sort((a, b) => b.amount - a.amount).slice(0, count);
 
     const monthlyObj: { [key: string]: number } = {};
-    for (const claimDetail of claimDetails) {
+    for (const betOrder of betOrdersWithAvailableClaim) {
       if (
-        claimDetail.betOrder.createdDate.getTime() >
+        betOrder.createdDate.getTime() >
         currentDate.getTime() - 30 * 24 * 60 * 60 * 1000
       ) {
-        const walletAddress = claimDetail.walletTx.userWallet.walletAddress;
+        const walletAddress = betOrder.walletTx.userWallet.walletAddress;
         if (!monthlyObj.hasOwnProperty(walletAddress))
           monthlyObj[walletAddress] = 0;
-        monthlyObj[walletAddress] += Number(claimDetail.claimAmount);
+        const drawResult = await this.drawResultRepository
+          .createQueryBuilder('drawResult')
+          .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+          .andWhere('drawResult.numberPair = :numberPair', {
+            numberPair: betOrder.numberPair,
+          })
+          .getOne();
+        const winningAmount = this.claimService.calculateWinningAmount(
+          betOrder,
+          drawResult,
+        );
+        monthlyObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
       }
     }
     let monthly = [];
@@ -781,7 +857,9 @@ export class GameService implements OnModuleInit {
       const end = new Date(Number(endDate));
 
       const games = await this.gameRepository.find({
-        where: { endDate: LessThan(end), startDate: MoreThan(start) },
+        where: {
+          endDate: Between(start, end),
+        },
         order: { id: 'DESC' },
       });
 

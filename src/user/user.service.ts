@@ -167,6 +167,21 @@ export class UserService {
     return query;
   }
 
+  async findByTgId(tgId: number) {
+    const query = await this.userRepository
+      .createQueryBuilder('row')
+      .select('row')
+      .addSelect('row.isReset')
+      .addSelect('row.verificationCode')
+      .addSelect('row.loginAttempt')
+      .where({
+        tgId,
+      })
+      .getOne();
+
+    return query;
+  }
+
   async findBySocialInfo(email: string, id: string, provider: string) {
     switch (provider) {
       case Provider.GOOGLE:
@@ -929,6 +944,10 @@ export class UserService {
         {
           referralUserId: userId,
           referralType: 'BET',
+        },
+        {
+          referralUserId: userId,
+          referralType: 'PRIZE',
         },
       ],
       relations: { user: true },

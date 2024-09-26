@@ -1,8 +1,10 @@
 import {
     Body,
     Controller,
+    Get,
     HttpStatus,
     Post,
+    Query,
     Request,
   } from '@nestjs/common';
   import { ApiHeader, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -48,6 +50,46 @@ export class ChatbotController {
         statusCode: HttpStatus.OK,
         data: {
           replied: replied
+        },
+        message: '',
+      };
+
+    } catch (error) {
+      console.error(error)
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: {},
+        message: "internal server error",
+      };
+    }
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('historical-message')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Bad Request',
+    type: ErrorResponseVo,
+  })
+  async getHistoricalMessage(
+    @Request() req,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const historicalMessage = await this.chatbotService.getHistoricalMessage(req.user.userId, limit)
+      return {
+        statusCode: HttpStatus.OK,
+        data: {
+          historicalMessage: historicalMessage.reverse()
         },
         message: '',
       };

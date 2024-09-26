@@ -9,6 +9,7 @@ import {
   Request,
   Res,
   UnauthorizedException,
+  Headers,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiHeader, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -24,7 +25,12 @@ import { ErrorResponseVo, ResponseVo } from 'src/shared/vo/response.vo';
 import { UserService } from 'src/user/user.service';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { LoginDto, LoginWithTelegramDTO, UserLoginDto } from './dto/login.dto';
+import {
+  GetOttDto,
+  LoginDto,
+  LoginWithTelegramDTO,
+  UserLoginDto,
+} from './dto/login.dto';
 import { ResponseAdminAuthVo } from './vo/auth.vo';
 import { PasswordResetDto, ResetPasswordDto } from './dto/reset-password.dto';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
@@ -273,6 +279,71 @@ export class AuthController {
         success: true,
         data: result,
       };
+    }
+  }
+
+  @Post('ott-login')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Successful Login',
+    type: ResponseVo,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request',
+    type: ErrorResponseVo,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ErrorResponseVo,
+  })
+  async ottLogin(
+    @Headers('ott-token') ottToken: string,
+    @Body() payload: GetOttDto,
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+  ) {
+    try {
+      const user = await this.authService.verifyOtt(payload.uid, ottToken);
+      await this.auditLogService.userInsert({
+        module: classInfo.class,
+        actions: classInfo.method,
+        userId: user.id.toString(),
+        content: `Login Successful with ${user.phoneNumber} `,
+        ipAddress,
+      });
+
+      const response = {
+        id: user.id,
+        status: user.status,
+        phoneNumber: user.phoneNumber,
+        referralCode: user.referralCode,
+        isMobileVerified: user.isMobileVerified,
+      };
+
+      const result = await this.authService.createToken(
+        response,
+        UserRole.USER,
+      );
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (ex) {
+      await this.auditLogService.userInsert({
+        module: classInfo.class,
+        actions: classInfo.method,
+        userId: '',
+        content: `Login Failed - ${ex.message} `,
+        ipAddress,
+      });
+      throw new UnauthorizedException(ex.message);
     }
   }
 

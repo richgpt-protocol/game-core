@@ -77,6 +77,46 @@ export default class CreateSettings implements Seeder {
           key: SettingEnum.DEPOSIT_NOTIFY_THRESHOLD,
           value: 100,
         },
+        {
+          key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_1,
+          value: 3,
+        },
+        {
+          key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_2,
+          value: 6,
+        },
+        {
+          key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_3,
+          value: 9,
+        },
+        {
+          key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_4,
+          value: 12,
+        },
+        {
+          key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_5,
+          value: 15,
+        },
+        {
+          key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_6,
+          value: 18,
+        },
+        {
+          key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_7,
+          value: 21,
+        },
+        {
+          key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_8,
+          value:24,
+        },
+        {
+          key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_9,
+          value: 27,
+        },
+        {
+          key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_10,
+          value: 30,
+        },
       ])
       .execute();
   }

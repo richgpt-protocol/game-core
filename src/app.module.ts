@@ -30,6 +30,7 @@ import { ChatbotModule } from './chatbot/chatbot.module';
 import { BackOfficeModule } from './back-office/back-office.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PointModule } from './point/point.module';
+import { PublicModule } from './public/public.module';
 // import { BullModule } from '@nestjs/bullmq';
 import { QueueModule } from './queue/queue.module';
 // import { QueueOptions } from 'bullmq';
@@ -118,6 +119,7 @@ import { QueueModule } from './queue/queue.module';
     BackOfficeModule,
     ScheduleModule.forRoot(),
     PointModule,
+    PublicModule,
     QueueModule,
   ],
   controllers: [AppController],

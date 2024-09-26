@@ -570,20 +570,20 @@ export class ClaimService {
     let bigForecastWinAmount = 0;
     let smallForecastWinAmount = 0;
     if (drawResult.prizeCategory === '1') {
-      bigForecastWinAmount += betOrder.bigForecastAmount * 2500;
-      smallForecastWinAmount += betOrder.smallForecastAmount * 4000;
+      bigForecastWinAmount += Number(betOrder.bigForecastAmount) * 2500;
+      smallForecastWinAmount += Number(betOrder.smallForecastAmount) * 4000;
     } else if (drawResult.prizeCategory === '2') {
-      bigForecastWinAmount += betOrder.bigForecastAmount * 1000;
-      smallForecastWinAmount += betOrder.smallForecastAmount * 2000;
+      bigForecastWinAmount += Number(betOrder.bigForecastAmount) * 1000;
+      smallForecastWinAmount += Number(betOrder.smallForecastAmount) * 2000;
     } else if (drawResult.prizeCategory === '3') {
-      bigForecastWinAmount += betOrder.bigForecastAmount * 500;
-      smallForecastWinAmount += betOrder.smallForecastAmount * 1000;
+      bigForecastWinAmount += Number(betOrder.bigForecastAmount) * 500;
+      smallForecastWinAmount += Number(betOrder.smallForecastAmount) * 1000;
     } else if (drawResult.prizeCategory === 'S') {
-      bigForecastWinAmount += betOrder.bigForecastAmount * 180;
-      smallForecastWinAmount += betOrder.smallForecastAmount * 0;
+      bigForecastWinAmount += Number(betOrder.bigForecastAmount) * 180;
+      smallForecastWinAmount += Number(betOrder.smallForecastAmount) * 0;
     } else if (drawResult.prizeCategory === 'C') {
-      bigForecastWinAmount += betOrder.bigForecastAmount * 60;
-      smallForecastWinAmount += betOrder.smallForecastAmount * 0;
+      bigForecastWinAmount += Number(betOrder.bigForecastAmount) * 60;
+      smallForecastWinAmount += Number(betOrder.smallForecastAmount) * 0;
     }
 
     return {

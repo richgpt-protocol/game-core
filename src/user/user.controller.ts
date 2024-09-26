@@ -345,10 +345,11 @@ export class UserController {
         `Get User Info Successful`,
       );
 
-      const level = this.walletService.calculateLevel(
+      const levelAndPercentage = this.walletService.calculateLevelAndPercentage(
         Number(user.wallet.pointBalance),
       );
-      user.wallet.level = level;
+      user.wallet.level = levelAndPercentage.level;
+      user.wallet.levelPercentage = levelAndPercentage.percentage;
 
       return {
         statusCode: 200,

@@ -29,6 +29,8 @@ import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
 import { Mutex } from 'async-mutex';
 import { ReviewRedeemDto } from '../dto/ReviewRedeem.dto';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { ConfigService } from 'src/config/config.service';
 dotenv.config();
 
 type RedeemResponse = {
@@ -73,20 +75,29 @@ export class WithdrawService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
     private userService: UserService,
     private readonly queueService: QueueService,
+    private configService: ConfigService,
   ) {
     this.payoutCronMutex = new Mutex();
   }
 
   onModuleInit() {
-    this.queueService.registerHandler('WITHDRAW_QUEUE', 'PROCESS_WITHDRAW', {
-      jobHandler: this.processWithdraw.bind(this),
-      failureHandler: this.onJobFailed.bind(this),
-    });
+    this.queueService.registerHandler(
+      QueueName.WITHDRAW,
+      QueueType.PROCESS_WITHDRAW,
+      {
+        jobHandler: this.processWithdraw.bind(this),
+        failureHandler: this.onJobFailed.bind(this),
+      },
+    );
 
-    this.queueService.registerHandler('WITHDRAW_QUEUE', 'PROCESS_PAYOUT', {
-      jobHandler: this.handlePayout.bind(this),
-      failureHandler: this.onJobFailed.bind(this),
-    });
+    this.queueService.registerHandler(
+      QueueName.WITHDRAW,
+      QueueType.PROCESS_PAYOUT,
+      {
+        jobHandler: this.handlePayout.bind(this),
+        failureHandler: this.onJobFailed.bind(this),
+      },
+    );
   }
 
   // how redeem & payout work
@@ -164,7 +175,7 @@ export class WithdrawService implements OnModuleInit {
         };
       }
 
-      const lastRedeemWalletTx = await queryRunner.manager.findOne(WalletTx, {
+      const lastPendingRedeemWalletTx = await queryRunner.manager.findOne(WalletTx, {
         where: [
           {
             txType: 'REDEEM',
@@ -184,7 +195,7 @@ export class WithdrawService implements OnModuleInit {
         ],
       });
 
-      if (lastRedeemWalletTx) {
+      if (lastPendingRedeemWalletTx) {
         return { error: 'Another Redeem Tx is pending', data: null };
       }
 
@@ -203,7 +214,7 @@ export class WithdrawService implements OnModuleInit {
         receiverAddress: payload.receiverAddress,
         isPayoutTransferred: false,
         chainId: payload.chainId,
-        fees: Number(payload.amount) * Number(setting.value),
+        fees: Number(setting?.value) || 0,
         tokenSymbol: payload.tokenSymbol,
         tokenAddress: payload.tokenAddress,
         amount: payload.amount,
@@ -257,9 +268,8 @@ export class WithdrawService implements OnModuleInit {
       );
       const isFirstRedeem = lastSuccessfulRedeemWalletTx === null;
       const isLastRedeemAfter24Hours =
-        lastRedeemWalletTx !== null &&
-        lastRedeemWalletTx.updatedDate <
-          new Date(Date.now() - 24 * 60 * 60 * 1000);
+        lastSuccessfulRedeemWalletTx !== null &&
+        lastSuccessfulRedeemWalletTx.updatedDate < new Date(Date.now() - 24 * 60 * 60 * 1000);
 
       if (
         redeemTx.amount < 100 &&
@@ -268,7 +278,7 @@ export class WithdrawService implements OnModuleInit {
         await queryRunner.commitTransaction();
 
         const jobId = `process_withdraw_${walletTx.id}`;
-        await this.queueService.addJob('WITHDRAW_QUEUE', jobId, {
+        await this.queueService.addJob(QueueName.WITHDRAW, jobId, {
           userId,
           payoutNote: 'This request redeem proceed automatically(criteria met)',
           reviewedBy: 999, // system auto payout
@@ -276,7 +286,7 @@ export class WithdrawService implements OnModuleInit {
           walletTxId: walletTx.id,
           gameUsdTxId: gameUsdTx.id,
           chainId: payload.chainId,
-          queueType: 'PROCESS_WITHDRAW',
+          queueType: QueueType.PROCESS_WITHDRAW,
         });
 
         await this.userService.setUserNotification(userId, {
@@ -294,6 +304,7 @@ export class WithdrawService implements OnModuleInit {
           `User ${userId} has requested redeem for amount $${payload.amount}, please review. redeemTxId: ${redeemTx.id}`,
           'info',
           'Redeem Request',
+          true,
           true,
         );
       }
@@ -355,15 +366,15 @@ export class WithdrawService implements OnModuleInit {
 
       if (payload.payoutCanProceed) {
         const jobId = `process_withdraw_${redeemTx.walletTx.id}`;
-        await this.queueService.addJob('WITHDRAW_QUEUE', jobId, {
+        await this.queueService.addJob(QueueName.WITHDRAW, jobId, {
           userId: userWallet.userId,
           payoutNote: payload.payoutNote,
-          reviewedBy: 999, // system auto payout
+          reviewedBy: adminId,
           redeemTxId: redeemTx.id,
           walletTxId: walletTx.id,
           gameUsdTxId: walletTx.gameUsdTx.id,
           chainId: redeemTx.chainId,
-          queueType: 'PROCESS_WITHDRAW',
+          queueType: QueueType.PROCESS_WITHDRAW,
         });
       } else {
         await this.userService.setUserNotification(walletTx.userWalletId, {
@@ -686,15 +697,15 @@ export class WithdrawService implements OnModuleInit {
 
   private async getUsdtBalance(chainId: number): Promise<bigint> {
     const providerUrl =
-      chainId === 56
+      chainId === 56 || chainId === 97
         ? process.env.BNB_PROVIDER_RPC_URL
         : process.env.OPBNB_PROVIDER_RPC_URL;
     const tokenAddress =
-      chainId === 56
+      chainId === 56 || chainId === 97
         ? process.env.BNB_USDT_TOKEN_ADDRESS
         : process.env.OPBNB_USDT_TOKEN_ADDRESS;
     const payoutPoolAddress =
-      chainId === 56
+      chainId === 56 || chainId === 97
         ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
         : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
 
@@ -710,34 +721,25 @@ export class WithdrawService implements OnModuleInit {
     signature: BytesLike,
   ): Promise<ethers.TransactionReceipt> {
     try {
-      const providerUrl = process.env.OPBNB_PROVIDER_RPC_URL;
+      const providerUrl = this.configService.get('PROVIDER_RPC_URL_' + chainId);
       const provider = new ethers.JsonRpcProvider(providerUrl);
       const payoutBot = new ethers.Wallet(
         await MPC.retrievePrivateKey(process.env.PAYOUT_BOT_ADDRESS),
         provider,
       );
 
-      this.eventEmitter.emit('gas.service.reload', payoutBot.address, chainId);
+      const payoutPoolContractAddress = chainId === 56 || chainId === 97
+        ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
+        : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
 
-      const payoutPoolContractAddress =
-        process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
       const payoutPoolContract = Payout__factory.connect(
         payoutPoolContractAddress,
         payoutBot,
       );
-      // const estimatedGas = await payoutPoolContract.payout.estimateGas(
-      //   ethers.parseEther(amount.toString()),
-      //   to,
-      //   signature,
-      // );
       const txResponse = await payoutPoolContract.payout(
         ethers.parseEther(amount.toString()),
         to,
         signature,
-        {
-          //if uncommented it throws "Exceeds block gas limit" error
-          // gasLimit: estimatedGas * ((estimatedGas * BigInt(30)) / BigInt(100)),
-        }, // increased by ~30% from actual gas used
       );
       const txReceipt = await txResponse.wait();
 
@@ -746,7 +748,7 @@ export class WithdrawService implements OnModuleInit {
 
       return txReceipt;
     } catch (error) {
-      console.error(error);
+      console.error('payoutUSDT() error:', error);
       return null;
     }
   }
@@ -772,9 +774,9 @@ export class WithdrawService implements OnModuleInit {
 
       for (const tx of redeemTxs) {
         const jobId = `process_payout_${tx.id}`;
-        await this.queueService.addJob('WITHDRAW_QUEUE', jobId, {
+        await this.queueService.addJob(QueueName.WITHDRAW, jobId, {
           redeemTxId: tx.id,
-          queueType: 'PROCESS_PAYOUT',
+          queueType: QueueType.PROCESS_PAYOUT,
         });
       }
     } catch (error) {

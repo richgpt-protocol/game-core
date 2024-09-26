@@ -39,19 +39,22 @@ export class ChatbotService {
     private userService: UserService,
   ) {}
 
-  async sendMessage(userId: number, payload: SendMessageDto): Promise<Array<{type: string, contents: string}>> {
+  async sendMessage(userId: number, payload: SendMessageDto): Promise<Array<{type: string, content: string}>> {
     const chatLog = await this.chatLogRepository.findBy({ userId });
     // extract chat completion message from chatLog
     // @ts-ignore
-    let messages: Array<ChatCompletionMessageParam> = chatLog.map(log => ({ role: log.role, content: log.content }));
+    let messages: Array<ChatCompletionMessageParam> = chatLog
+      .map(log => ({ role: log.role, content: log.content }))
+      .filter(log => log.role !== 'tool');
 
     const initialContent = 
-`You are human, and reply in casual conversation in simple English under 3 sentences.
+`You are a human named Professor Rich, please reply in casual conversation in simple English under 3 sentences.
 Try to figure out my gender and slightly use some flirty words.
 You can reply with image(to execute getImage function) if the topic regards something that can be visualized.
 You should ONLY mention 4-Digits lottery when current topic is related to bet.
 When I mention lost or number not matched in 4-Digits lottery, pity me / ask me to take a break / control the cost of betting.
-Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`;
+Today date: ${new Date().toDateString()}.`;
+// Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`;
 
     // there is an initial chat from Professor Rich in frontend: Hi How are you today?
     // TODO: add this into chatCompletion & database
@@ -59,18 +62,34 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
     // TODO: if the conversation is too long, summarize it to save tokens
 
     if (messages.length === 0) {
-      // initial chat, save initial chatLog in database
-      await this.chatLogRepository.save(
+      // initial chat
+      messages = [
+        {
+          role: 'system',
+          content: initialContent,
+        },
+        {
+          role: 'assistant',
+          content: "Hello there, lucky seeker! I'm Professor Rich, Ready to turn your dreams into numbers?",
+        }
+      ]
+
+      // save initial chatLog in database
+      await this.chatLogRepository.save([
         this.chatLogRepository.create({
           userId,
           role: 'system',
-          content: initialContent,
+          content: messages[0].content as string,
         }),
-      );
+        this.chatLogRepository.create({
+          userId,
+          role: 'assistant',
+          content: messages[1].content as string,
+        }),
+      ]);
 
     } else {
-      // naively update initialCotent to latest one in database
-      // TODO: if today date is same, no need update database
+      // update latest initialContent into database
       await this.chatLogRepository.update(
         chatLog[0].id,
         { content: initialContent },
@@ -142,7 +161,7 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
     // add assistantMessage into messages
     messages.push(assistantMessage);
 
-    let replies: Array<{type: 'text' | 'image' | 'speech', contents: string}> = [];
+    let replies: Array<{type: 'text' | 'image' | 'speech', content: string}> = [];
     const toolCalls = assistantMessage.tool_calls;
     if (toolCalls) {
       // this message is to call functions
@@ -158,7 +177,7 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
         } else if (functionName === 'getImage') {
           functionResponse = await functionToCall(functionArgs.keyword);
           // add into bot replies(to user)
-          replies.push({ type: 'image', contents: functionResponse });
+          replies.push({ type: 'image', content: functionResponse });
 
         } else {
           // all other functions (without argument)
@@ -175,6 +194,13 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
             }),
           );
           // and add into messages
+          // first message is responding to tool_calls, which is a compulsory for now
+          messages.push({
+            tool_call_id: toolCall.id,
+            role: 'tool',
+            content: '', // should be image in base64 but will throw error because too large to process
+          })
+          // second message
           // here treat as user ask bot what is in the image
           messages.push({
             role: 'user',
@@ -185,15 +211,7 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
           })
 
         } else {
-          // function response is object, save into database
-          await this.chatLogRepository.save(
-            this.chatLogRepository.create({
-              userId,
-              role: 'tool',
-              content: JSON.stringify(functionResponse),
-            }),
-          );
-          // and add into messages
+          // function response is object, add into messages
           // bot will create reply based on the object
           messages.push({
             tool_call_id: toolCall.id,
@@ -220,13 +238,13 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
       );
 
       // add into bot replies(to user)
-      replies.push({ type: 'text', contents: assistantReplyBasedOnFunctionResponse.content });
+      replies.push({ type: 'text', content: assistantReplyBasedOnFunctionResponse.content });
 
     } else {
       // this message is normal message
 
       // add into bot replies(to user)
-      replies.push({ type: 'text', contents: assistantMessage.content });
+      replies.push({ type: 'text', content: assistantMessage.content });
 
       // save the reply into database
       await this.chatLogRepository.save(
@@ -242,11 +260,11 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
     const speech = await openai.audio.speech.create({
       model: 'tts-1',
       voice: 'nova',
-      input: replies[replies.length - 1].contents,
+      input: replies[replies.length - 1].content,
       speed: 1,
     })
     const speechInBuffer = Buffer.from(await speech.arrayBuffer());
-    replies.push({ type: 'speech', contents: speechInBuffer.toString('base64') });
+    replies.push({ type: 'speech', content: speechInBuffer.toString('base64') });
 
     // 3 conversation daily get xp
     // loop backward and check all the chats that over 00:00 UTC today
@@ -270,23 +288,17 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
     // only once xp reward per utc day
     if (userMessageCount === 2 && assistantMessageCount >= 2) {
       const userWallet = await this.userWalletRepository.findOneBy({ userId });
-      
-      // create pointTx
-      const pointTx = this.pointTxRepository.create({
-        txType: 'CHAT',
-        amount: 1,
-        startingBalance: 0,
-        endingBalance: 0,
-        walletId: userWallet.id,
-      });
-      await this.pointTxRepository.save(pointTx);
 
       const lastPointTx = await this.pointTxRepository.findOne({
         where: { walletId: userWallet.id },
         order: { id: 'DESC' },
       })
-
-      // update pointTx
+      
+      const pointTx = this.pointTxRepository.create({
+        txType: 'CHAT',
+        amount: 1,
+        walletId: userWallet.id,
+      });
       pointTx.startingBalance = Number(lastPointTx.endingBalance);
       pointTx.endingBalance = Number(pointTx.startingBalance) + 1;
       await this.pointTxRepository.save(pointTx);
@@ -367,5 +379,20 @@ Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`
       size: '256x256',
     });
     return image.data[0].b64_json;
+  }
+
+  async getHistoricalMessage(userId: number, limit: number): Promise<Array<{role: string, content: string}>> {
+    // const chatLog = await this.chatLogRepository.findBy({ userId });
+    const chatLog = await this.chatLogRepository
+      .createQueryBuilder('chatLog')
+      .select('chatLog.role')
+      .addSelect('chatLog.content')
+      .where('userId = :userId', { userId })
+      .andWhere('role != :role', { role: 'system' })
+      .orderBy('id', 'DESC')
+      .getMany();
+    // console.log(chatLog);
+    const historicalMessage = chatLog.slice(0, limit);
+    return historicalMessage;
   }
 }

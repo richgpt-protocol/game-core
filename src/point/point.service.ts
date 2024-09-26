@@ -399,7 +399,7 @@ export class PointService {
   async getAllReferralPrizeBonus() {
     const setting = await this.settingRepository.find({
       where: {
-        key: Like('referralPrizeBonusTier%'),
+        key: Like('REFERRAL_PRIZE_BONUS_TIER_%'),
       },
     });
 
@@ -410,14 +410,14 @@ export class PointService {
     const tier = Math.ceil(level / 10); //each tier has 10 levels
     const setting = await this.settingRepository.findOne({
       where: {
-        key: `referralPrizeBonusTier${tier}`,
+        key: `REFERRAL_PRIZE_BONUS_TIER_${tier}`,
       },
     });
 
     return setting ? +setting.value : 0;
   }
 
-  @Cron('* * * * * *', { utcOffset: 0 }) // every hour UTC time
+  @Cron('* * * * *') // check every minute
   async checkLevelUp(): Promise<void> {
     // start queryRunner
     const queryRunner = this.dataSource.createQueryRunner();
@@ -442,7 +442,7 @@ export class PointService {
           await this.userService.setUserNotification(pointTx.walletId, {
             type: 'point',
             title: 'Congratulations on Level Up',
-            message: `You have level up from ${levelBefore} to level ${levelAfter}.`,
+            message: `You just level up from ${levelBefore} to level ${levelAfter}!`,
             walletTxId: pointTx.walletTxId,
           });
 

@@ -11,6 +11,7 @@ import { WalletTx } from './wallet-tx.entity';
 import { CreditWalletTx } from './credit-wallet-tx.entity';
 import { ReloadTx } from './reload-tx.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
+import { GameTx } from 'src/public/entity/gameTx.entity';
 
 @Entity()
 export class UserWallet {
@@ -75,4 +76,7 @@ export class UserWallet {
 
   @OneToMany(() => PointTx, (pointTx) => pointTx.userWallet)
   pointTx: PointTx[];
+
+  @OneToMany(() => GameTx, (gameTx) => gameTx.userWallet)
+  gameTx: GameTx[];
 }
