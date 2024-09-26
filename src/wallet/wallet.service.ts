@@ -33,7 +33,7 @@ export class WalletService {
   calculateLevel(point: number): number {
     // minimum level 1
     const level1 = this.levelMap.find((level) => level.level === 1);
-    if (point < level1.xp) return 0;
+    if (point < level1.xp) return 1;
 
     const levels = this.levelMap
       .sort((a, b) => a.xp - b.xp)
