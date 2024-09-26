@@ -1,16 +1,23 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AdminService } from 'src/admin/admin.service';
 import { ConfigService } from 'src/config/config.service';
 import { LoginDto, UserLoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { AdminStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { UserService } from 'src/user/user.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { RandomUtil } from 'src/shared/utils/random.util';
-import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +27,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private userService: UserService,
     private cacheSettingService: CacheSettingService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async validateAdmin(payload: LoginDto): Promise<any> {
@@ -88,6 +96,28 @@ export class AuthService {
     }
 
     return result.data;
+  }
+
+  async verifyOtt(uid: string, ott: string) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const ottData = await this.cacheManager.get(`ott_${user.uid}`);
+
+    const hashOTT = (ott: string) => {
+      return crypto.createHash('sha256').update(ott).digest('hex'); // Hash the OTT and return as a hex string
+    };
+
+    if (ottData) {
+      if (hashOTT(ottData as string) === ott) {
+        this.cacheManager.del(`ott_${user.uid}`);
+        return user;
+      }
+    }
+
+    throw new BadRequestException('Invalid OTT');
   }
 
   async createToken(user: any, role: string) {

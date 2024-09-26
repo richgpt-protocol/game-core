@@ -19,6 +19,7 @@ import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
         };
       },
     }),
+    CacheModule.register(),
   ],
   providers: [AuthService, JwtStrategy, CookieStrategy],
   controllers: [AuthController],
