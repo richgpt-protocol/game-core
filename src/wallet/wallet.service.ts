@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
 import { WalletTx } from './entities/wallet-tx.entity';
 import * as dotenv from 'dotenv';
@@ -91,6 +91,7 @@ export class WalletService {
       where: {
         userWalletId: userId,
         status: 'S',
+        txType: Not('GAME_TRANSACTION'),
       },
       order: { createdDate: 'DESC' },
     });
