@@ -164,15 +164,22 @@ export class TelegramService {
     //   return await ctx.reply('Invalid phone number');
     // }
 
+    //Telegram removes the (+) sign from phone number for some countries
+    const phone = user.phoneNumber.replace('+', '');
+    const tgPhone = contact.phone_number.replace('+', '');
     if (
       user.tgId != id ||
       user.tgUsername != username ||
-      user.phoneNumber != contact.phone_number
+      // user.phoneNumber != contact.phone_number
+      phone != tgPhone
     ) {
+      console.log('Invalid Data: ', user, id, username, contact.phone_number);
       user.tgUsername = null;
       user.tgId = null;
       await this.userRepository.save(user);
-      return await ctx.reply('Invalid Data. Please try to register again');
+      return await ctx.reply(
+        'Telegram data mismatch. Is the telegram Phone number same as the registered phone number?',
+      );
     }
 
     await ctx.reply(
