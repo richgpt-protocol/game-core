@@ -723,11 +723,13 @@ export class BetService implements OnModuleInit {
     provider: JsonRpcProvider,
   ) {
     try {
+      this.logger.debug('start _bet()')
       const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
       const coreContract = Core__factory.connect(coreContractAddr, provider);
 
       let totalAmount = 0;
       const bets = [];
+      this.logger.debug('start payload.map()')
       payload.map((bet) => {
         if (bet.smallForecastAmount > 0) {
           bets.push({
@@ -751,15 +753,21 @@ export class BetService implements OnModuleInit {
           totalAmount += +bet.bigForecastAmount;
         }
       });
+      this.logger.debug('end payload.map()')
 
+      this.logger.debug('start _checkAllowanceAndApprove')
       await this._checkAllowanceAndApprove(userSigner, ethers.MaxUint256);
+      this.logger.debug('end _checkAllowanceAndApprove')
 
+      this.logger.debug('start estimateGas()')
       const gasLimit = await coreContract
         .connect(userSigner)
         [
           'bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])'
         ].estimateGas(uid, ticketId, bets);
+      this.logger.debug('end estimateGas()')
 
+      this.logger.debug('start coreContract.bet()')
       const tx = await coreContract
         .connect(userSigner)
         [
@@ -768,6 +776,7 @@ export class BetService implements OnModuleInit {
           gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
         });
       await tx.wait();
+      this.logger.debug('end coreContract.bet()')
 
       this.eventEmitter.emit(
         'gas.service.reload',
@@ -775,6 +784,7 @@ export class BetService implements OnModuleInit {
         Number(tx.chainId),
       );
 
+      this.logger.debug('end _bet()')
       return tx;
     } catch (error) {
       console.error(error);
@@ -1089,11 +1099,13 @@ export class BetService implements OnModuleInit {
     betWalletTxId: number,
     queryRunner?: QueryRunner,
   ) {
+    this.logger.debug('start handleReferralFlow()')
     // const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
+      this.logger.debug('start query userInfo')
       const userInfo = await queryRunner.manager
         .createQueryBuilder(User, 'user')
         .leftJoinAndSelect('user.referralUser', 'referralUser')
@@ -1103,6 +1115,7 @@ export class BetService implements OnModuleInit {
 
       if (!userInfo || userInfo.referralUserId == null) return;
 
+      this.logger.debug('start query referralUserInfo')
       const referralUserInfo = await queryRunner.manager.findOne(User, {
         where: {
           id: userInfo.referralUserId,
@@ -1113,6 +1126,7 @@ export class BetService implements OnModuleInit {
       const commisionAmount =
         betAmount * this.referralCommissionByRank(userInfo.referralRank);
 
+      this.logger.debug('start query lastValidWalletTx')
       const lastValidWalletTx = await queryRunner.manager
         .createQueryBuilder(WalletTx, 'walletTx')
         .where(
@@ -1125,6 +1139,7 @@ export class BetService implements OnModuleInit {
         .orderBy('walletTx.id', 'DESC')
         .getOne();
 
+      this.logger.debug('start creating new walletTx')
       const walletTxInserted = new WalletTx();
       walletTxInserted.txType = 'REFERRAL';
       walletTxInserted.txAmount = commisionAmount;
@@ -1137,6 +1152,7 @@ export class BetService implements OnModuleInit {
         Number(lastValidWalletTx?.endingBalance || 0) + commisionAmount;
 
       await queryRunner.manager.save(walletTxInserted);
+      this.logger.debug('walletTxInserted saved')
 
       // const walletTx = await queryRunner.manager.findOne(WalletTx, {
       //   where: {
@@ -1144,6 +1160,7 @@ export class BetService implements OnModuleInit {
       //   },
       // });
 
+      this.logger.debug('start querying walletTx')
       const walletTx = await queryRunner.manager
         .createQueryBuilder(WalletTx, 'walletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
@@ -1153,11 +1170,14 @@ export class BetService implements OnModuleInit {
         .getOne();
 
       // Returns false if the user doesn't have enough balance and reload is pending
+      this.logger.debug('start checkNativeBalance()')
       const hasBalance = await this.checkNativeBalance(
         walletTx.userWallet,
         +this.configService.get('BASE_CHAIN_ID'),
       );
+      this.logger.debug('done checkNativeBalance()')
 
+      this.logger.debug('initiating depositContract')
       const depositContract = Deposit__factory.connect(
         this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
         new Wallet(
@@ -1171,14 +1191,20 @@ export class BetService implements OnModuleInit {
           ),
         ),
       );
+      this.logger.debug('done initiated depositContract')
 
+      this.logger.debug('start depositContract.distributeReferralFee()')
       const referralRewardOnchainTx =
         await depositContract.distributeReferralFee(
           userInfo.referralUser.wallet.walletAddress,
           ethers.parseEther(commisionAmount.toString()),
         );
-
+        
+        
       await referralRewardOnchainTx.wait();
+      this.logger.debug('done depositContract.distributeReferralFee()')
+
+      this.logger.debug('start inserting GameUsdTx')
       const gameUsdTxInsertResult = await queryRunner.manager.insert(
         GameUsdTx,
         {
@@ -1195,13 +1221,17 @@ export class BetService implements OnModuleInit {
           txHash: referralRewardOnchainTx.hash, //betTxHash,
         },
       );
+      this.logger.debug('done inserting GameUsdTx')
 
+      this.logger.debug('start querying GameUsdTx')
       const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
         where: {
           id: gameUsdTxInsertResult.identifiers[0].id,
         },
       });
+      this.logger.debug('done querying GameUsdTx')
 
+      this.logger.debug('start inserting ReferralTx')
       const referrelTxInsertResult = await queryRunner.manager.insert(
         ReferralTx,
         {
@@ -1213,18 +1243,22 @@ export class BetService implements OnModuleInit {
           referralUserId: userInfo.referralUserId, //one who receives the referral amount
         },
       );
+      this.logger.debug('done inserting ReferralTx')
 
       //Update Referrer
+      this.logger.debug('start querying referrerWallet')
       const referrerWallet = await queryRunner.manager.findOne(UserWallet, {
         where: {
           id: walletTx.userWalletId,
         },
       });
+      this.logger.debug('done querying referrerWallet')
 
       referrerWallet.walletBalance = walletTx.endingBalance;
       // referrerWallet.redeemableBalance =
       // Number(referrerWallet.redeemableBalance) + Number(gameUsdTx.amount); //commision amount
 
+      this.logger.debug('start updateReferrerXpPoints()')
       await this.updateReferrerXpPoints(
         queryRunner,
         userId,
@@ -1232,8 +1266,10 @@ export class BetService implements OnModuleInit {
         referrerWallet,
         walletTx,
       );
+      this.logger.debug('done updateReferrerXpPoints()')
 
       await queryRunner.manager.save(referrerWallet);
+      this.logger.debug('referrerWallet saved')
 
       await queryRunner.commitTransaction();
     } catch (error) {
@@ -1245,6 +1281,7 @@ export class BetService implements OnModuleInit {
     // } finally {
     //   if (!queryRunner.isReleased) await queryRunner.release();
     // }
+    this.logger.debug('end handleReferralFlow()')
   }
 
   async updateReferrerXpPoints(
