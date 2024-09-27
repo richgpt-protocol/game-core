@@ -109,7 +109,8 @@ export class QueueService {
     queueName: string,
     jobName: string,
     data: any,
-    delay: number = 1000, // 1 second
+    // delay: number = 1000, // 1 second
+    delay: number = 0, // default to no delay
   ) {
     const queue = this.createQueue(queueName);
     await queue.add(jobName, data, {
