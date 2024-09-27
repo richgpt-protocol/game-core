@@ -1,7 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryRunner, Repository } from 'typeorm';
+import { DataSource, Not, QueryRunner, Repository } from 'typeorm';
 import { ConfigService } from 'src/config/config.service';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
@@ -20,6 +25,9 @@ import { MPC } from 'src/shared/mpc';
 import { Mutex } from 'async-mutex';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { Deposit__factory } from 'src/contract';
+import { QueueService } from 'src/queue/queue.service';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { Job } from 'bullmq';
 
 /**
  * How deposit works
@@ -35,7 +43,7 @@ import { Deposit__factory } from 'src/contract';
  */
 
 @Injectable()
-export class DepositService {
+export class DepositService implements OnModuleInit {
   private readonly cronMutex: Mutex = new Mutex();
   private readonly miniGameUSDTSender: string;
 
@@ -50,11 +58,39 @@ export class DepositService {
     private readonly pointService: PointService,
     private readonly userService: UserService,
     private eventEmitter: EventEmitter2,
+    private queueservice: QueueService,
   ) {
     const senderWallet = new ethers.Wallet(
       this.configService.get('USDT_SENDER_PRIV_KEY'),
     );
     this.miniGameUSDTSender = senderWallet.address;
+  }
+  onModuleInit() {
+    this.queueservice.registerHandler(
+      QueueName.DEPOSIT,
+      QueueType.DEPOSIT_ESCROW,
+      {
+        jobHandler: this.handleEscrowTx.bind(this),
+        failureHandler: this.onEscrowTxFailed.bind(this),
+      },
+    );
+
+    this.queueservice.registerHandler(
+      QueueName.DEPOSIT,
+      QueueType.DEPOSIT_GAMEUSD_ONCHAIN,
+      {
+        jobHandler: this.handleGameUsdTx.bind(this),
+      },
+    );
+
+    this.queueservice.registerHandler(
+      QueueName.DEPOSIT,
+      QueueType.DEPOSIT_GAMEUSD_DB,
+      {
+        jobHandler: this.handleGameUSDTxHash.bind(this),
+        failureHandler: this.onGameUsdTxFailed.bind(this),
+      },
+    );
   }
 
   async getAllAddress(page: number = 1, limit: number = 100) {
@@ -75,19 +111,34 @@ export class DepositService {
     };
   }
 
+  /** This method is Initiated by deposit bot.
+   * This method will ignore the tx if the sender is mini-game's USDT sender.
+   */
   async processDeposit(payload: DepositDTO) {
     const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      const usdtSender = await queryRunner.manager.findOne(Setting, {
+        where: {
+          key: 'USDT_SENDER_ADDRESS',
+        },
+      });
+
+      if (
+        usdtSender &&
+        payload.depositerAddress.toLowerCase() ===
+          usdtSender.value.toLowerCase()
+      ) {
+        return;
+      }
+
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
         where: {
           walletAddress: payload.walletAddress,
         },
       });
-      if (!userWallet) return;
-
       if (
         payload.amount < 1 &&
         payload.depositerAddress.toLowerCase() !==
@@ -107,6 +158,42 @@ export class DepositService {
         );
         return;
       }
+
+      const depositTx = await this._processDeposit(payload, queryRunner);
+
+      await queryRunner.commitTransaction();
+
+      await this.addToEscrowQueue(depositTx.id);
+    } catch (error) {
+      // queryRunner
+      console.error('processDeposit() error within queryRunner, error:', error);
+      await queryRunner.rollbackTransaction();
+
+      await this.adminNotificationService.setAdminNotification(
+        `processDeposit() error within queryRunner, walletAddress: ${payload.walletAddress}, error: ${error}`,
+        'TRANSACTION_ROLLBACK',
+        'Transaction Rollback When Processing Deposit',
+        false,
+      );
+
+      throw new InternalServerErrorException('Error processing deposit');
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  private async _processDeposit(
+    payload: DepositDTO,
+    queryRunner: QueryRunner,
+    txType = 'DEPOSIT',
+  ) {
+    try {
+      const userWallet = await queryRunner.manager.findOne(UserWallet, {
+        where: {
+          walletAddress: payload.walletAddress,
+        },
+      });
+      if (!userWallet) return;
 
       const deposit_notify_threshold = await queryRunner.manager.findOne(
         Setting,
@@ -129,7 +216,7 @@ export class DepositService {
 
       // create walletTx with status pending
       const walletTx = new WalletTx();
-      walletTx.txType = 'DEPOSIT';
+      walletTx.txType = txType;
       walletTx.txAmount = payload.amount;
       walletTx.txHash = payload.txHash;
       walletTx.status = 'P';
@@ -164,32 +251,93 @@ export class DepositService {
         Number(process.env.BASE_CHAIN_ID),
       );
 
-      await queryRunner.commitTransaction();
+      return depositTx;
     } catch (error) {
-      // queryRunner
-      console.error('processDeposit() error within queryRunner, error:', error);
-      await queryRunner.rollbackTransaction();
-
-      await this.adminNotificationService.setAdminNotification(
-        `processDeposit() error within queryRunner, walletAddress: ${payload.walletAddress}, error: ${error}`,
-        'TRANSACTION_ROLLBACK',
-        'Transaction Rollback When Processing Deposit',
-        false,
-      );
-
-      throw new InternalServerErrorException('Error processing deposit');
-    } finally {
-      await queryRunner.release();
+      console.error('processDeposit() error:', error);
+      throw error;
     }
   }
 
-  // transfer deposited token to escrow wallet
-  @Cron(CronExpression.EVERY_SECOND)
-  async handleEscrowTx() {
-    const release = await this.cronMutex.acquire();
+  async addToEscrowQueue(depositTxId: number) {
+    try {
+      // add job to queue
+      const jobId = `escrow-${depositTxId}`;
+      await this.queueservice.addJob(QueueName.DEPOSIT, jobId, {
+        depositTxId: depositTxId,
+        queueType: QueueType.DEPOSIT_ESCROW,
+      });
+    } catch (error) {
+      console.error('addToEscrowQueue() error:', error);
+
+      await this.adminNotificationService.setAdminNotification(
+        `Error adding to escrow queue for depositTxId: ${depositTxId}`,
+        'CRITICAL_ERROR',
+        'Critical Error When Adding to Escrow Queue',
+        false,
+        true,
+      );
+      throw new InternalServerErrorException('Error adding to escrow queue');
+    }
+  }
+
+  async retryDeposit(depositTxId: number) {
+    const queryRunner = this.dataSource.createQueryRunner();
 
     try {
-      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      const depositTx = await queryRunner.manager
+        .createQueryBuilder(DepositTx, 'depositTx')
+        .leftJoinAndSelect('depositTx.walletTx', 'walletTx')
+        .where('depositTx.id = :id', { id: depositTxId })
+        .andWhere('walletTx.status != :status', { status: 'S' })
+        .getOne();
+
+      if (!depositTx) {
+        throw new BadRequestException('Deposit not found or already processed');
+      }
+
+      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
+        where: {
+          walletTxId: depositTx.walletTxId,
+        },
+      });
+
+      if (gameUsdTx && gameUsdTx.status != 'S') {
+        gameUsdTx.retryCount = 0;
+        await queryRunner.manager.save(gameUsdTx);
+      }
+
+      await queryRunner.commitTransaction();
+
+      // add job to queue
+      const jobId = `escrow-${depositTx.id}`;
+      await this.queueservice.addJob(QueueName.DEPOSIT, jobId, {
+        depositTxId: depositTx.id,
+        queueType: QueueType.DEPOSIT_ESCROW,
+      });
+
+      return true;
+    } catch (error) {
+      console.error('retryDeposit() error:', error);
+      await queryRunner.rollbackTransaction();
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      } else {
+        throw new InternalServerErrorException('Error retrying deposit');
+      }
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  // Step1: transfer deposited token to escrow wallet
+  async handleEscrowTx(job: Job<{ depositTxId: number }>) {
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
@@ -197,154 +345,168 @@ export class DepositService {
         .createQueryBuilder(DepositTx, 'depositTx')
         .innerJoinAndSelect('depositTx.walletTx', 'walletTx')
         .innerJoinAndSelect('walletTx.userWallet', 'userWallet')
-        .where('depositTx.status = :status', { status: 'P' })
+        .where('depositTx.id = :id', { id: job.data.depositTxId })
         .orderBy('depositTx.id', 'ASC')
         .getOne();
       if (!depositTx) {
         await queryRunner.release();
-        // finally block will do cronMutex.release()
+
+        //add to next queue here
         return;
       }
 
-      try {
-        if (depositTx.retryCount >= 10) {
-          // retry 10 times already, set status to F and won't enter handleEscrowTx() again
-          depositTx.status = 'F';
-          await queryRunner.manager.save(depositTx);
-          // inform admin
-          await this.adminNotificationService.setAdminNotification(
-            `Transaction to escrow failed after 10 times for depositTx, depositTx.id: ${depositTx.id}`,
-            'ESCROW_FAILED_10_TIMES',
-            'Transfer to Escrow Failed',
-            false,
-            false,
-            depositTx.walletTxId,
-          );
+      if (depositTx.isTransferred) {
+        const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
+          where: {
+            walletTxId: depositTx.walletTxId,
+          },
+        });
 
-          await queryRunner.commitTransaction();
-          // finally block will do queryRunner.release() & cronMutex.release()
+        await queryRunner.release();
+
+        //add to next queue here
+        await this.queueservice.addJob(
+          QueueName.DEPOSIT,
+          `gameusd-${gameUsdTx.id}`,
+          {
+            gameUsdTxId: gameUsdTx.id,
+            queueType: QueueType.DEPOSIT_GAMEUSD_ONCHAIN,
+          },
+          0,
+          0,
+        );
+
+        return;
+      }
+
+      const userWallet = await queryRunner.manager.findOne(UserWallet, {
+        where: {
+          id: depositTx.walletTx.userWalletId,
+        },
+      });
+      // if get private key failed, into catch block and retry again in next cron job
+      const userSigner = await this.getSigner(
+        userWallet.walletAddress,
+        depositTx.chainId,
+      );
+      const tokenContract = await this.getTokenContract(
+        depositTx.currency,
+        userSigner,
+      );
+
+      const escrowAddress = this.configService.get(
+        `ESCROW_ADDRESS_${depositTx.chainId.toString()}`,
+      );
+
+      const depositAmount = parseUnits(
+        depositTx.walletTx.txAmount.toString(),
+        await tokenContract.decimals(),
+      );
+
+      // transfer user deposit token to escrow wallet
+      const onchainEscrowTx = await this.transferToken(
+        tokenContract,
+        escrowAddress,
+        depositAmount,
+      );
+      // if transfer token failed, normally due to insufficient gas fee, means
+      // user wallet haven't been reloaded yet in processDeposit() especially new created wallet
+      // into catch block and retry again in next cron job
+      const receipt = await onchainEscrowTx.wait(1);
+      const onchainEscrowTxHash = onchainEscrowTx.hash;
+
+      // reload user wallet that execute token transfer if needed
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        userWallet.walletAddress,
+        depositTx.chainId,
+      );
+
+      if (receipt && receipt.status == 1) {
+        // transfer token transaction success
+        depositTx.isTransferred = true;
+        depositTx.status = 'S';
+        depositTx.txHash = onchainEscrowTxHash;
+        await queryRunner.manager.save(depositTx);
+
+        const gameUsdTx = new GameUsdTx();
+        gameUsdTx.amount = depositTx.walletTx.txAmount;
+        gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
+        gameUsdTx.status = 'P';
+        gameUsdTx.senderAddress = this.configService.get(
+          'GAMEUSD_POOL_CONTRACT_ADDRESS',
+        );
+        gameUsdTx.receiverAddress = userWallet.walletAddress;
+        gameUsdTx.walletTxId = depositTx.walletTx.id;
+        gameUsdTx.walletTxs = [depositTx.walletTx];
+        await queryRunner.manager.save(gameUsdTx);
+
+        await this.queueservice.addJob(
+          QueueName.DEPOSIT,
+          `gameusd-${gameUsdTx.id}`,
+          {
+            gameUsdTxId: gameUsdTx.id,
+            queueType: QueueType.DEPOSIT_GAMEUSD_ONCHAIN,
+          },
+          0,
+          0,
+        );
+      } else if (receipt && receipt.status != 1) {
+        throw new Error(
+          `Escrow transaction failed with hash: ${onchainEscrowTxHash}`,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      console.error('handleEscrowTx() error:', error);
+      throw new Error(`Error processing deposit ${error}`);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  private async onEscrowTxFailed(
+    job: Job<{ depositTxId: number }>,
+    error: Error,
+  ) {
+    if (job.attemptsMade > job.opts.attempts) {
+      const queryRunner = this.dataSource.createQueryRunner();
+
+      try {
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        const depositTx = await queryRunner.manager
+          .createQueryBuilder(DepositTx, 'depositTx')
+          .innerJoinAndSelect('depositTx.walletTx', 'walletTx')
+          .where('depositTx.id = :id', { id: job.data.depositTxId })
+          .orderBy('depositTx.id', 'ASC')
+          .getOne();
+        if (!depositTx) {
+          await queryRunner.release();
           return;
         }
 
-        try {
-          const userWallet = await queryRunner.manager.findOne(UserWallet, {
-            where: {
-              id: depositTx.walletTx.userWalletId,
-            },
-          });
-          // if get private key failed, into catch block and retry again in next cron job
-          const userSigner = await this.getSigner(
-            userWallet.walletAddress,
-            depositTx.chainId,
-          );
-          const tokenContract = await this.getTokenContract(
-            depositTx.currency,
-            userSigner,
-          );
+        depositTx.status = 'F';
+        depositTx.walletTx.status = 'F';
+        await queryRunner.manager.save(depositTx);
+        await queryRunner.manager.save(depositTx.walletTx);
 
-          const escrowAddress = this.configService.get(
-            `ESCROW_ADDRESS_${depositTx.chainId.toString()}`,
-          );
-
-          const depositAmount = parseUnits(
-            depositTx.walletTx.txAmount.toString(),
-            await tokenContract.decimals(),
-          );
-
-          // transfer user deposit token to escrow wallet
-          const onchainEscrowTx = await this.transferToken(
-            tokenContract,
-            escrowAddress,
-            depositAmount,
-          );
-          // if transfer token failed, normally due to insufficient gas fee, means
-          // user wallet haven't been reloaded yet in processDeposit() especially new created wallet
-          // into catch block and retry again in next cron job
-          const receipt = await onchainEscrowTx.wait(1);
-          const onchainEscrowTxHash = onchainEscrowTx.hash;
-
-          // reload user wallet that execute token transfer if needed
-          this.eventEmitter.emit(
-            'gas.service.reload',
-            userWallet.walletAddress,
-            depositTx.chainId,
-          );
-
-          if (receipt && receipt.status == 1) {
-            // transfer token transaction success
-            depositTx.isTransferred = true;
-            depositTx.status = 'S';
-            depositTx.txHash = onchainEscrowTxHash;
-            await queryRunner.manager.save(depositTx);
-
-            const gameUsdTx = new GameUsdTx();
-            gameUsdTx.amount = depositTx.walletTx.txAmount;
-            gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-            gameUsdTx.status = 'P';
-            gameUsdTx.senderAddress = this.configService.get(
-              'GAMEUSD_POOL_CONTRACT_ADDRESS',
-            );
-            gameUsdTx.receiverAddress = userWallet.walletAddress;
-            gameUsdTx.walletTxId = depositTx.walletTx.id;
-            gameUsdTx.walletTxs = [depositTx.walletTx];
-            await queryRunner.manager.save(gameUsdTx);
-          } else if (receipt && receipt.status != 1) {
-            // transfer token transaction failed
-            depositTx.retryCount += 1;
-            depositTx.txHash = onchainEscrowTxHash;
-            await queryRunner.manager.save(depositTx);
-          }
-        } catch (error) {
-          // two possible reach here:
-          // 1. get private key failed due to share threshold not met
-          // 2. transfer token failed due to insufficient gas
-          console.error(
-            'handleEscrowTx(): Error when try to execute on-chain transfer, will retry again',
-            error,
-          );
-          depositTx.retryCount += 1;
-          await queryRunner.manager.save(depositTx);
-          // finally block will do queryRunner.release() & cronMutex.release()
-        } finally {
-          await queryRunner.commitTransaction();
-        }
-      } catch (err) {
-        // queryRunner
-        console.error('handleEscrowTx() error within queryRunner, error:', err);
-        await queryRunner.rollbackTransaction();
-
-        // inform admin
+        await queryRunner.commitTransaction();
+        await queryRunner.release();
         await this.adminNotificationService.setAdminNotification(
-          `handleEscrowTx() error within queryRunner, error: ${err}`,
-          'TRANSACTION_ROLLBACK',
-          'Transaction Rollback When Transfer to Escrow Wallet',
-          true,
-          true,
+          `Transaction to escrow failed depositTx.id: ${depositTx.id} with error: ${error}`,
+          'ESCROW_FAILED',
+          'Transfer to Escrow Failed',
+          false,
+          false,
           depositTx.walletTxId,
         );
-
-        // unknown issue, wait developer to check
-        // set status to F and won't enter this handleEscrowTx() again
-        depositTx.status = 'F';
-        this.depositRepository.save(depositTx);
-      } finally {
-        // queryRunner
-        await queryRunner.release();
+      } catch (error) {
+        if (!queryRunner.isReleased) await queryRunner.release();
+        console.error('Error in onEscrowTxFailed', error);
       }
-    } catch (error) {
-      // cronMutex
-      console.error('handleEscrowTx() error within cronMutex:', error);
-
-      await this.adminNotificationService.setAdminNotification(
-        `handleEscrowTx() error within cronMutex: ${error}`,
-        'CRITICAL_ERROR',
-        'Critical Error When Transfer to Escrow Wallet',
-        true,
-        true,
-      );
-    } finally {
-      // cronMutex
-      release();
     }
   }
 
@@ -386,32 +548,34 @@ export class DepositService {
     });
   }
 
-  // transfer GameUSD to user wallet
-  @Cron(CronExpression.EVERY_SECOND)
-  async handleGameUsdTx() {
-    const release = await this.cronMutex.acquire();
+  // Step2: transfer GameUSD to user wallet.
+  // When calling addJob(), set attempts to 0 as this function itself will handle retry
+  private async handleGameUsdTx(job: Job<{ gameUsdTxId: number }>) {
+    const queryRunner = this.dataSource.createQueryRunner();
 
     try {
-      const queryRunner = this.dataSource.createQueryRunner();
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
-      const gameUsdTx = (await queryRunner.manager
-        .createQueryBuilder('game_usd_tx', 'gameUsdTx')
-        .where('gameUsdTx.status = :status', { status: 'P' })
-        .andWhere('gameUsdTx.senderAddress IN (:...senderAddresses)', {
-          senderAddresses: [
-            this.configService.get('DEPOSIT_BOT_ADDRESS'),
-            this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
-          ],
-        })
-        .andWhere('gameUsdTx.creditWalletTx IS NULL')
-        .orderBy('gameUsdTx.id', 'ASC')
-        .getOne()) as GameUsdTx;
+      const gameUsdTx = await queryRunner.manager
+        .createQueryBuilder(GameUsdTx, 'gameUsdTx')
+        .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
+        .getOne();
 
       if (!gameUsdTx) {
         await queryRunner.release();
-        // finally block will do cronMutex.release()
+        return;
+      }
+
+      if (gameUsdTx.status == 'S') {
+        await queryRunner.release();
+
+        const jobId = `updateStatus-${gameUsdTx.id}`;
+        await this.queueservice.addJob(QueueName.DEPOSIT, jobId, {
+          gameUsdTxId: gameUsdTx.id,
+          queueType: QueueType.DEPOSIT_GAMEUSD_DB,
+        });
+
         return;
       }
 
@@ -423,6 +587,7 @@ export class DepositService {
               this.configService.get('DEPOSIT_BOT_ADDRESS'),
               gameUsdTx.chainId,
             );
+            // throw new Error('Test Error');
 
             // if transfer GameUSD failed due to gas limit, into catch block and retry again in next cron job
             const onchainGameUsdTx = await this.depositGameUSD(
@@ -473,6 +638,9 @@ export class DepositService {
             { status: 'F' },
           );
 
+          await queryRunner.commitTransaction();
+          if (!queryRunner.isReleased) await queryRunner.release();
+
           await this.adminNotificationService.setAdminNotification(
             `GameUSD transaction after 5 times for gameUsdTx id: ${gameUsdTx.id}`,
             'GAMEUSD_TX_FAILED_5_TIMES',
@@ -485,7 +653,14 @@ export class DepositService {
 
         if (gameUsdTx.status == 'S') {
           // handles the db part of gameUsdTx sent to user address.
-          await this.handleGameUSDTxHash(gameUsdTx);
+          await queryRunner.commitTransaction();
+          if (!queryRunner.isReleased) await queryRunner.release();
+
+          const jobId = `updateStatus-${gameUsdTx.id}`;
+          await this.queueservice.addJob(QueueName.DEPOSIT, jobId, {
+            gameUsdTxId: gameUsdTx.id,
+            queueType: QueueType.DEPOSIT_GAMEUSD_DB,
+          });
         }
       } catch (error) {
         // queryRunner
@@ -497,6 +672,9 @@ export class DepositService {
         gameUsdTx.status = 'F';
         await queryRunner.manager.save(gameUsdTx);
 
+        await queryRunner.commitTransaction();
+        if (!queryRunner.isReleased) await queryRunner.release();
+
         // inform admin
         await this.adminNotificationService.setAdminNotification(
           `handleGameUsdTx() error within queryRunner - GameUsdTx id: ${gameUsdTx.id}, error: ${error}`,
@@ -506,25 +684,18 @@ export class DepositService {
           false,
           gameUsdTx.walletTxId,
         );
-      } finally {
-        // queryRunner
-        await queryRunner.commitTransaction();
-        await queryRunner.release();
       }
     } catch (error) {
-      // cronMutex
       console.error('handleGameUsdTx() error:', error);
+      if (!queryRunner.isReleased) await queryRunner.release();
 
       await this.adminNotificationService.setAdminNotification(
-        `handleGameUsdTx() error within cronMutex, error: ${error}`,
+        `handleGameUsdTx() error, error: ${error}`,
         'CRITICAL_ERROR',
         'Critical Error When Transfer GameUSD',
         true,
         true,
       );
-    } finally {
-      // cronMutex
-      release();
     }
   }
 
@@ -544,12 +715,17 @@ export class DepositService {
   }
 
   // handles the db part of gameUsdTx sent to user address.
-  private async handleGameUSDTxHash(gameUsdTx: GameUsdTx) {
+  private async handleGameUSDTxHash(job: Job<{ gameUsdTxId: number }>) {
     const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
+        where: {
+          id: job.data.gameUsdTxId,
+        },
+      });
       const walletTx = await queryRunner.manager
         .createQueryBuilder(WalletTx, 'walletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
@@ -584,7 +760,7 @@ export class DepositService {
       const pointTxEndingBalance =
         Number(pointTxStartingBalance) + Number(pointTxAmount);
       const pointTx = new PointTx();
-      pointTx.txType = 'DEPOSIT';
+      pointTx.txType = walletTx.txType; //'DEPOSIT';
       pointTx.amount = pointTxAmount;
       pointTx.startingBalance = pointTxStartingBalance;
       pointTx.endingBalance = pointTxEndingBalance;
@@ -598,7 +774,14 @@ export class DepositService {
       walletTx.userWallet.pointBalance = pointTxEndingBalance;
       await queryRunner.manager.save(walletTx.userWallet);
 
+      await this.handleReferralFlow(
+        walletTx.userWallet.id,
+        walletTx.txAmount,
+        queryRunner,
+      );
+
       await queryRunner.commitTransaction();
+      if (!queryRunner.isReleased) await queryRunner.release();
 
       await this.userService.setUserNotification(walletTx.userWallet.userId, {
         type: 'Deposit',
@@ -606,14 +789,6 @@ export class DepositService {
         message: 'Your Deposit has been successfully processed',
         walletTxId: walletTx.id,
       });
-
-      await this.handleReferralFlow(
-        walletTx.userWallet.id,
-        walletTx.txAmount,
-        gameUsdTx.id,
-        gameUsdTx.txHash,
-        queryRunner,
-      );
     } catch (error) {
       console.error(
         'handleGameUsdTxHash() error within queryRunner, error:',
@@ -621,16 +796,45 @@ export class DepositService {
       );
       await queryRunner.rollbackTransaction();
 
-      // inform admin about the error
-      await this.adminNotificationService.setAdminNotification(
-        `handleGameUSDTxHash() error within queryRunner, error: ${error}`,
-        'TRANSACTION_ROLLBACK',
-        'Transaction Rollback When Update WalletTx and Create PointTx',
-        true,
-        true,
-      );
+      throw new Error(`Error processing gameUsdTx ${error}`); //throwing to retry
     } finally {
-      await queryRunner.release();
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  private async onGameUsdTxFailed(
+    job: Job<{ gameUsdTxId: number }>,
+    error: Error,
+  ) {
+    if (job.attemptsMade >= job.opts.attempts) {
+      const queryRunner = this.dataSource.createQueryRunner();
+      try {
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        const gameUsdTx = await queryRunner.manager
+          .createQueryBuilder(GameUsdTx, 'gameUsdTx')
+          .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
+          .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
+          .getOne();
+
+        gameUsdTx.walletTxs[0].status = 'F';
+        await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
+
+        await queryRunner.commitTransaction();
+        await queryRunner.release();
+
+        await this.adminNotificationService.setAdminNotification(
+          `GameUSD transaction failed after ${job.attemptsMade} times for gameUsdTx id: ${gameUsdTx.id} with error: ${error}`,
+          'GAMEUSD_TX_FAILED_5_TIMES',
+          'GameUSD transfer failed',
+          false,
+          false,
+          gameUsdTx.walletTxId,
+        );
+      } catch (error) {
+        console.error('Error in onGameUsdTxFailed', error);
+      }
     }
   }
 
@@ -660,12 +864,8 @@ export class DepositService {
   private async handleReferralFlow(
     userId: number,
     depositAmount: number,
-    gameUsdTxId: number,
-    depositGameUsdTxHash: string,
     queryRunner: QueryRunner,
   ) {
-    await queryRunner.startTransaction();
-
     try {
       const userInfo = await queryRunner.manager
         .createQueryBuilder(User, 'user')
@@ -676,7 +876,6 @@ export class DepositService {
 
       if (!userInfo || userInfo.referralUserId == null) {
         // do nothing, queryRunner.release() will be done in parent function
-        await queryRunner.commitTransaction();
         return;
       }
 
@@ -705,24 +904,14 @@ export class DepositService {
       // update userWallet pointBalance
       userInfo.referralUser.wallet.pointBalance = pointTx.endingBalance;
       await queryRunner.manager.save(userInfo.referralUser.wallet);
-
-      await queryRunner.commitTransaction();
     } catch (error) {
       // queryRunner
       console.error(
         'handleReferralFlow() error within queryRunner, error:',
         error,
       );
-      await queryRunner.rollbackTransaction();
 
-      // inform admin
-      this.adminNotificationService.setAdminNotification(
-        `handleReferralFlow() error within queryRunner, gameUsdTx id: ${gameUsdTxId}, error: ${error}`,
-        'TRANSACTION_ROLLBACK',
-        'Transaction Rollback When Create Referral PointTx',
-        true,
-        true,
-      );
+      throw new Error(`Error processing referral flow ${error}`);
     }
   }
 }

@@ -588,4 +588,15 @@ export class WalletController {
       data: {},
     };
   }
+
+  @Secure(null, UserRole.ADMIN)
+  @Post('retry-deposit')
+  async retryDeposit(@Body() payload: { depositId: number }) {
+    await this.depositService.retryDeposit(payload.depositId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'retry deposit process initiated',
+      data: {},
+    };
+  }
 }
