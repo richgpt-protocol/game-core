@@ -28,15 +28,16 @@ import { Deposit__factory } from 'src/contract';
 import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { Job } from 'bullmq';
+import { SettingEnum } from 'src/shared/enum/setting.enum';
 
 /**
  * How deposit works
  * 1. deposit-bot access via api/v1/wallet/deposit
- * 2. processDeposit() create pending walletTx and depositTx
- * 3. handleEscrowTx() fetch pending depositTx with cron, and transfer deposited token to escrow wallet
- *    once success, set depositTx status to success and create pending gameUsdTx, otherwise retry again in next cron job
- * 4. handleGameUsdTx() fetch pending gameUsdTx with cron, and transfer GameUSD to user wallet
- *    once success, set gameUsdTx status to success and proceed to handleGameUSDTxHash(), otherwise retry again in next cron job
+ * 2. processDeposit() create pending walletTx, depositTx and Adds it to queue of type `DEPOSIT_ESCROW`.
+ * 3. handleEscrowTx() is executed by the queue, transfers the  deposited token to escrow wallet
+ *    once success, set depositTx status to success and create pending gameUsdTx, otherwise retry again by the queue.
+ * 4. handleGameUsdTx() transfer GameUSD to user wallet.
+ *    once success, set gameUsdTx status to success and proceed to handleGameUSDTxHash()
  * 5. handleGameUSDTxHash() update walletTx status to success, update userWallet.walletBalance,
  *    create pointTx & update user userWallet.pointBalance, and proceed with handleReferralFlow()
  * 6. handleReferralFlow() create referral pointTx and update referral userWallet.pointBalance if user has referral.
@@ -60,10 +61,10 @@ export class DepositService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
     private queueservice: QueueService,
   ) {
-    const senderWallet = new ethers.Wallet(
-      this.configService.get('USDT_SENDER_PRIV_KEY'),
-    );
-    this.miniGameUSDTSender = senderWallet.address;
+    this.miniGameUSDTSender = this.configService.get('MINI_GAME_USDT_SENDER');
+    if (!this.miniGameUSDTSender) {
+      throw new Error('MINI_GAME_USDT_SENDER not found in .env');
+    }
   }
   onModuleInit() {
     this.queueservice.registerHandler(
@@ -120,20 +121,6 @@ export class DepositService implements OnModuleInit {
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
-      const usdtSender = await queryRunner.manager.findOne(Setting, {
-        where: {
-          key: 'USDT_SENDER_ADDRESS',
-        },
-      });
-
-      if (
-        usdtSender &&
-        payload.depositerAddress.toLowerCase() ===
-          usdtSender.value.toLowerCase()
-      ) {
-        return;
-      }
-
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
         where: {
           walletAddress: payload.walletAddress,
@@ -141,8 +128,7 @@ export class DepositService implements OnModuleInit {
       });
       if (
         payload.amount < 1 &&
-        payload.depositerAddress.toLowerCase() !==
-          this.miniGameUSDTSender.toLowerCase()
+        payload.depositerAddress.toLowerCase() !== this.miniGameUSDTSender
       ) {
         // deposit amount less than $1, inform admin and do nothing
         await this.adminNotificationService.setAdminNotification(
@@ -199,7 +185,7 @@ export class DepositService implements OnModuleInit {
         Setting,
         {
           where: {
-            key: 'DEPOSIT_NOTIFY_THRESHOLD',
+            key: SettingEnum.DEPOSIT_NOTIFY_THRESHOLD,
           },
         },
       );
