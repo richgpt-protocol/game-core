@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { SendMessageDto } from './dto/sendMessage.dto';
 import { MongoClient } from 'mongodb';
@@ -22,6 +22,8 @@ const model = 'gpt-4o-mini';
 
 @Injectable()
 export class ChatbotService {
+  private readonly logger = new Logger(ChatbotService.name);
+
   availableFunctions: { [key: string]: Function } = {
     getNumberRecommendation: this.getNumberRecommendation,
     getImage: this.getImage,
@@ -335,7 +337,7 @@ Today date: ${new Date().toDateString()}.`;
       qztwzt = <QztWzt[]>await cursor.toArray();
     
     } catch (e) {
-      console.error(e);
+      this.logger.error(e);
       throw new HttpException('Cannot connect to qztwzt database', HttpStatus.INTERNAL_SERVER_ERROR);
 
     } finally {

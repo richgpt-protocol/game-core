@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { UserWallet } from '../entities/user-wallet.entity';
 import {
   DataSource,
@@ -27,6 +27,7 @@ import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 @Injectable()
 export class CreditService {
+  private readonly logger = new Logger(CreditService.name);
   GAMEUSD_TRANFER_INITIATOR: string;
   private readonly cronMutex: Mutex = new Mutex();
   constructor(
@@ -82,7 +83,7 @@ export class CreditService {
       return creditWalletTx;
     } catch (error) {
       console.log('catch block');
-      console.error(error);
+      this.logger.error(error);
       await queryRunner.rollbackTransaction();
       throw new BadRequestException(error.message);
     } finally {
@@ -95,7 +96,7 @@ export class CreditService {
     try {
       return await this._addCredit(payload, queryRunner, true);
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       throw new Error(error.message);
     }
   }
@@ -175,7 +176,7 @@ export class CreditService {
 
       return creditWalletTx;
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       if (error instanceof BadRequestException) {
         throw new BadRequestException(error.message);
       } else {
@@ -254,7 +255,7 @@ export class CreditService {
       });
       return { data, total: Math.ceil(total / limit), currentPage: page };
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       throw new BadRequestException('Failed to get credit wallet tx list');
     }
   }
@@ -294,7 +295,7 @@ export class CreditService {
       });
       return { data, total: Math.ceil(total / limit), currentPage: page };
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       throw new BadRequestException('Failed to get credit wallet tx list');
     }
   }
@@ -411,7 +412,7 @@ export class CreditService {
 
       await queryRunner.commitTransaction();
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       await queryRunner.rollbackTransaction();
 
       throw new Error('Failed to add credit');
@@ -443,7 +444,7 @@ export class CreditService {
 
         await queryRunner.commitTransaction();
       } catch (error) {
-        console.error(error);
+        this.logger.error(error);
         await queryRunner.rollbackTransaction();
       } finally {
         if (!queryRunner.isReleased) await queryRunner.release();
@@ -471,7 +472,7 @@ export class CreditService {
       // But need to edit past transaction's status.
       // await this.expireCreditsMethod2();
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
     } finally {
       release();
     }
@@ -548,7 +549,7 @@ export class CreditService {
         }
       }
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       queryRunner.rollbackTransaction();
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
@@ -623,7 +624,7 @@ export class CreditService {
   //       await queryRunner.commitTransaction();
   //     }
   //   } catch (error) {
-  //     console.error(error);
+  //     this.logger.error(error);
   //     await queryRunner.rollbackTransaction();
   //   } finally {
   //     if (!queryRunner.isReleased) await queryRunner.release();

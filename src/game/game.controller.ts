@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpStatus,
+  Logger,
   Post,
   Query,
   Request,
@@ -27,6 +28,8 @@ import { BetService } from './bet.service';
 @ApiTags('Game')
 @Controller('api/v1/game')
 export class GameController {
+  private readonly logger = new Logger(GameController.name);
+
   constructor(
     private gameService: GameService,
     private betService: BetService,
@@ -62,7 +65,7 @@ export class GameController {
         message: 'get available games success',
       };
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       return {
         statusCode: HttpStatus.BAD_REQUEST,
         data: null,
@@ -82,7 +85,7 @@ export class GameController {
         message: 'get leaderboard success',
       };
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       return {
         statusCode: HttpStatus.BAD_REQUEST,
         data: null,

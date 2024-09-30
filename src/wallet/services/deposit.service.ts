@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,7 +14,6 @@ import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { DepositDTO } from '../dto/deposit.dto';
 import { ethers, parseEther, parseUnits } from 'ethers';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { User } from 'src/user/entities/user.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
@@ -22,7 +22,6 @@ import { PointService } from 'src/point/point.service';
 import { UserService } from 'src/user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MPC } from 'src/shared/mpc';
-import { Mutex } from 'async-mutex';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { Deposit__factory } from 'src/contract';
 import { QueueService } from 'src/queue/queue.service';
@@ -45,12 +44,10 @@ import { SettingEnum } from 'src/shared/enum/setting.enum';
 
 @Injectable()
 export class DepositService implements OnModuleInit {
-  private readonly cronMutex: Mutex = new Mutex();
+  private readonly logger = new Logger(DepositService.name);
   private readonly miniGameUSDTSender: string;
 
   constructor(
-    @InjectRepository(DepositTx)
-    private depositRepository: Repository<DepositTx>,
     @InjectRepository(UserWallet)
     private userWalletRepository: Repository<UserWallet>,
     private readonly configService: ConfigService,
@@ -152,7 +149,7 @@ export class DepositService implements OnModuleInit {
       await this.addToEscrowQueue(depositTx.id);
     } catch (error) {
       // queryRunner
-      console.error('processDeposit() error within queryRunner, error:', error);
+      this.logger.error('processDeposit() error within queryRunner, error:', error);
       await queryRunner.rollbackTransaction();
 
       await this.adminNotificationService.setAdminNotification(
@@ -239,7 +236,7 @@ export class DepositService implements OnModuleInit {
 
       return depositTx;
     } catch (error) {
-      console.error('processDeposit() error:', error);
+      this.logger.error('processDeposit() error:', error);
       throw error;
     }
   }
@@ -253,7 +250,7 @@ export class DepositService implements OnModuleInit {
         queueType: QueueType.DEPOSIT_ESCROW,
       });
     } catch (error) {
-      console.error('addToEscrowQueue() error:', error);
+      this.logger.error('addToEscrowQueue() error:', error);
 
       await this.adminNotificationService.setAdminNotification(
         `Error adding to escrow queue for depositTxId: ${depositTxId}`,
@@ -306,7 +303,7 @@ export class DepositService implements OnModuleInit {
 
       return true;
     } catch (error) {
-      console.error('retryDeposit() error:', error);
+      this.logger.error('retryDeposit() error:', error);
       await queryRunner.rollbackTransaction();
 
       if (error instanceof BadRequestException) {
@@ -445,7 +442,7 @@ export class DepositService implements OnModuleInit {
 
       await queryRunner.commitTransaction();
     } catch (error) {
-      console.error('handleEscrowTx() error:', error);
+      this.logger.error('handleEscrowTx() error:', error);
       throw new Error(`Error processing deposit ${error}`);
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
@@ -491,7 +488,7 @@ export class DepositService implements OnModuleInit {
         );
       } catch (error) {
         if (!queryRunner.isReleased) await queryRunner.release();
-        console.error('Error in onEscrowTxFailed', error);
+        this.logger.error('Error in onEscrowTxFailed', error);
       }
     }
   }
@@ -606,7 +603,7 @@ export class DepositService implements OnModuleInit {
             // two possible reach here
             // 1. get private key failed due to share threshold not met
             // 2. transfer GameUSD failed due to gas limit
-            console.error('handleGameUsdTx() error:', error);
+            this.logger.error('handleGameUsdTx() error:', error);
             gameUsdTx.retryCount += 1;
           } finally {
             await queryRunner.manager.save(gameUsdTx);
@@ -650,7 +647,7 @@ export class DepositService implements OnModuleInit {
         }
       } catch (error) {
         // queryRunner
-        console.error('handleGameUsdTx() error:', error);
+        this.logger.error('handleGameUsdTx() error:', error);
         // no queryRunner.rollbackTransaction() here because contain on-chain data
         // no new record created as well so nothing to rollback
 
@@ -672,7 +669,7 @@ export class DepositService implements OnModuleInit {
         );
       }
     } catch (error) {
-      console.error('handleGameUsdTx() error:', error);
+      this.logger.error('handleGameUsdTx() error:', error);
       if (!queryRunner.isReleased) await queryRunner.release();
 
       await this.adminNotificationService.setAdminNotification(
@@ -776,7 +773,7 @@ export class DepositService implements OnModuleInit {
         walletTxId: walletTx.id,
       });
     } catch (error) {
-      console.error(
+      this.logger.error(
         'handleGameUsdTxHash() error within queryRunner, error:',
         error,
       );
@@ -819,7 +816,7 @@ export class DepositService implements OnModuleInit {
           gameUsdTx.walletTxId,
         );
       } catch (error) {
-        console.error('Error in onGameUsdTxFailed', error);
+        this.logger.error('Error in onGameUsdTxFailed', error);
       }
     }
   }
@@ -892,7 +889,7 @@ export class DepositService implements OnModuleInit {
       await queryRunner.manager.save(userInfo.referralUser.wallet);
     } catch (error) {
       // queryRunner
-      console.error(
+      this.logger.error(
         'handleReferralFlow() error within queryRunner, error:',
         error,
       );

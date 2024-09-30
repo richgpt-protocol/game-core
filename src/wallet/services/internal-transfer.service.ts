@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { DataSource, Repository } from 'typeorm';
@@ -21,6 +21,8 @@ import { User } from 'src/user/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 @Injectable()
 export class InternalTransferService {
+  private readonly logger = new Logger(InternalTransferService.name);
+
   constructor(
     @InjectRepository(UserWallet)
     private walletRepository: Repository<UserWallet>,
@@ -162,7 +164,7 @@ export class InternalTransferService {
         gameUsdTx,
       });
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       await queryRunner.rollbackTransaction();
       if (error instanceof BadRequestException) {
         throw new BadRequestException(error.message);
@@ -251,7 +253,7 @@ export class InternalTransferService {
           });
         } catch (error) {
           //Internal catch. Catches error in processing individual gameUsdTx.
-          console.error('InAppTransferError Error in retry cron', error);
+          this.logger.error('InAppTransferError Error in retry cron', error);
 
           gameUsdTx.retryCount += 1;
           await this.gameUsdTxRepository.save(gameUsdTx);
@@ -260,7 +262,7 @@ export class InternalTransferService {
 
       this.isRetryCronRunning = false;
     } catch (error) {
-      console.error('InAppTransferError: Error in retry cron', error);
+      this.logger.error('InAppTransferError: Error in retry cron', error);
       this.isRetryCronRunning = false;
     }
 
@@ -396,7 +398,7 @@ export class InternalTransferService {
           throw new Error('Transaction failed');
         }
       } catch (error) {
-        console.error(error);
+        this.logger.error(error);
 
         gameUsdTx.status = 'F';
         senderWalletTx.status = 'F';
@@ -459,7 +461,7 @@ export class InternalTransferService {
         return true;
       }
     } catch (error) {
-      console.error('Error in checkNativeBalance', error);
+      this.logger.error('Error in checkNativeBalance', error);
       return false;
     }
   }

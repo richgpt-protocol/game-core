@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Job, Queue, Worker } from 'bullmq';
 import { ConfigService } from 'src/config/config.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
@@ -10,6 +10,8 @@ interface QueueHandler {
 
 @Injectable()
 export class QueueService {
+  private readonly logger = new Logger(QueueService.name);
+
   private handlers: Map<string, Map<string, QueueHandler>> = new Map();
   private queues: Map<string, Queue> = new Map();
   private redisHost: string;
@@ -21,7 +23,7 @@ export class QueueService {
   }
 
   async onFailed(job: Job, error: Error) {
-    console.error(
+    this.logger.error(
       `Job ${job.id} failed with error: ${error.message}. Attempts ${job.attemptsMade}`,
     );
 
@@ -33,7 +35,7 @@ export class QueueService {
         try {
           await handler.failureHandler(job, error);
         } catch (error) {
-          console.error(error);
+          this.logger.error(error);
         }
       } else {
         console.warn(`No failure handler found for job ${job.data.queueType}`);
@@ -67,10 +69,10 @@ export class QueueService {
         );
         return await handler.jobHandler(job);
       } else {
-        console.error(`No handler found for job ${job.name}`);
+        this.logger.error(`No handler found for job ${job.name}`);
       }
     } else {
-      console.error(`No handlers found for queue ${job.queueName}`);
+      this.logger.error(`No handlers found for queue ${job.queueName}`);
     }
   }
 
@@ -133,7 +135,7 @@ export class QueueService {
 
 //   @OnWorkerEvent('failed')
 //   async onFailed(job: Job, error: Error) {
-//     console.error(
+//     this.logger.error(
 //       `Job ${job.id} failed with error: ${error.message}. Attempts ${job.attemptsMade}`,
 //     );
 
@@ -157,7 +159,7 @@ export class QueueService {
 //       );
 //       return await handler.jobHandler(job);
 //     } else {
-//       console.error(`No handler found for job ${job.name}`);
+//       this.logger.error(`No handler found for job ${job.name}`);
 //     }
 //   }
 // }

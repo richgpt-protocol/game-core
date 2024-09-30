@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
@@ -16,6 +16,8 @@ import { Between, In, Repository } from 'typeorm';
 
 @Injectable()
 export class BackOfficeService {
+  private readonly logger = new Logger(BackOfficeService.name);
+
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -114,7 +116,7 @@ export class BackOfficeService {
         totalPages: Math.ceil(wallets[1] / limit),
       };
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       throw new InternalServerErrorException('Internal Server Error');
     }
   }

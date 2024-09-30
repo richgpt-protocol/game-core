@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { UserService } from 'src/user/user.service';
 import { WalletService } from 'src/wallet/wallet.service';
 import { GetProfileDto } from './dtos/get-profile.dto';
@@ -35,6 +35,8 @@ import { UsdtTx } from './entity/usdt-tx.entity';
 import { CreditService } from 'src/wallet/services/credit.service';
 @Injectable()
 export class PublicService {
+  private readonly logger = new Logger(PublicService.name);
+
   GAMEUSD_TRANFER_INITIATOR: string;
   miniGameNotificationEndPoint: string;
   AddCreditMutex: Mutex;
@@ -174,7 +176,7 @@ export class PublicService {
         previousXpCap: this.walletService.getPreviousXpCap(xp),
       };
     } catch (error) {
-      console.error('Public-service: Failed to update task', error);
+      this.logger.error('Public-service: Failed to update task', error);
       await queryRunner.rollbackTransaction();
       const errorMessage =
         error instanceof BadRequestException ? error.message : 'Error occurred';
@@ -277,7 +279,7 @@ export class PublicService {
         gameSessionToken: payload.gameSessionToken,
       };
     } catch (error) {
-      console.error('Public-service: Failed to update user game', error);
+      this.logger.error('Public-service: Failed to update user game', error);
       await queryRunner.rollbackTransaction();
       const errorMessage =
         error instanceof BadRequestException ? error.message : 'Error occurred';
@@ -344,7 +346,7 @@ export class PublicService {
         await queryRunner.manager.save(gameTx);
       }
     } catch (error) {
-      console.error('Public-service: Failed to add XP', error);
+      this.logger.error('Public-service: Failed to add XP', error);
       throw new Error(error.message);
     }
   }
@@ -385,7 +387,7 @@ export class PublicService {
       return creditWalletTx;
     } catch (error) {
       // await queryRunner.rollbackTransaction();
-      console.error('Public-service: Failed to add credit', error);
+      this.logger.error('Public-service: Failed to add credit', error);
       throw new Error(error.message);
     }
   }
@@ -428,7 +430,7 @@ export class PublicService {
       await queryRunner.manager.save(usdtTx);
       await queryRunner.manager.save(walletTx);
     } catch (error) {
-      console.error('Public-service: Failed to add GameUSD', error);
+      this.logger.error('Public-service: Failed to add GameUSD', error);
       throw new Error(error.message);
     }
   }
@@ -511,7 +513,7 @@ export class PublicService {
           throw new Error('Transaction failed');
         }
       } catch (error) {
-        console.error('publicService: error Adding gameUSD onchain', error);
+        this.logger.error('publicService: error Adding gameUSD onchain', error);
         usdtTx.retryCount = usdtTx.retryCount + 1;
         await queryRunner.manager.save(usdtTx);
         await queryRunner.commitTransaction();
@@ -543,7 +545,7 @@ export class PublicService {
       await queryRunner.manager.save(userWallet);
       await queryRunner.commitTransaction();
     } catch (error) {
-      console.error('error in handleAddGameUSD Cron', error);
+      this.logger.error('error in handleAddGameUSD Cron', error);
       // await this.adminNotificationService.setAdminNotification(
       //   error.message,
       //   'SYNCHRONISE_ADD_GAMEUSD',
@@ -602,7 +604,7 @@ export class PublicService {
       }
       await queryRunner.commitTransaction();
     } catch (error) {
-      console.error('publicService: error in statusUpdater Cron', error);
+      this.logger.error('publicService: error in statusUpdater Cron', error);
       await this.adminNotificationService.setAdminNotification(
         error.message,
         'SYNCHRONISE_SET_STATUS',
@@ -676,13 +678,13 @@ export class PublicService {
             isNotified: true,
           });
         } catch (error) {
-          console.error('error notifing MiniGame Cron', error.response.data);
+          this.logger.error('error notifing MiniGame Cron', error.response.data);
         }
       }
 
       await queryRunner.commitTransaction();
     } catch (error) {
-      console.error('error in notifyMiniGame Cron', error);
+      this.logger.error('error in notifyMiniGame Cron', error);
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
       release();

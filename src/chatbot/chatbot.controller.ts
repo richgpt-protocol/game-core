@@ -3,6 +3,7 @@ import {
     Controller,
     Get,
     HttpStatus,
+    Logger,
     Post,
     Query,
     Request,
@@ -20,6 +21,8 @@ import { SendMessageDto } from './dto/sendMessage.dto';
 @ApiTags('Chatbot')
 @Controller('api/v1/chatbot')
 export class ChatbotController {
+  private readonly logger = new Logger(ChatbotController.name)
+
   constructor(
     private chatbotService: ChatbotService,
   ) {}
@@ -55,7 +58,7 @@ export class ChatbotController {
       };
 
     } catch (error) {
-      console.error(error)
+      this.logger.error(error)
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         data: {},
@@ -95,7 +98,7 @@ export class ChatbotController {
       };
 
     } catch (error) {
-      console.error(error)
+      this.logger.error(error)
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         data: {},

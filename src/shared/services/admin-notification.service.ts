@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
@@ -10,6 +10,8 @@ import { WebClient } from '@slack/web-api';
 
 @Injectable()
 export class AdminNotificationService {
+  private readonly logger = new Logger(AdminNotificationService.name);
+
   private bot: TelegramBot;
   // private tg_admins: Array<string>;
   private TG_ADMIN_GROUP;
@@ -122,7 +124,7 @@ export class AdminNotificationService {
         await this.bot.sendMessage(chatId, message);
       }
     } catch (error) {
-      console.error('Error sending message to telegram', error);
+      this.logger.error('Error sending message to telegram', error);
     }
   }
 
@@ -134,7 +136,7 @@ export class AdminNotificationService {
           text: message,
         });
       } catch (error) {
-        console.error('Error sending message to slack', error);
+        this.logger.error('Error sending message to slack', error);
       }
     }
   }

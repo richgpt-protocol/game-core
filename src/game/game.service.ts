@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -38,6 +38,7 @@ interface SubmitDrawResultDTO {
 
 @Injectable()
 export class GameService implements OnModuleInit {
+  private readonly logger = new Logger(GameService.name);
   provider = new ethers.JsonRpcProvider(
     this.configService.get(
       'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
@@ -322,7 +323,7 @@ export class GameService implements OnModuleInit {
                 // delay: 2000,
               });
             } catch (error) {
-              console.error(
+              this.logger.error(
                 'Error in game.service.submitDrawResult.processWinReferralBonus',
                 error,
               );
@@ -340,7 +341,7 @@ export class GameService implements OnModuleInit {
         );
       }
     } catch (err) {
-      console.error('Error in game.service.submitDrawResult:', err);
+      this.logger.error('Error in game.service.submitDrawResult:', err);
 
       // await this.adminNotificationService.setAdminNotification(
       //   `Error in game.service.submitDrawResult, error: ${err}`,
@@ -408,7 +409,7 @@ export class GameService implements OnModuleInit {
 
       return;
     } catch (error) {
-      console.error('Error in reProcessReferralBonus', error);
+      this.logger.error('Error in reProcessReferralBonus', error);
       if (error instanceof BadRequestException) {
         throw error;
       } else {
@@ -551,7 +552,7 @@ export class GameService implements OnModuleInit {
 
       await queryRunner.commitTransaction();
     } catch (error) {
-      console.error('Error in transferReferrerBonus', error);
+      this.logger.error('Error in transferReferrerBonus', error);
       await queryRunner.rollbackTransaction();
 
       throw error;
@@ -572,7 +573,7 @@ export class GameService implements OnModuleInit {
           true,
         );
       } catch (error) {
-        console.error('Error in onReferralBonusFailed', error);
+        this.logger.error('Error in onReferralBonusFailed', error);
       }
     }
   }
@@ -594,7 +595,7 @@ export class GameService implements OnModuleInit {
         await queryRunner.commitTransaction();
       }
     } catch (error) {
-      console.error('Error in game.service.onChainTxFailed, error:', error);
+      this.logger.error('Error in game.service.onChainTxFailed, error:', error);
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }

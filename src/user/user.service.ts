@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
 import {
@@ -50,6 +50,7 @@ type GenerateOtpEvent = {
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
   telegramOTPBotUserName: string;
   TG_LOGIN_WIDGET_BOT_TOKEN: string;
   constructor(
@@ -505,7 +506,7 @@ export class UserService {
         return { error: null, data: newUser };
       }
     } catch (error) {
-      console.error('error', error);
+      this.logger.error('error', error);
       await queryRunner.rollbackTransaction();
 
       await this.adminNotificationService.setAdminNotification(
@@ -916,7 +917,7 @@ export class UserService {
       });
       await this.userNotificationRepository.save(userNotification);
     } catch (err) {
-      console.error(err);
+      this.logger.error(err);
     }
   }
 

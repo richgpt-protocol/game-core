@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { HttpService } from '@nestjs/axios';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -15,6 +15,7 @@ import { ConfigService } from 'src/config/config.service';
 
 @Injectable()
 export class GasService {
+  private readonly logger = new Logger(GasService.name);
   private readonly cronMutex: Mutex = new Mutex();
 
   constructor(
@@ -158,7 +159,7 @@ export class GasService {
       }
 
     } catch (error) {
-      console.error('handlePendingReloadTx() error within queryRunner, error:', error);
+      this.logger.error('handlePendingReloadTx() error within queryRunner, error:', error);
       // no queryRunner.rollbackTransaction() because it contain on-chain transaction
       // no new record created so it's safe not to rollback
 

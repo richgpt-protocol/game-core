@@ -6,6 +6,7 @@ import {
   Get,
   HttpStatus,
   Inject,
+  Logger,
   Param,
   Post,
   Put,
@@ -48,6 +49,8 @@ import { User } from './entities/user.entity';
 @ApiTags('User')
 @Controller('api/v1/user')
 export class UserController {
+  private logger = new Logger(UserController.name);
+
   constructor(
     private userService: UserService,
     private walletService: WalletService,
@@ -256,7 +259,7 @@ export class UserController {
         message: 'update profile successful',
       };
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         data: {},
@@ -308,6 +311,7 @@ export class UserController {
         message: 'update withdraw password successful',
       };
     } catch (error) {
+      this.logger.error(error);
       await queryRunner.rollbackTransaction();
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,

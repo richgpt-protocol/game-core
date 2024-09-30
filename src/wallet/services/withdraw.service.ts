@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { UserWallet } from '../entities/user-wallet.entity';
@@ -48,6 +48,7 @@ type RedeemResponse = {
 
 @Injectable()
 export class WithdrawService implements OnModuleInit {
+  private readonly logger = new Logger(WithdrawService.name);
   provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
   payoutCronMutex: Mutex;
   constructor(
@@ -311,7 +312,7 @@ export class WithdrawService implements OnModuleInit {
 
       return { error: null, data: redeemTx };
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       await queryRunner.rollbackTransaction();
 
       await this.adminNotificationService.setAdminNotification(
@@ -386,7 +387,7 @@ export class WithdrawService implements OnModuleInit {
       }
       return { error: null, data: redeemTx };
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       await queryRunner.rollbackTransaction();
 
       return { error: 'Unable to process review', data: null };
@@ -476,7 +477,7 @@ export class WithdrawService implements OnModuleInit {
       await queryRunner.manager.save(gameUsdTx);
       await queryRunner.commitTransaction();
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       await queryRunner.rollbackTransaction();
 
       throw error; //re-tried by queue
@@ -570,7 +571,7 @@ export class WithdrawService implements OnModuleInit {
         );
       }
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       await queryRunner.rollbackTransaction();
 
       throw new Error('Handle Payout errored'); //re-tried by queue
@@ -606,7 +607,7 @@ export class WithdrawService implements OnModuleInit {
         );
       }
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
@@ -748,7 +749,7 @@ export class WithdrawService implements OnModuleInit {
 
       return txReceipt;
     } catch (error) {
-      console.error('payoutUSDT() error:', error);
+      this.logger.error('payoutUSDT() error:', error);
       return null;
     }
   }
