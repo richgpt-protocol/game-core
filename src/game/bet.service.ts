@@ -291,7 +291,7 @@ export class BetService implements OnModuleInit {
           gameUsdTxId: gameUsdTx.id,
           queueType: QueueType.SUBMIT_BET,
         },
-        // 3000, //starts processing after 3 seconds
+        0, // no delay
       );
     } catch (error) {
       this.logger.error(`Rolling back Db transaction`);
@@ -336,7 +336,7 @@ export class BetService implements OnModuleInit {
           betOrders: gameusdTx.walletTxs[0].betOrders.map((bet) => bet.id),
           queueType: QueueType.SUBMIT_BET,
         },
-        3000, //starts processing after 3 seconds
+        0, // no delay
       );
 
       return true;
@@ -784,7 +784,7 @@ export class BetService implements OnModuleInit {
             gameUsdTxId: gameUsdTx.id,
             queueType: QueueType.SUBMIT_SUCCESS_PROCESS,
           },
-          // 3000, //starts processing after 3 seconds
+          0, // no delay
         );
 
         return true;
@@ -825,7 +825,7 @@ export class BetService implements OnModuleInit {
           gameUsdTxId: gameUsdTx.id,
           queueType: QueueType.SUBMIT_SUCCESS_PROCESS,
         },
-        // 3000, //starts processing after 3 seconds
+        0, // no delay
       );
     } catch (error) {
       this.logger.error(error);
