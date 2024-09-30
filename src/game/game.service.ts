@@ -529,10 +529,10 @@ export class GameService implements OnModuleInit {
       referralTx.referralType = 'PRIZE';
       referralTx.txHash = onchainTx.hash;
       referralTx.status = 'S';
-      referralTx.userId = referralUser.id;
-      referralTx.user = referralUser;
-      referralTx.referralUserId = betOrder.walletTx.userWallet.user.id;
-      referralTx.referralUser = betOrder.walletTx.userWallet.user;
+      referralTx.userId = betOrder.walletTx.userWallet.user.id;
+      referralTx.user = betOrder.walletTx.userWallet.user;
+      referralTx.referralUserId = referralUser.id;
+      referralTx.referralUser = referralUser;
       referralTx.walletTx = walletTx;
       await queryRunner.manager.save(referralTx);
 
