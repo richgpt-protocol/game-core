@@ -13,9 +13,12 @@ import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { Logger } from '@nestjs/common';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class GameGateway {
+  private readonly logger = new Logger(GameGateway.name);
+
   delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
   @WebSocketServer()
@@ -53,7 +56,7 @@ export class GameGateway {
   @Cron('0 2 */1 * * *') // 2 minutes after every hour
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
-    console.log('emitDrawResult()', new Date());
+    this.logger.log('emitDrawResult()');
     try {
       // get draw result from last game
       const lastGame = await this.gameRepository.findOne({

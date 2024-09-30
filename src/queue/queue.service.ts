@@ -64,7 +64,7 @@ export class QueueService {
     if (queueHandlers) {
       const handler = queueHandlers.get(job.data.queueType);
       if (handler) {
-        console.log(
+        this.logger.log(
           `Processing ${job.queueName} - ${job.data.queueType} Job ${job.id}. Attempts ${job.attemptsMade}`,
         );
         return await handler.jobHandler(job);
