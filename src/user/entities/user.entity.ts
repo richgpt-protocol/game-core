@@ -27,6 +27,7 @@ export class User {
   uid: string;
 
   @Column({
+    unique: true,
     nullable: true,
   })
   phoneNumber: string;
