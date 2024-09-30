@@ -75,7 +75,7 @@ export class PublicController {
     };
   }
 
-  @UseGuards(SecretTokenGuard)
+  // @UseGuards(SecretTokenGuard)
   @Post('game')
   @ApiResponse({
     status: 200,

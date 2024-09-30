@@ -12,6 +12,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { UsdtTx } from './usdt-tx.entity';
 
 @Entity()
 export class GameTx {
@@ -83,4 +84,8 @@ export class GameTx {
   @OneToOne(() => PointTx, (pointTx) => pointTx.gameTx)
   @JoinColumn()
   pointTx: PointTx;
+
+  @OneToOne(() => UsdtTx, (usdtTx) => usdtTx.gameTx)
+  @JoinColumn()
+  usdtTx: UsdtTx;
 }
