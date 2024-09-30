@@ -103,9 +103,12 @@ export class WalletService {
   }
 
   async getTicket(userId: number) {
+    const userWallet = await this.userWalletRepository.findOne({
+      where: { userId },
+    });
     const betWalletTxs = await this.walletTxRepository.find({
       where: {
-        userWalletId: userId,
+        userWalletId: userWallet.userId,
         txType: 'PLAY',
         status: 'S',
       },
