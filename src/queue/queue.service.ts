@@ -109,13 +109,13 @@ export class QueueService {
     queueName: string,
     jobName: string,
     data: any,
-    // delay: number = 1000, // 1 second
-    delay: number = 0, // default to no delay
+    delay: number = 1000, // 1 second
+    attempts: number = 5,
   ) {
     const queue = this.createQueue(queueName);
     await queue.add(jobName, data, {
       delay,
-      attempts: 5,
+      attempts,
       debounce: { id: jobName }, //can't add 2 jobs with the same id
       backoff: {
         type: 'exponential',
