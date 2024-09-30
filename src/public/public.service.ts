@@ -405,37 +405,18 @@ export class PublicService {
     queryRunner: QueryRunner,
   ) {
     try {
-      // const walletTx = new WalletTx();
-      // walletTx.txType = 'GAME_TRANSACTION';
-      // walletTx.txAmount = amount;
-      // walletTx.txHash = '';
-      // walletTx.status = 'P';
-      // walletTx.userWallet = userWallet;
-      // walletTx.userWalletId = userWallet.id;
-      // walletTx.gameTx = gameTx;
-      // await queryRunner.manager.save(walletTx);
-
-      // gameTx.walletTx = walletTx;
-      // await queryRunner.manager.save(gameTx);
-
-      const senderWallet = new Wallet(
-        this.configService.get('USDT_SENDER_PRIV_KEY'),
-      );
-
       const usdtTx = new UsdtTx();
       usdtTx.amount = amount;
       usdtTx.status = 'P';
       usdtTx.txHash = null;
       usdtTx.retryCount = 0;
       usdtTx.receiverAddress = userWallet.walletAddress;
-      usdtTx.senderAddress = await senderWallet.getAddress();
+      usdtTx.senderAddress = this.configService.get('MINI_GAME_USDT_SENDER');
       usdtTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       usdtTx.gameTx = gameTx;
-      // usdtTx.walletTx = walletTx;
-      // usdtTx.walletTxId = walletTx.id;
-      // walletTx.usdtTx = usdtTx;
       await queryRunner.manager.save(usdtTx);
-      // await queryRunner.manager.save(walletTx);
+      gameTx.usdtTx = usdtTx;
+      await queryRunner.manager.save(gameTx);
     } catch (error) {
       this.logger.error('Public-service: Failed to add GameUSD', error);
       throw new Error(error.message);
@@ -455,19 +436,6 @@ export class PublicService {
           status: 'P',
         },
       });
-
-      // const walletTx = await queryRunner.manager
-      //   .createQueryBuilder(WalletTx, 'walletTx')
-      //   .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-      //   .leftJoinAndSelect('walletTx.usdtTx', 'usdtTx')
-      //   .leftJoinAndSelect('walletTx.gameTx', 'gameTx')
-      //   .where('walletTx.status = :status', { status: 'P' })
-      //   .andWhere('walletTx.txType = :txType', {
-      //     txType: 'GAME_TRANSACTION',
-      //   })
-      //   .getOne();
-
-      // console.log(walletTx);
 
       if (!usdtTx) {
         if (!queryRunner.isReleased) await queryRunner.release();
@@ -578,24 +546,15 @@ export class PublicService {
 
       console.log('publicService: Updating status for gameTx', gameTxn.id);
 
-      if (!gameTxn.creditWalletTx || gameTxn.creditWalletTx.status === 'S') {
-        //If USDT deposited, waits for the deposit to be successful
-        if (gameTxn.walletTx && gameTxn.usdtAmount > 0) {
-          const depositWalletTx = await queryRunner.manager.findOne(WalletTx, {
-            where: {
-              txHash: gameTxn.walletTx.txHash,
-              status: 'S',
-              // txType: 'DEPOSIT',
-            },
-          });
-
-          if (!depositWalletTx) return;
-        }
-
+      if (
+        (!gameTxn.creditWalletTx || gameTxn.creditWalletTx.status === 'S') &&
+        (gameTxn.usdtAmount == 0 ||
+          (gameTxn.walletTx && gameTxn.walletTx.status === 'S'))
+      ) {
         gameTxn.status = 'S';
         await queryRunner.manager.save(gameTxn);
+        await queryRunner.commitTransaction();
       }
-      await queryRunner.commitTransaction();
     } catch (error) {
       this.logger.error('publicService: error in statusUpdater Cron', error);
       await this.adminNotificationService.setAdminNotification(
@@ -671,10 +630,10 @@ export class PublicService {
             isNotified: true,
           });
         } catch (error) {
-          // this.logger.error(
-          //   'error notifing MiniGame Cron',
-          //   error.response.data,
-          // );
+          this.logger.error(
+            'error notifing MiniGame Cron',
+            error.response.data,
+          );
         }
       }
 

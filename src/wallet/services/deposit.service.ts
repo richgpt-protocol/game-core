@@ -28,6 +28,8 @@ import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { Job } from 'bullmq';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
+import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
+import { GameTx } from 'src/public/entity/gameTx.entity';
 
 /**
  * How deposit works
@@ -62,6 +64,7 @@ export class DepositService implements OnModuleInit {
     if (!this.miniGameUSDTSender) {
       throw new Error('MINI_GAME_USDT_SENDER not found in .env');
     }
+    this.miniGameUSDTSender = this.miniGameUSDTSender.toLowerCase();
   }
   onModuleInit() {
     this.queueservice.registerHandler(
@@ -149,7 +152,10 @@ export class DepositService implements OnModuleInit {
       await this.addToEscrowQueue(depositTx.id);
     } catch (error) {
       // queryRunner
-      this.logger.error('processDeposit() error within queryRunner, error:', error);
+      this.logger.error(
+        'processDeposit() error within queryRunner, error:',
+        error,
+      );
       await queryRunner.rollbackTransaction();
 
       await this.adminNotificationService.setAdminNotification(
@@ -165,11 +171,7 @@ export class DepositService implements OnModuleInit {
     }
   }
 
-  private async _processDeposit(
-    payload: DepositDTO,
-    queryRunner: QueryRunner,
-    txType = 'DEPOSIT',
-  ) {
+  private async _processDeposit(payload: DepositDTO, queryRunner: QueryRunner) {
     try {
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
         where: {
@@ -197,14 +199,42 @@ export class DepositService implements OnModuleInit {
         );
       }
 
-      // create walletTx with status pending
       const walletTx = new WalletTx();
-      walletTx.txType = txType;
+      walletTx.usdtTx = null;
+      walletTx.gameTx = null;
+      walletTx.txType = 'DEPOSIT';
       walletTx.txAmount = payload.amount;
       walletTx.txHash = payload.txHash;
       walletTx.status = 'P';
       walletTx.userWalletId = userWallet.id;
       walletTx.userWallet = userWallet;
+
+      if (payload.usdtTxId) {
+        const usdtTx = await queryRunner.manager.findOne(UsdtTx, {
+          where: { id: payload.usdtTxId },
+        });
+
+        const gameTx = await queryRunner.manager.findOne(GameTx, {
+          where: {
+            usdtTx,
+          },
+        });
+        if (!usdtTx) {
+          throw new BadRequestException('USDT Transaction not found');
+        }
+
+        walletTx.gameTx = gameTx;
+        walletTx.usdtTx = usdtTx;
+        walletTx.txType = 'GAME_TRANSACTION';
+
+        await queryRunner.manager.save(walletTx);
+        gameTx.walletTx = walletTx;
+        usdtTx.walletTx = walletTx;
+        usdtTx.walletTxId = walletTx.id;
+        await queryRunner.manager.save(gameTx);
+        await queryRunner.manager.save(usdtTx);
+      }
+
       const walletTxResult = await queryRunner.manager.save(walletTx);
 
       // create depositTx with status pending
