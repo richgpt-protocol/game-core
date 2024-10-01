@@ -182,17 +182,17 @@ export class WithdrawService implements OnModuleInit {
           where: [
             {
               txType: 'REDEEM',
-              userWalletId: userId,
+              userWalletId: userWallet.id,
               status: 'P',
             },
             {
               txType: 'REDEEM',
-              userWalletId: userId,
+              userWalletId: userWallet.id,
               status: 'PD',
             },
             {
               txType: 'REDEEM',
-              userWalletId: userId,
+              userWalletId: userWallet.id,
               status: 'PA',
             },
           ],
@@ -263,7 +263,7 @@ export class WithdrawService implements OnModuleInit {
         WalletTx,
         {
           where: {
-            userWalletId: userId,
+            userWalletId: userWallet.id,
             txType: 'REDEEM',
             status: 'S',
           },

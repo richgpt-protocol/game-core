@@ -267,7 +267,7 @@ export class WalletController {
     @Query('count') count: number,
   ): Promise<ResponseVo<any>> {
     const walletTxs = await this.walletService.getWalletTx(
-      req.user.userId,
+      Number(req.user.userId),
       count,
     );
     return {
@@ -294,8 +294,9 @@ export class WalletController {
     // @HandlerClass() classInfo: IHandlerClass,
     // @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const betWalletTxs = await this.walletService.getTicket(req.user.userId);
-
+    const betWalletTxs = await this.walletService.getTicket(
+      Number(req.user.userId),
+    );
     // final result after code below
     // {
     //   claimableAmount: 200, // total claimable amount
