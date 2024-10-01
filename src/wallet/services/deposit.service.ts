@@ -47,7 +47,6 @@ import { GameTx } from 'src/public/entity/gameTx.entity';
 @Injectable()
 export class DepositService implements OnModuleInit {
   private readonly logger = new Logger(DepositService.name);
-  private readonly miniGameUSDTSender: string;
 
   constructor(
     @InjectRepository(UserWallet)
@@ -59,13 +58,7 @@ export class DepositService implements OnModuleInit {
     private readonly userService: UserService,
     private eventEmitter: EventEmitter2,
     private queueservice: QueueService,
-  ) {
-    this.miniGameUSDTSender = this.configService.get('MINI_GAME_USDT_SENDER');
-    if (!this.miniGameUSDTSender) {
-      throw new Error('MINI_GAME_USDT_SENDER not found in .env');
-    }
-    this.miniGameUSDTSender = this.miniGameUSDTSender.toLowerCase();
-  }
+  ) {}
   onModuleInit() {
     this.queueservice.registerHandler(
       QueueName.DEPOSIT,
@@ -126,9 +119,21 @@ export class DepositService implements OnModuleInit {
           walletAddress: payload.walletAddress,
         },
       });
+      const miniGameUSDTSenderSetting = await queryRunner.manager.findOne(
+        Setting,
+        {
+          where: {
+            key: SettingEnum.MINI_GAME_USDT_SENDER_ADDRESS,
+          },
+        },
+      );
+
+      const miniGameUSDTSender =
+        miniGameUSDTSenderSetting?.value.toLowerCase() || '';
+
       if (
         payload.amount < 1 &&
-        payload.depositerAddress.toLowerCase() !== this.miniGameUSDTSender
+        payload.depositerAddress.toLowerCase() !== miniGameUSDTSender
       ) {
         // deposit amount less than $1, inform admin and do nothing
         await this.adminNotificationService.setAdminNotification(

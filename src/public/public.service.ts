@@ -39,6 +39,8 @@ import { UserStatus } from 'src/shared/enum/status.enum';
 import { UsdtTx } from './entity/usdt-tx.entity';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { MPC } from 'src/shared/mpc';
+import { Setting } from 'src/setting/entities/setting.entity';
+import { SettingEnum } from 'src/shared/enum/setting.enum';
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -405,13 +407,20 @@ export class PublicService {
     queryRunner: QueryRunner,
   ) {
     try {
+      const miniGameUsdtSender = await queryRunner.manager.findOne(Setting, {
+        where: {
+          key: SettingEnum.MINI_GAME_USDT_SENDER_ADDRESS,
+        },
+      });
+      if (!miniGameUsdtSender)
+        throw new Error('Mini Game USDT Sender not found');
       const usdtTx = new UsdtTx();
       usdtTx.amount = amount;
       usdtTx.status = 'P';
       usdtTx.txHash = null;
       usdtTx.retryCount = 0;
       usdtTx.receiverAddress = userWallet.walletAddress;
-      usdtTx.senderAddress = this.configService.get('MINI_GAME_USDT_SENDER');
+      usdtTx.senderAddress = miniGameUsdtSender.value;
       usdtTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       usdtTx.gameTx = gameTx;
       await queryRunner.manager.save(usdtTx);
@@ -465,9 +474,7 @@ export class PublicService {
           this.configService.get(`PROVIDER_RPC_URL_${usdtTx.chainId}`),
         );
         const signer = new Wallet(
-          await MPC.retrievePrivateKey(
-            this.configService.get('MINI_GAME_USDT_SENDER'),
-          ),
+          await MPC.retrievePrivateKey(usdtTx.senderAddress),
           provider,
         );
 
