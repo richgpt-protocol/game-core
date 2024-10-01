@@ -11,7 +11,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
-import { AddCreditDto } from '../dto/credit.dto';
+import { AddCreditBackofficeDto, AddCreditDto } from '../dto/credit.dto';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JsonRpcProvider, parseUnits, Wallet } from 'ethers';
@@ -25,6 +25,9 @@ import { Mutex } from 'async-mutex';
 import { Job } from 'bullmq';
 import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { User } from 'src/user/entities/user.entity';
+import { Setting } from 'src/setting/entities/setting.entity';
+import { SettingEnum } from 'src/shared/enum/setting.enum';
 @Injectable()
 export class CreditService {
   private readonly logger = new Logger(CreditService.name);
@@ -91,6 +94,80 @@ export class CreditService {
     }
   }
 
+  async addCreditBackoffice(
+    payload: AddCreditBackofficeDto,
+    runner?: QueryRunner,
+  ) {
+    if (payload.gameUsdAmount <= 0) {
+      throw new BadRequestException('Invalid game usd amount');
+    }
+
+    const queryRunner = runner ? runner : this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const user = await queryRunner.manager
+        .createQueryBuilder(User, 'user')
+        .leftJoinAndSelect('user.wallet', 'wallet')
+        .where('user.uid = :uid', { uid: payload.uid })
+        .getOne();
+
+      if (!user) throw new BadRequestException('User not found');
+
+      const creditExpirySetting = await queryRunner.manager.findOne(Setting, {
+        where: { key: SettingEnum.CREDIT_EXPIRY_DAYS },
+      });
+
+      const creditExpiryDays = Number(creditExpirySetting?.value) || 90;
+      const today = new Date();
+      const expirationDate = new Date(
+        today.setDate(today.getDate() + creditExpiryDays),
+      );
+
+      const creditTx = new CreditWalletTx();
+      creditTx.amount = payload.gameUsdAmount;
+      creditTx.txType = 'CAMPAIGN';
+      creditTx.status = 'P';
+      creditTx.userWallet = user.wallet;
+      creditTx.walletId = user.wallet.id;
+      creditTx.expirationDate = expirationDate;
+
+      await queryRunner.manager.save(creditTx);
+
+      if (payload.campaignId) {
+        const campaign = await queryRunner.manager.findOne(Campaign, {
+          where: { id: payload.campaignId },
+        });
+        creditTx.campaign = campaign;
+      }
+
+      const gameUsdTx = new GameUsdTx();
+      gameUsdTx.amount = payload.gameUsdAmount;
+      gameUsdTx.status = 'P';
+      gameUsdTx.txHash = null;
+      gameUsdTx.receiverAddress = user.wallet.walletAddress;
+      gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
+      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
+      gameUsdTx.creditWalletTx = creditTx;
+      gameUsdTx.retryCount = 0;
+
+      console.log('gameUsdTx', gameUsdTx);
+
+      await queryRunner.manager.save(gameUsdTx);
+      creditTx.gameUsdTx = [gameUsdTx];
+      await queryRunner.manager.save(creditTx);
+
+      if (!runner) await queryRunner.commitTransaction();
+      return creditTx;
+    } catch (error) {
+      this.logger.error(error);
+      if (!runner) await queryRunner.rollbackTransaction();
+      throw new BadRequestException('Failed to add credit');
+    } finally {
+      if (!runner && !queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
   /// IMPORTANT: this.addToQueue(creditWalletTx.id); SHOULD BE CALLED AFTER THIS METHOD and COMMITING THE TRANSACTION
   async addCreditMiniGame(payload: AddCreditDto, queryRunner: QueryRunner) {
     try {
@@ -139,8 +216,14 @@ export class CreditService {
         }
       }
 
+      const creditExpirySetting = await queryRunner.manager.findOne(Setting, {
+        where: { key: SettingEnum.CREDIT_EXPIRY_DAYS },
+      });
+      const creditExpiryDays = Number(creditExpirySetting?.value) || 90;
       const today = new Date();
-      const expirationDate = new Date(today.setDate(today.getDate() + 90));
+      const expirationDate = new Date(
+        today.setDate(today.getDate() + creditExpiryDays),
+      );
 
       //update or insert credit wallet tx
       const creditWalletTx = new CreditWalletTx();

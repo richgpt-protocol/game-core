@@ -217,12 +217,16 @@
     <div class="content-wrapper">
       <form id="addCreditForm" class="flex-form" method="post" action="/api/v1/wallet/add-credit">
         <div class="input-area">
-          <span>WalletAddress: </span>
-          <input type="text" name="walletAddress" required/>
+          <span>User UID: </span>
+          <input type="text" name="uid" required/>
         </div>
         <div class="input-area">
-          <span>Amount: </span>
-          <input type="number" name="amount" required/>
+          <span>GameUsd Amount: </span>
+          <input type="number" name="gameUsdAmount" required/>
+        </div>
+        <div class="input-area">
+          <span>USDT Amount: </span>
+          <input type="number" name="usdtAmount" required/>
         </div>
         <div class="input-area">
           <span>Campaign: </span>

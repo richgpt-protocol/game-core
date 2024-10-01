@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpStatus,
+  InternalServerErrorException,
   Post,
   Query,
   Req,
@@ -33,7 +34,8 @@ import { DepositService } from './services/deposit.service';
 import { ConfigService } from 'src/config/config.service';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { CreditService } from './services/credit.service';
-import { AddCreditDto } from './dto/credit.dto';
+import { AddCreditBackofficeDto, AddCreditDto } from './dto/credit.dto';
+import { DataSource } from 'typeorm';
 
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
@@ -46,6 +48,7 @@ export class WalletController {
     private depositService: DepositService,
     private configService: ConfigService,
     private creditService: CreditService,
+    private datasource: DataSource,
   ) {}
 
   // TODO: supply free credit to wallet. Here is not a good place for this API.
@@ -557,25 +560,50 @@ export class WalletController {
 
   @SecureEJS(null, UserRole.ADMIN)
   @Post('add-credit')
-  async addCredit(@Body() payload: AddCreditDto): Promise<ResponseVo<any>> {
-    // try {
-    const { campaignId, ...restPayload } = payload;
+  async addCredit(
+    @Body() payload: AddCreditBackofficeDto,
+  ): Promise<ResponseVo<any>> {
+    const queryRunner = this.datasource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
 
-    await this.creditService.addCredit({
-      amount: Number(payload.amount),
-      ...restPayload,
-      campaignId: campaignId || null, // Handle empty campaignId
-    });
+      const { campaignId, ...restPayload } = payload;
 
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'credit add process initiated',
-      data: {},
-    };
-    // } catch (error) {
-    //   console.error(error);
-    //   throw new InternalServerErrorException();
-    // }
+      if (payload.gameUsdAmount > 0) {
+        await this.creditService.addCreditBackoffice(
+          {
+            ...restPayload,
+            usdtAmount: Number(payload.usdtAmount),
+            gameUsdAmount: Number(payload.gameUsdAmount),
+            campaignId: campaignId || null, // Handle empty campaignId
+          },
+          queryRunner,
+        );
+      }
+
+      // if (payload.usdtAmount > 0) {
+      //   await this.walletService.addUSDT(
+      //     payload.uid,
+      //     payload.usdtAmount,
+      //     queryRunner,
+      //   );
+      // }
+
+      await queryRunner.commitTransaction();
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'credit add process initiated',
+        data: {},
+      };
+    } catch (error) {
+      console.error(error);
+      await queryRunner.rollbackTransaction();
+      throw new InternalServerErrorException('Failed to add credit');
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
   }
 
   @Secure(null, UserRole.ADMIN)
