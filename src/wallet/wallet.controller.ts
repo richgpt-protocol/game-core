@@ -267,7 +267,7 @@ export class WalletController {
     @Query('count') count: number,
   ): Promise<ResponseVo<any>> {
     const walletTxs = await this.walletService.getWalletTx(
-      req.user.userId,
+      Number(req.user.userId),
       count,
     );
     return {
