@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -95,7 +100,7 @@ export class GameService implements OnModuleInit {
     );
   }
 
-  // @Cron('0 0 */1 * * *') // every hour
+  @Cron('0 0 */1 * * *') // every hour
   async setBetClose(): Promise<void> {
     console.log('setBetClose()', new Date());
     const queryRunner = this.dataSource.createQueryRunner();
