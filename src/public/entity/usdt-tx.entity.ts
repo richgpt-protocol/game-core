@@ -43,7 +43,6 @@ export class UsdtTx {
     nullable: true,
   })
   walletTxId: number;
-  // TO DO: there is only 1 walletTxId, how come @OneToMany?
   @OneToOne(() => WalletTx, (walletTx) => walletTx.usdtTx)
   walletTx: WalletTx;
 
