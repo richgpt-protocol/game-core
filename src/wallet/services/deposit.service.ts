@@ -28,6 +28,8 @@ import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { Job } from 'bullmq';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
+import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
+import { GameTx } from 'src/public/entity/gameTx.entity';
 
 /**
  * How deposit works
@@ -45,7 +47,6 @@ import { SettingEnum } from 'src/shared/enum/setting.enum';
 @Injectable()
 export class DepositService implements OnModuleInit {
   private readonly logger = new Logger(DepositService.name);
-  private readonly miniGameUSDTSender: string;
 
   constructor(
     @InjectRepository(UserWallet)
@@ -57,12 +58,7 @@ export class DepositService implements OnModuleInit {
     private readonly userService: UserService,
     private eventEmitter: EventEmitter2,
     private queueservice: QueueService,
-  ) {
-    this.miniGameUSDTSender = this.configService.get('MINI_GAME_USDT_SENDER');
-    if (!this.miniGameUSDTSender) {
-      throw new Error('MINI_GAME_USDT_SENDER not found in .env');
-    }
-  }
+  ) {}
   onModuleInit() {
     this.queueservice.registerHandler(
       QueueName.DEPOSIT,
@@ -123,9 +119,21 @@ export class DepositService implements OnModuleInit {
           walletAddress: payload.walletAddress,
         },
       });
+      const miniGameUSDTSenderSetting = await queryRunner.manager.findOne(
+        Setting,
+        {
+          where: {
+            key: SettingEnum.MINI_GAME_USDT_SENDER_ADDRESS,
+          },
+        },
+      );
+
+      const miniGameUSDTSender =
+        miniGameUSDTSenderSetting?.value.toLowerCase() || '';
+
       if (
         payload.amount < 1 &&
-        payload.depositerAddress.toLowerCase() !== this.miniGameUSDTSender
+        payload.depositerAddress.toLowerCase() !== miniGameUSDTSender
       ) {
         // deposit amount less than $1, inform admin and do nothing
         await this.adminNotificationService.setAdminNotification(
@@ -149,7 +157,10 @@ export class DepositService implements OnModuleInit {
       await this.addToEscrowQueue(depositTx.id);
     } catch (error) {
       // queryRunner
-      this.logger.error('processDeposit() error within queryRunner, error:', error);
+      this.logger.error(
+        'processDeposit() error within queryRunner, error:',
+        error,
+      );
       await queryRunner.rollbackTransaction();
 
       await this.adminNotificationService.setAdminNotification(
@@ -165,11 +176,7 @@ export class DepositService implements OnModuleInit {
     }
   }
 
-  private async _processDeposit(
-    payload: DepositDTO,
-    queryRunner: QueryRunner,
-    txType = 'DEPOSIT',
-  ) {
+  private async _processDeposit(payload: DepositDTO, queryRunner: QueryRunner) {
     try {
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
         where: {
@@ -197,14 +204,42 @@ export class DepositService implements OnModuleInit {
         );
       }
 
-      // create walletTx with status pending
       const walletTx = new WalletTx();
-      walletTx.txType = txType;
+      walletTx.usdtTx = null;
+      walletTx.gameTx = null;
+      walletTx.txType = 'DEPOSIT';
       walletTx.txAmount = payload.amount;
       walletTx.txHash = payload.txHash;
       walletTx.status = 'P';
       walletTx.userWalletId = userWallet.id;
       walletTx.userWallet = userWallet;
+
+      if (payload.usdtTxId) {
+        const usdtTx = await queryRunner.manager.findOne(UsdtTx, {
+          where: { id: payload.usdtTxId },
+        });
+
+        const gameTx = await queryRunner.manager.findOne(GameTx, {
+          where: {
+            usdtTx,
+          },
+        });
+        if (!usdtTx) {
+          throw new BadRequestException('USDT Transaction not found');
+        }
+
+        walletTx.gameTx = gameTx;
+        walletTx.usdtTx = usdtTx;
+        walletTx.txType = 'GAME_TRANSACTION';
+
+        await queryRunner.manager.save(walletTx);
+        gameTx.walletTx = walletTx;
+        usdtTx.walletTx = walletTx;
+        usdtTx.walletTxId = walletTx.id;
+        await queryRunner.manager.save(gameTx);
+        await queryRunner.manager.save(usdtTx);
+      }
+
       const walletTxResult = await queryRunner.manager.save(walletTx);
 
       // create depositTx with status pending

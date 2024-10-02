@@ -1,5 +1,6 @@
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { Column, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { GameTx } from './gameTx.entity';
 
 @Entity()
 export class UsdtTx {
@@ -45,4 +46,7 @@ export class UsdtTx {
   // TO DO: there is only 1 walletTxId, how come @OneToMany?
   @OneToOne(() => WalletTx, (walletTx) => walletTx.usdtTx)
   walletTx: WalletTx;
+
+  @OneToOne(() => GameTx, (gameTx) => gameTx.usdtTx)
+  gameTx: GameTx;
 }

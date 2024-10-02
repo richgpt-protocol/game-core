@@ -68,11 +68,15 @@ export class ClaimService {
       return { error: 'Claim is not available yet', data: null };
     }
 
+    const wallet = await this.userWalletRepository.findOne({
+      where: { userId },
+    });
+
     // check if there is any pending claim
     const lastClaimWalletTx = await this.walletTxRepository.findOne({
       where: {
         txType: 'CLAIM',
-        userWalletId: userId,
+        userWalletId: wallet.id,
         status: Not('S'),
       },
     });

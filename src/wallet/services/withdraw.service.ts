@@ -176,25 +176,28 @@ export class WithdrawService implements OnModuleInit {
         };
       }
 
-      const lastPendingRedeemWalletTx = await queryRunner.manager.findOne(WalletTx, {
-        where: [
-          {
-            txType: 'REDEEM',
-            userWalletId: userId,
-            status: 'P',
-          },
-          {
-            txType: 'REDEEM',
-            userWalletId: userId,
-            status: 'PD',
-          },
-          {
-            txType: 'REDEEM',
-            userWalletId: userId,
-            status: 'PA',
-          },
-        ],
-      });
+      const lastPendingRedeemWalletTx = await queryRunner.manager.findOne(
+        WalletTx,
+        {
+          where: [
+            {
+              txType: 'REDEEM',
+              userWalletId: userWallet.id,
+              status: 'P',
+            },
+            {
+              txType: 'REDEEM',
+              userWalletId: userWallet.id,
+              status: 'PD',
+            },
+            {
+              txType: 'REDEEM',
+              userWalletId: userWallet.id,
+              status: 'PA',
+            },
+          ],
+        },
+      );
 
       if (lastPendingRedeemWalletTx) {
         return { error: 'Another Redeem Tx is pending', data: null };
@@ -215,7 +218,7 @@ export class WithdrawService implements OnModuleInit {
         receiverAddress: payload.receiverAddress,
         isPayoutTransferred: false,
         chainId: payload.chainId,
-        fees: Number(setting?.value) || 0,
+        fees: setting ? Number(setting.value) * payload.amount : 0,
         tokenSymbol: payload.tokenSymbol,
         tokenAddress: payload.tokenAddress,
         amount: payload.amount,
@@ -260,7 +263,7 @@ export class WithdrawService implements OnModuleInit {
         WalletTx,
         {
           where: {
-            userWalletId: userId,
+            userWalletId: userWallet.id,
             txType: 'REDEEM',
             status: 'S',
           },
@@ -270,7 +273,8 @@ export class WithdrawService implements OnModuleInit {
       const isFirstRedeem = lastSuccessfulRedeemWalletTx === null;
       const isLastRedeemAfter24Hours =
         lastSuccessfulRedeemWalletTx !== null &&
-        lastSuccessfulRedeemWalletTx.updatedDate < new Date(Date.now() - 24 * 60 * 60 * 1000);
+        lastSuccessfulRedeemWalletTx.updatedDate <
+          new Date(Date.now() - 24 * 60 * 60 * 1000);
 
       if (
         redeemTx.amount < 100 &&
@@ -729,9 +733,10 @@ export class WithdrawService implements OnModuleInit {
         provider,
       );
 
-      const payoutPoolContractAddress = chainId === 56 || chainId === 97
-        ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
-        : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
+      const payoutPoolContractAddress =
+        chainId === 56 || chainId === 97
+          ? process.env.BNB_PAYOUT_POOL_CONTRACT_ADDRESS
+          : process.env.OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS;
 
       const payoutPoolContract = Payout__factory.connect(
         payoutPoolContractAddress,

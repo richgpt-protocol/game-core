@@ -62,19 +62,19 @@ export default class CreateSettings implements Seeder {
         // withdrawal fees
         {
           key: SettingEnum.WITHDRAWAL_FEES_BNB,
-          value: 0.22,
+          value: 0.01,
         },
         {
           key: SettingEnum.WITHDRAWAL_FEES_BNB_TESTNET,
-          value: 0.22,
+          value: 0.01,
         },
         {
           key: SettingEnum.WITHDRAWAL_FEES_OPBNB,
-          value: 0.2,
+          value: 0.01,
         },
         {
           key: SettingEnum.WITHDRAWAL_FEES_OPBNB_TESTNET,
-          value: 0.2,
+          value: 0.01,
         },
         {
           key: SettingEnum.DEPOSIT_NOTIFY_THRESHOLD,
@@ -119,6 +119,10 @@ export default class CreateSettings implements Seeder {
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_10,
           value: 30,
+        },
+        {
+          key: SettingEnum.MINI_GAME_USDT_SENDER_ADDRESS,
+          value: '0x3559318f1F2e53696D98F78cEe5223b127143AA1', //Testnet address. Should be replaced
         },
         {
           key: SettingEnum.CREDIT_EXPIRY_DAYS,
