@@ -204,7 +204,7 @@ export class DepositService implements OnModuleInit {
         );
       }
 
-      const walletTx = new WalletTx();
+      let walletTx = new WalletTx();
       walletTx.usdtTx = null;
       walletTx.gameTx = null;
       walletTx.txType = 'DEPOSIT';
@@ -217,6 +217,7 @@ export class DepositService implements OnModuleInit {
       if (payload.usdtTxId) {
         const usdtTx = await queryRunner.manager.findOne(UsdtTx, {
           where: { id: payload.usdtTxId },
+          relations: ['walletTx'],
         });
 
         const gameTx = await queryRunner.manager.findOne(GameTx, {
@@ -228,16 +229,21 @@ export class DepositService implements OnModuleInit {
           throw new BadRequestException('USDT Transaction not found');
         }
 
-        walletTx.gameTx = gameTx;
-        walletTx.usdtTx = usdtTx;
-        walletTx.txType = 'GAME_TRANSACTION';
+        //Already have a walletTx if the txType is CAMPAIGN
+        if (usdtTx.txType == 'CAMPAIGN') {
+          walletTx = usdtTx.walletTx;
+        } else {
+          walletTx.gameTx = gameTx;
+          walletTx.usdtTx = usdtTx;
+          walletTx.txType = 'GAME_TRANSACTION';
 
-        await queryRunner.manager.save(walletTx);
-        gameTx.walletTx = walletTx;
-        usdtTx.walletTx = walletTx;
-        usdtTx.walletTxId = walletTx.id;
-        await queryRunner.manager.save(gameTx);
-        await queryRunner.manager.save(usdtTx);
+          await queryRunner.manager.save(walletTx);
+          gameTx.walletTx = walletTx;
+          usdtTx.walletTx = walletTx;
+          usdtTx.walletTxId = walletTx.id;
+          await queryRunner.manager.save(gameTx);
+          await queryRunner.manager.save(usdtTx);
+        }
       }
 
       const walletTxResult = await queryRunner.manager.save(walletTx);

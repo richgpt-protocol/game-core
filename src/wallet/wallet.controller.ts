@@ -583,13 +583,13 @@ export class WalletController {
         );
       }
 
-      // if (payload.usdtAmount > 0) {
-      //   await this.walletService.addUSDT(
-      //     payload.uid,
-      //     payload.usdtAmount,
-      //     queryRunner,
-      //   );
-      // }
+      if (payload.usdtAmount > 0) {
+        await this.walletService.addUSDT(
+          payload.uid,
+          payload.usdtAmount,
+          queryRunner,
+        );
+      }
 
       await queryRunner.commitTransaction();
 

@@ -29,6 +29,9 @@ export class UsdtTx {
   txHash: string;
 
   @Column()
+  txType: string;
+
+  @Column()
   senderAddress: string;
 
   @Column()
