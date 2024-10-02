@@ -92,9 +92,13 @@ export class CreditService {
   }
 
   /// IMPORTANT: this.addToQueue(creditWalletTx.id); SHOULD BE CALLED AFTER THIS METHOD and COMMITING THE TRANSACTION
-  async addCreditMiniGame(payload: AddCreditDto, queryRunner: QueryRunner) {
+  async addCreditQueryRunner(
+    payload: AddCreditDto,
+    queryRunner: QueryRunner,
+    isGameTx: boolean = false,
+  ) {
     try {
-      return await this._addCredit(payload, queryRunner, true);
+      return await this._addCredit(payload, queryRunner, isGameTx);
     } catch (error) {
       this.logger.error(error);
       throw new Error(error.message);

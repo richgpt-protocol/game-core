@@ -64,7 +64,7 @@ import { IpWhitelistMiddleware } from './middleware/ip-whitelist.middleware';
     ]),
     PermissionModule,
     SharedModule,
-    UserModule,
+    forwardRef(() => UserModule),
     forwardRef(() => PointModule),
     ConfigModule,
   ],
