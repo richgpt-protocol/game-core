@@ -862,6 +862,11 @@ export class UserService {
       });
 
       if (signupBonusSetting) {
+        this.eventEmitter.emit(
+          'gas.service.reload',
+          await walletAddress,
+          this.configService.get('BASE_CHAIN_ID'),
+        );
         const settingvalue = JSON.parse(signupBonusSetting.value);
         const timeNow = new Date().getTime() / 1000;
         const startDate = new Date(settingvalue.startTime * 1000);
