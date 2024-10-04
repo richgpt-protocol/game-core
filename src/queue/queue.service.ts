@@ -152,6 +152,7 @@ export class QueueService {
         type: 'exponential',
         delay: 5000, // 5 seconds
       },
+      removeOnComplete: true,
     });
 
     this.assignWorkerToQueue(queueName, data);
