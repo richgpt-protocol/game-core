@@ -16,6 +16,9 @@ export class QueueService {
   private queues: Map<string, Queue> = new Map();
   private redisHost: string;
   private redisPort: number;
+  private workers: Map<string, Worker> = new Map(); // Track active workers by queue name
+  private maxWorkers = 10; // Number of workers in the pool
+  private waitingQueue: Array<{ queueName: string; jobData: any }> = []; // Track waiting jobs
 
   constructor(private readonly configService: ConfigService) {
     this.redisHost = this.configService.get('REDIS_HOST');
@@ -43,7 +46,6 @@ export class QueueService {
     } else {
       console.warn(`No handlers found for queue ${job.queueName}`);
     }
-    // }
   }
 
   async registerHandler(
@@ -55,8 +57,6 @@ export class QueueService {
       this.handlers.set(queueName, new Map());
     }
     this.handlers.get(queueName).set(queueType, handlers);
-
-    this.createQueue(queueName);
   }
 
   async process(job: Job): Promise<any> {
@@ -88,15 +88,6 @@ export class QueueService {
       },
     });
     this.queues.set(queueName, queue);
-
-    // Create a worker for the new queue
-    new Worker(queueName, this.process.bind(this), {
-      connection: {
-        host: this.redisHost,
-        port: this.redisPort,
-      },
-    }).on('failed', this.onFailed.bind(this));
-
     return queue;
   }
 
@@ -124,6 +115,110 @@ export class QueueService {
         delay: 5000, // 5 seconds
       },
     });
+
+    this.assignWorkerToQueue(queueName, data);
+  }
+
+  /**
+   * Adds a job to the queue
+   * @param queueName The name of the queue
+   * @param jobName Name/Id of the Job. **Note:** `jobName` should be unique. 2 jobs with the same name will not be added to the queue
+   * @param handlers The handler functions for the job
+   * @param data The data to be processed by the job
+   * @param delay The delay in milliseconds before the job is processed
+   */
+  async addDynamicQueueJob(
+    queueName: string,
+    jobName: string,
+    handlers: QueueHandler,
+    data: any,
+    delay: number = 1000, // 1 second
+    attempts: number = 5,
+  ) {
+    const queue = this.createQueue(queueName);
+
+    // Register the handler
+    if (!this.handlers.has(queueName)) {
+      this.handlers.set(queueName, new Map());
+    }
+    this.handlers.get(queueName).set(data.queueType, handlers);
+
+    // Add the job to the queue
+    await queue.add(jobName, data, {
+      delay,
+      attempts,
+      debounce: { id: jobName }, //can't add 2 jobs with the same id
+      backoff: {
+        type: 'exponential',
+        delay: 5000, // 5 seconds
+      },
+    });
+
+    this.assignWorkerToQueue(queueName, data);
+  }
+
+  // Dynamically assign a worker to process jobs in a specific queue (wallet or fixed)
+  private assignWorkerToQueue(queueName: string, jobData: any) {
+    // If a worker is already assigned to this queue, do nothing
+    if (this.workers.has(queueName)) {
+      return;
+    }
+
+    // If max workers limit is reached, add the job to the waiting queue
+    if (this.workers.size >= this.maxWorkers) {
+      this.logger.warn(
+        `Max worker limit reached, queuing job for: ${queueName}`,
+      );
+      this.waitingQueue.push({ queueName, jobData });
+      return;
+    }
+
+    // Create and assign a worker to this queue
+    const worker = new Worker(queueName, this.process.bind(this), {
+      connection: {
+        host: this.redisHost,
+        port: this.redisPort,
+      },
+    });
+
+    worker.on('failed', this.onFailed.bind(this));
+
+    worker.on('completed', async () => {
+      this.logger.log(`Job completed for queue ${queueName}`);
+      // Optionally remove the worker when the queue is empty
+      await this.removeWorkerIfQueueIsEmpty(queueName);
+      // Check the waiting queue for the next job to assign
+      this.assignNextJobFromWaitingQueue();
+    });
+
+    this.workers.set(queueName, worker);
+    this.logger.log(`Assigned worker to queue: ${queueName}`);
+  }
+
+  // Check if there are any jobs in the waiting queue and assign them if a worker becomes free
+  private assignNextJobFromWaitingQueue() {
+    // Check if there are jobs in the waiting queue and workers are available
+    if (this.waitingQueue.length > 0 && this.workers.size < this.maxWorkers) {
+      const nextJob = this.waitingQueue.shift(); // Get the next job from the waiting queue
+      if (nextJob) {
+        this.assignWorkerToQueue(nextJob.queueName, nextJob.jobData);
+      }
+    }
+  }
+
+  // Remove the worker if the queue is empty
+  private async removeWorkerIfQueueIsEmpty(queueName: string) {
+    const queue = this.queues.get(queueName);
+
+    const jobCounts = await queue.getJobCounts();
+    if (jobCounts.waiting === 0 && jobCounts.active === 0) {
+      const worker = this.workers.get(queueName);
+      worker.close();
+      this.workers.delete(queueName);
+      this.logger.log(
+        `Removed worker for queue: ${queueName} as the queue is empty`,
+      );
+    }
   }
 }
 // @Processor('GenericQueue')
