@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, DataSource, QueryRunner, Not } from 'typeorm';
@@ -201,7 +206,6 @@ export class BetService implements OnModuleInit {
   }
 
   async bet(userId: number, payload: BetDto[]): Promise<any> {
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -748,7 +752,6 @@ export class BetService implements OnModuleInit {
   }
 
   async submitBet(job: Job<SubmitBetJobDTO>): Promise<any> {
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
@@ -883,7 +886,6 @@ export class BetService implements OnModuleInit {
   }
 
   async handleTxSuccess(job: Job<{ gameUsdTxId: number }>) {
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
@@ -1011,7 +1013,6 @@ export class BetService implements OnModuleInit {
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
-
   }
 
   private async handleReferralFlow(
@@ -1109,8 +1110,7 @@ export class BetService implements OnModuleInit {
           userInfo.referralUser.wallet.walletAddress,
           ethers.parseEther(commisionAmount.toString()),
         );
-        
-        
+
       await referralRewardOnchainTx.wait();
 
       const gameUsdTxInsertResult = await queryRunner.manager.insert(
@@ -1161,9 +1161,10 @@ export class BetService implements OnModuleInit {
 
       await this.updateReferrerXpPoints(
         queryRunner,
-        userId,
+        userInfo.referralUserId,
         betAmount,
         referrerWallet,
+        betWalletTxId,
         walletTx,
       );
 
@@ -1183,9 +1184,10 @@ export class BetService implements OnModuleInit {
 
   async updateReferrerXpPoints(
     queryRunner: QueryRunner,
-    user: number,
+    referrer: number,
     betAmount: number,
     referrerWallet: UserWallet,
+    betWalletTxId: number,
     walletTx: WalletTx,
   ) {
     const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
@@ -1198,9 +1200,9 @@ export class BetService implements OnModuleInit {
     });
 
     const referrerXPAmount = await this.pointService.getBetPointsReferrer(
-      user,
+      referrer,
       betAmount,
-      walletTx.id,
+      betWalletTxId,
     );
     referrerWallet.pointBalance =
       Number(referrerWallet.pointBalance) + referrerXPAmount;

@@ -793,7 +793,7 @@ export class DepositService implements OnModuleInit {
       await queryRunner.manager.save(walletTx.userWallet);
 
       await this.handleReferralFlow(
-        walletTx.userWallet.id,
+        walletTx.userWallet.user.id,
         walletTx.txAmount,
         queryRunner,
       );

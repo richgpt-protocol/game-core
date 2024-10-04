@@ -73,7 +73,7 @@ export class PointService {
   }
 
   async getBetPointsReferrer(
-    userId: number,
+    reffererId: number,
     betAmount: number,
     currentBetWalletTxId: number,
   ): Promise<number> {
@@ -97,7 +97,8 @@ export class PointService {
       .createQueryBuilder('betOrder')
       .innerJoin('betOrder.walletTx', 'walletTx')
       .innerJoin('walletTx.userWallet', 'userWallet')
-      .where('userWallet.userId = :userId', { userId })
+      .innerJoin('userWallet.user', 'user')
+      .where('user.referralUserId = :reffererId', { reffererId })
       .andWhere('walletTx.status = :status', { status: 'S' })
       .andWhere('betOrder.createdDate >= :date', {
         date: new Date(
@@ -105,6 +106,9 @@ export class PointService {
           currentDate.getUTCMonth(),
           1,
         ),
+      })
+      .andWhere('walletTx.txType = :txType', {
+        txType: 'PLAY',
       })
       .andWhere('betOrder.walletTxId != :currentBetWalletTxId', {
         currentBetWalletTxId,
