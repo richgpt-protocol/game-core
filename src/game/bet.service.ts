@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, DataSource, QueryRunner, Not } from 'typeorm';
@@ -201,7 +206,6 @@ export class BetService implements OnModuleInit {
   }
 
   async bet(userId: number, payload: BetDto[]): Promise<any> {
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -748,7 +752,6 @@ export class BetService implements OnModuleInit {
   }
 
   async submitBet(job: Job<SubmitBetJobDTO>): Promise<any> {
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
@@ -883,7 +886,6 @@ export class BetService implements OnModuleInit {
   }
 
   async handleTxSuccess(job: Job<{ gameUsdTxId: number }>) {
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
@@ -900,31 +902,11 @@ export class BetService implements OnModuleInit {
         .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
         .getOne();
 
-      const lastValidWalletTx = await queryRunner.manager
-        .createQueryBuilder(WalletTx, 'walletTx')
-        .where('walletTx.userWalletId = :userWalletId', {
-          userWalletId: gameUsdTx.walletTxs[0].userWalletId,
-        })
-        .andWhere('walletTx.status = :status', { status: 'S' })
-        .andWhere('walletTx.id != :id', { id: gameUsdTx.walletTxs[0].id })
-        .orderBy('walletTx.updatedDate', 'DESC')
-        .getOne();
-
-      const lastValidCreditWalletTx = await queryRunner.manager
-        .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
-        .where('creditWalletTx.walletId = :walletId', {
-          walletId: gameUsdTx.walletTxs[0].userWalletId,
-        })
-        .andWhere('creditWalletTx.status = :status', { status: 'S' })
-        .orderBy('creditWalletTx.updatedDate', 'DESC')
-        .getOne();
-
       gameUsdTx.status = 'S';
       gameUsdTx.walletTxs[0].status = 'S';
       gameUsdTx.walletTxs[0].txHash = gameUsdTx.txHash;
-      gameUsdTx.walletTxs[0].startingBalance = lastValidWalletTx
-        ? lastValidWalletTx.endingBalance
-        : 0;
+      gameUsdTx.walletTxs[0].startingBalance =
+        gameUsdTx.walletTxs[0].userWallet.walletBalance;
       gameUsdTx.walletTxs[0].endingBalance =
         gameUsdTx.walletTxs[0].startingBalance - gameUsdTx.amount;
 
@@ -933,8 +915,7 @@ export class BetService implements OnModuleInit {
         .map((bet) => bet.creditWalletTx);
 
       let previousEndingCreditBalance =
-        lastValidCreditWalletTx?.endingBalance || 0;
-
+        gameUsdTx.walletTxs[0].userWallet.creditBalance;
       for (let i = 0; i < creditWalletTxns.length; i++) {
         const creditWalletTx = creditWalletTxns[i];
         creditWalletTx.startingBalance = previousEndingCreditBalance;
@@ -962,17 +943,9 @@ export class BetService implements OnModuleInit {
         gameUsdTx.walletTxs[0].txAmount,
         gameUsdTx.walletTxs[0].id,
       );
-      const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
-        where: {
-          walletId: userWallet.id,
-        },
-        order: {
-          updatedDate: 'DESC',
-        },
-      });
-      const pointTxStartingBalance = lastValidPointTx?.endingBalance || 0;
+      const pointTxStartingBalance = userWallet.pointBalance;
       const pointTxEndingBalance =
-        Number(lastValidPointTx?.endingBalance || 0) + Number(xpPoints);
+        Number(pointTxStartingBalance) + Number(xpPoints);
       const pointTxInsertResult = await queryRunner.manager.insert(PointTx, {
         amount: xpPoints,
         txType: 'BET',
@@ -1011,7 +984,6 @@ export class BetService implements OnModuleInit {
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
-
   }
 
   private async handleReferralFlow(
@@ -1045,18 +1017,6 @@ export class BetService implements OnModuleInit {
       const commisionAmount =
         betAmount * this.referralCommissionByRank(userInfo.referralRank);
 
-      const lastValidWalletTx = await queryRunner.manager
-        .createQueryBuilder(WalletTx, 'walletTx')
-        .where(
-          'walletTx.userWalletId = :userWalletId AND walletTx.status = :status',
-          {
-            userWalletId: referralUserInfo.wallet.id,
-            status: 'S',
-          },
-        )
-        .orderBy('walletTx.id', 'DESC')
-        .getOne();
-
       const walletTxInserted = new WalletTx();
       walletTxInserted.txType = 'REFERRAL';
       walletTxInserted.txAmount = commisionAmount;
@@ -1064,9 +1024,9 @@ export class BetService implements OnModuleInit {
       walletTxInserted.userWalletId = referralUserInfo.wallet.id;
       walletTxInserted.userWallet = referralUserInfo.wallet;
       walletTxInserted.txHash = betTxHash;
-      walletTxInserted.startingBalance = lastValidWalletTx?.endingBalance || 0;
+      walletTxInserted.startingBalance = referralUserInfo.wallet.walletBalance;
       walletTxInserted.endingBalance =
-        Number(lastValidWalletTx?.endingBalance || 0) + commisionAmount;
+        Number(walletTxInserted.startingBalance) + commisionAmount;
 
       await queryRunner.manager.save(walletTxInserted);
 
@@ -1109,8 +1069,7 @@ export class BetService implements OnModuleInit {
           userInfo.referralUser.wallet.walletAddress,
           ethers.parseEther(commisionAmount.toString()),
         );
-        
-        
+
       await referralRewardOnchainTx.wait();
 
       const gameUsdTxInsertResult = await queryRunner.manager.insert(
