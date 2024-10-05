@@ -331,9 +331,9 @@ export class PublicService {
       const pointTx = new PointTx();
       pointTx.amount = xpAmount;
       pointTx.walletId = userWallet.id;
-      pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
+      pointTx.startingBalance = userWallet.pointBalance;
       pointTx.endingBalance =
-        Number(lastValidPointTx?.endingBalance || 0) + Number(xpAmount);
+        Number(pointTx.startingBalance) + Number(xpAmount);
       pointTx.userWallet = userWallet;
       pointTx.txType = txType;
 

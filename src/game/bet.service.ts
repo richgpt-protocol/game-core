@@ -908,31 +908,11 @@ export class BetService implements OnModuleInit {
         .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
         .getOne();
 
-      const lastValidWalletTx = await queryRunner.manager
-        .createQueryBuilder(WalletTx, 'walletTx')
-        .where('walletTx.userWalletId = :userWalletId', {
-          userWalletId: gameUsdTx.walletTxs[0].userWalletId,
-        })
-        .andWhere('walletTx.status = :status', { status: 'S' })
-        .andWhere('walletTx.id != :id', { id: gameUsdTx.walletTxs[0].id })
-        .orderBy('walletTx.updatedDate', 'DESC')
-        .getOne();
-
-      const lastValidCreditWalletTx = await queryRunner.manager
-        .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
-        .where('creditWalletTx.walletId = :walletId', {
-          walletId: gameUsdTx.walletTxs[0].userWalletId,
-        })
-        .andWhere('creditWalletTx.status = :status', { status: 'S' })
-        .orderBy('creditWalletTx.updatedDate', 'DESC')
-        .getOne();
-
       gameUsdTx.status = 'S';
       gameUsdTx.walletTxs[0].status = 'S';
       gameUsdTx.walletTxs[0].txHash = gameUsdTx.txHash;
-      gameUsdTx.walletTxs[0].startingBalance = lastValidWalletTx
-        ? lastValidWalletTx.endingBalance
-        : 0;
+      gameUsdTx.walletTxs[0].startingBalance =
+        gameUsdTx.walletTxs[0].userWallet.walletBalance;
       gameUsdTx.walletTxs[0].endingBalance =
         gameUsdTx.walletTxs[0].startingBalance - gameUsdTx.amount;
 
@@ -941,8 +921,7 @@ export class BetService implements OnModuleInit {
         .map((bet) => bet.creditWalletTx);
 
       let previousEndingCreditBalance =
-        lastValidCreditWalletTx?.endingBalance || 0;
-
+        gameUsdTx.walletTxs[0].userWallet.creditBalance;
       for (let i = 0; i < creditWalletTxns.length; i++) {
         const creditWalletTx = creditWalletTxns[i];
         creditWalletTx.startingBalance = previousEndingCreditBalance;
@@ -970,17 +949,9 @@ export class BetService implements OnModuleInit {
         gameUsdTx.walletTxs[0].txAmount,
         gameUsdTx.walletTxs[0].id,
       );
-      const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
-        where: {
-          walletId: userWallet.id,
-        },
-        order: {
-          updatedDate: 'DESC',
-        },
-      });
-      const pointTxStartingBalance = lastValidPointTx?.endingBalance || 0;
+      const pointTxStartingBalance = userWallet.pointBalance;
       const pointTxEndingBalance =
-        Number(lastValidPointTx?.endingBalance || 0) + Number(xpPoints);
+        Number(pointTxStartingBalance) + Number(xpPoints);
       const pointTxInsertResult = await queryRunner.manager.insert(PointTx, {
         amount: xpPoints,
         txType: 'BET',
@@ -1052,18 +1023,6 @@ export class BetService implements OnModuleInit {
       const commisionAmount =
         betAmount * this.referralCommissionByRank(userInfo.referralRank);
 
-      const lastValidWalletTx = await queryRunner.manager
-        .createQueryBuilder(WalletTx, 'walletTx')
-        .where(
-          'walletTx.userWalletId = :userWalletId AND walletTx.status = :status',
-          {
-            userWalletId: referralUserInfo.wallet.id,
-            status: 'S',
-          },
-        )
-        .orderBy('walletTx.id', 'DESC')
-        .getOne();
-
       const walletTxInserted = new WalletTx();
       walletTxInserted.txType = 'REFERRAL';
       walletTxInserted.txAmount = commisionAmount;
@@ -1071,9 +1030,9 @@ export class BetService implements OnModuleInit {
       walletTxInserted.userWalletId = referralUserInfo.wallet.id;
       walletTxInserted.userWallet = referralUserInfo.wallet;
       walletTxInserted.txHash = betTxHash;
-      walletTxInserted.startingBalance = lastValidWalletTx?.endingBalance || 0;
+      walletTxInserted.startingBalance = referralUserInfo.wallet.walletBalance;
       walletTxInserted.endingBalance =
-        Number(lastValidWalletTx?.endingBalance || 0) + commisionAmount;
+        Number(walletTxInserted.startingBalance) + commisionAmount;
 
       await queryRunner.manager.save(walletTxInserted);
 

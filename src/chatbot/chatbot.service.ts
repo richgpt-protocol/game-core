@@ -301,7 +301,7 @@ Today date: ${new Date().toDateString()}.`;
         amount: 1,
         walletId: userWallet.id,
       });
-      pointTx.startingBalance = Number(lastPointTx.endingBalance);
+      pointTx.startingBalance = Number(userWallet.pointBalance);
       pointTx.endingBalance = Number(pointTx.startingBalance) + 1;
       await this.pointTxRepository.save(pointTx);
 

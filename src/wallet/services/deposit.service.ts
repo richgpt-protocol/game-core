@@ -758,14 +758,10 @@ export class DepositService implements OnModuleInit {
         .getOne();
 
       // update walletTx
-      const previousWalletTx = await this.lastValidWalletTx(
-        walletTx.userWalletId,
-      );
       walletTx.status = 'S';
-      walletTx.startingBalance = previousWalletTx?.endingBalance || 0;
+      walletTx.startingBalance = walletTx.userWallet.walletBalance;
       walletTx.endingBalance =
-        (Number(previousWalletTx?.endingBalance) || 0) +
-        Number(gameUsdTx.amount);
+        (Number(walletTx.startingBalance) || 0) + Number(gameUsdTx.amount);
       await queryRunner.manager.save(walletTx);
 
       // update userWallet walletBalance
@@ -780,7 +776,7 @@ export class DepositService implements OnModuleInit {
       );
       const pointTxAmount =
         pointInfo.xp + (walletTx.txAmount * pointInfo.bonusPerc) / 100;
-      const pointTxStartingBalance = lastValidPointTx?.endingBalance || 0;
+      const pointTxStartingBalance = walletTx.userWallet.pointBalance;
       const pointTxEndingBalance =
         Number(pointTxStartingBalance) + Number(pointTxAmount);
       const pointTx = new PointTx();
@@ -907,18 +903,10 @@ export class DepositService implements OnModuleInit {
       const referrerXp = this.pointService.getReferralDepositXp(
         Number(depositAmount),
       );
-      const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
-        where: {
-          walletId: userInfo.referralUser.wallet.id,
-        },
-        order: {
-          createdDate: 'DESC',
-        },
-      });
       const pointTx = new PointTx();
       pointTx.txType = 'REFERRAL';
       pointTx.amount = referrerXp;
-      pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
+      pointTx.startingBalance = userInfo.referralUser.wallet.pointBalance;
       pointTx.endingBalance =
         Number(pointTx.startingBalance) + Number(pointTx.amount);
       pointTx.walletId = userInfo.referralUser.wallet.id;

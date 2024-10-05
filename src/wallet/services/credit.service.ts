@@ -503,11 +503,9 @@ export class CreditService {
           },
         },
       );
-      creditWalletTx.startingBalance =
-        lastValidCreditWalletTx?.endingBalance || 0;
+      creditWalletTx.startingBalance = userWallet.creditBalance;
       const endingBalance =
-        Number(lastValidCreditWalletTx?.endingBalance || 0) +
-        Number(gameUsdTx.amount);
+        Number(creditWalletTx.startingBalance) + Number(gameUsdTx.amount);
       creditWalletTx.endingBalance = endingBalance;
       userWallet.creditBalance = endingBalance;
 
