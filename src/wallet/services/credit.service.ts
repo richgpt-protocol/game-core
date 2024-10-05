@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { UserWallet } from '../entities/user-wallet.entity';
 import {
   DataSource,
@@ -25,6 +31,7 @@ import { Mutex } from 'async-mutex';
 import { Job } from 'bullmq';
 import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { UserService } from 'src/user/user.service';
 import { User } from 'src/user/entities/user.entity';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
@@ -44,6 +51,8 @@ export class CreditService {
     private readonly reloadTxRepository: Repository<ReloadTx>,
     private readonly configService: ConfigService,
     private readonly adminNotificationService: AdminNotificationService,
+    @Inject(forwardRef(() => UserService))
+    private readonly userService: UserService,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
     private readonly queueService: QueueService,
@@ -178,9 +187,13 @@ export class CreditService {
   }
 
   /// IMPORTANT: this.addToQueue(creditWalletTx.id); SHOULD BE CALLED AFTER THIS METHOD and COMMITING THE TRANSACTION
-  async addCreditMiniGame(payload: AddCreditDto, queryRunner: QueryRunner) {
+  async addCreditQueryRunner(
+    payload: AddCreditDto,
+    queryRunner: QueryRunner,
+    isGameTx: boolean = false,
+  ) {
     try {
-      return await this._addCredit(payload, queryRunner, true);
+      return await this._addCredit(payload, queryRunner, isGameTx);
     } catch (error) {
       this.logger.error(error);
       throw new Error(error.message);
@@ -503,6 +516,18 @@ export class CreditService {
       await queryRunner.manager.save(userWallet);
 
       await queryRunner.commitTransaction();
+
+      if (creditWalletTx.txType == 'CREDIT') {
+        await this.userService.setUserNotification(
+          creditWalletTx.userWallet.userId,
+          {
+            type: 'Credit',
+            title: 'Credit Added Successfully',
+            message: 'Your Credit has been added successfully',
+            walletTxId: creditWalletTx.id,
+          },
+        );
+      }
     } catch (error) {
       this.logger.error(error);
       await queryRunner.rollbackTransaction();

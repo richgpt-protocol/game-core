@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, DataSource, QueryRunner, Not } from 'typeorm';
@@ -201,7 +206,6 @@ export class BetService implements OnModuleInit {
   }
 
   async bet(userId: number, payload: BetDto[]): Promise<any> {
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -691,6 +695,12 @@ export class BetService implements OnModuleInit {
       const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
       const coreContract = Core__factory.connect(coreContractAddr, provider);
 
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        await userSigner.getAddress(),
+        this.configService.get('BASE_CHAIN_ID'),
+      );
+
       let totalAmount = 0;
       const bets = [];
       payload.map((bet) => {
@@ -748,7 +758,6 @@ export class BetService implements OnModuleInit {
   }
 
   async submitBet(job: Job<SubmitBetJobDTO>): Promise<any> {
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
@@ -883,7 +892,6 @@ export class BetService implements OnModuleInit {
   }
 
   async handleTxSuccess(job: Job<{ gameUsdTxId: number }>) {
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
@@ -1011,7 +1019,6 @@ export class BetService implements OnModuleInit {
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
-
   }
 
   private async handleReferralFlow(
@@ -1109,8 +1116,7 @@ export class BetService implements OnModuleInit {
           userInfo.referralUser.wallet.walletAddress,
           ethers.parseEther(commisionAmount.toString()),
         );
-        
-        
+
       await referralRewardOnchainTx.wait();
 
       const gameUsdTxInsertResult = await queryRunner.manager.insert(

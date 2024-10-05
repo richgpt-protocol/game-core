@@ -38,6 +38,7 @@ import { PointModule } from 'src/point/point.module';
 import { ConfigModule } from 'src/config/config.module';
 import { CreditService } from './services/credit.service';
 import { IpWhitelistMiddleware } from './middleware/ip-whitelist.middleware';
+import { UserService } from 'src/user/user.service';
 
 @Module({
   imports: [
@@ -64,7 +65,7 @@ import { IpWhitelistMiddleware } from './middleware/ip-whitelist.middleware';
     ]),
     PermissionModule,
     SharedModule,
-    UserModule,
+    forwardRef(() => UserModule),
     forwardRef(() => PointModule),
     ConfigModule,
   ],
@@ -76,6 +77,7 @@ import { IpWhitelistMiddleware } from './middleware/ip-whitelist.middleware';
     ConfigService,
     DepositService,
     CreditService,
+    UserService,
   ],
   controllers: [WalletController],
   exports: [WalletService, CreditService, ClaimService, DepositService],

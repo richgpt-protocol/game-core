@@ -381,12 +381,13 @@ export class PublicService {
         },
       });
 
-      const creditWalletTx = await this.creditService.addCreditMiniGame(
+      const creditWalletTx = await this.creditService.addCreditQueryRunner(
         {
           amount: creditAmount,
           walletAddress: userWallet.walletAddress,
         },
         queryRunner,
+        true,
       );
 
       gameTx.creditWalletTx = creditWalletTx;

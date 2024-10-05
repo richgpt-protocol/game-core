@@ -1,7 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, Repository } from 'typeorm';
+import {
+  Between,
+  Brackets,
+  DataSource,
+  QueryRunner,
+  Repository,
+} from 'typeorm';
 import {
   GetUsersDto,
   RegisterUserDto,
@@ -35,6 +41,9 @@ import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { Telegraf } from 'telegraf';
 import { ConfigService } from 'src/config/config.service';
 import { Update } from 'telegraf/typings/core/types/typegram';
+import { Setting } from 'src/setting/entities/setting.entity';
+import { CreditService } from 'src/wallet/services/credit.service';
+import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -72,6 +81,7 @@ export class UserService {
     private smsService: SMSService,
     private cacheSettingService: CacheSettingService,
     private configService: ConfigService,
+    private creditService: CreditService,
     private datasource: DataSource,
   ) {
     this.telegramOTPBotUserName = this.configService.get(
@@ -502,6 +512,19 @@ export class UserService {
           { headers: { 'Content-Type': 'application/json' } },
         );
 
+        const creditTx = await this.processSignUpBonus(
+          walletAddress,
+          queryRunner,
+        );
+
+        if (creditTx) {
+          await queryRunner.commitTransaction();
+
+          await this.creditService.addToQueue(creditTx.id);
+
+          return { error: null, data: newUser };
+        }
+
         await queryRunner.commitTransaction();
         return { error: null, data: newUser };
       }
@@ -790,6 +813,19 @@ export class UserService {
           },
           { headers: { 'Content-Type': 'application/json' } },
         );
+
+        const creditTx = await this.processSignUpBonus(
+          userWallet.walletAddress,
+          queryRunner,
+        );
+
+        if (creditTx) {
+          await queryRunner.commitTransaction();
+
+          await this.creditService.addToQueue(creditTx.id);
+
+          return { error: null, data: user };
+        }
       }
 
       await queryRunner.commitTransaction();
@@ -811,6 +847,57 @@ export class UserService {
       return { error: err.message, data: null };
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  private async processSignUpBonus(
+    walletAddress: string,
+    queryRunner: QueryRunner,
+  ): Promise<CreditWalletTx> {
+    try {
+      const signupBonusSetting = await queryRunner.manager.findOne(Setting, {
+        where: {
+          key: SettingEnum.ENABLE_SIGNUP_BONUS,
+        },
+      });
+
+      if (signupBonusSetting) {
+        this.eventEmitter.emit(
+          'gas.service.reload',
+          await walletAddress,
+          this.configService.get('BASE_CHAIN_ID'),
+        );
+        const settingvalue = JSON.parse(signupBonusSetting.value);
+        const timeNow = new Date().getTime() / 1000;
+        const startDate = new Date(settingvalue.startTime * 1000);
+        const endDate = new Date(settingvalue.endTime * 1000);
+        const registrations = await queryRunner.manager.count(User, {
+          where: {
+            createdDate: Between(startDate, endDate),
+            status: 'A',
+          },
+        });
+
+        if (
+          timeNow >= settingvalue.startTime &&
+          timeNow <= settingvalue.endTime &&
+          registrations <= settingvalue.noOfUsers
+        ) {
+          const creditTx = await this.creditService.addCreditQueryRunner(
+            {
+              amount: settingvalue.creditAmount,
+              walletAddress: walletAddress,
+            },
+            queryRunner,
+            false,
+          );
+
+          return creditTx;
+        }
+      }
+    } catch (error) {
+      this.logger.error(error);
+      throw new Error(error.message);
     }
   }
 

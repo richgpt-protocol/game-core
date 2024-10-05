@@ -125,6 +125,15 @@ export default class CreateSettings implements Seeder {
           value: '0x3559318f1F2e53696D98F78cEe5223b127143AA1', //Testnet address. Should be replaced
         },
         {
+          key: SettingEnum.ENABLE_SIGNUP_BONUS,
+          value: JSON.stringify({
+            startTime: 1727807400,
+            endTime: 1733077800,
+            noOfUsers: 1000,
+            creditAmount: 5,
+          }),
+        },
+        {
           key: SettingEnum.CREDIT_EXPIRY_DAYS,
           value: 90,
         },
