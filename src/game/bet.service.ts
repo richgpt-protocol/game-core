@@ -1126,9 +1126,10 @@ export class BetService implements OnModuleInit {
 
       await this.updateReferrerXpPoints(
         queryRunner,
-        userId,
+        userInfo.referralUserId,
         betAmount,
         referrerWallet,
+        betWalletTxId,
         walletTx,
       );
 
@@ -1148,9 +1149,10 @@ export class BetService implements OnModuleInit {
 
   async updateReferrerXpPoints(
     queryRunner: QueryRunner,
-    user: number,
+    referrer: number,
     betAmount: number,
     referrerWallet: UserWallet,
+    betWalletTxId: number,
     walletTx: WalletTx,
   ) {
     const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
@@ -1163,9 +1165,9 @@ export class BetService implements OnModuleInit {
     });
 
     const referrerXPAmount = await this.pointService.getBetPointsReferrer(
-      user,
+      referrer,
       betAmount,
-      walletTx.id,
+      betWalletTxId,
     );
     referrerWallet.pointBalance =
       Number(referrerWallet.pointBalance) + referrerXPAmount;
