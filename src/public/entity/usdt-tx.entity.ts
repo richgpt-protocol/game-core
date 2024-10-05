@@ -29,6 +29,9 @@ export class UsdtTx {
   txHash: string;
 
   @Column()
+  txType: string;
+
+  @Column()
   senderAddress: string;
 
   @Column()
@@ -43,7 +46,6 @@ export class UsdtTx {
     nullable: true,
   })
   walletTxId: number;
-  // TO DO: there is only 1 walletTxId, how come @OneToMany?
   @OneToOne(() => WalletTx, (walletTx) => walletTx.usdtTx)
   walletTx: WalletTx;
 

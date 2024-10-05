@@ -17,21 +17,24 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
-import { AddCreditDto } from '../dto/credit.dto';
+import { AddCreditBackofficeDto, AddCreditDto } from '../dto/credit.dto';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { JsonRpcProvider, parseUnits, Wallet } from 'ethers';
+import { ethers, JsonRpcProvider, parseUnits, Wallet } from 'ethers';
 import { ReloadTx } from '../entities/reload-tx.entity';
 import { ConfigService } from 'src/config/config.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
-import { Deposit__factory } from 'src/contract';
+import { Deposit__factory, GameUSD__factory } from 'src/contract';
 import { MPC } from 'src/shared/mpc';
 import { Mutex } from 'async-mutex';
 import { Job } from 'bullmq';
 import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { UserService } from 'src/user/user.service';
+import { User } from 'src/user/entities/user.entity';
+import { Setting } from 'src/setting/entities/setting.entity';
+import { SettingEnum } from 'src/shared/enum/setting.enum';
 @Injectable()
 export class CreditService {
   private readonly logger = new Logger(CreditService.name);
@@ -68,6 +71,15 @@ export class CreditService {
         failureHandler: this.onFailed.bind(this),
       },
     );
+
+    this.queueService.registerHandler(
+      QueueName.CREDIT,
+      QueueType.REVOKE_CREDIT,
+      {
+        jobHandler: this.processRevokeCredit.bind(this),
+        failureHandler: this.revokeCreditFailed.bind(this),
+      },
+    );
   }
 
   // async getCreditBalance(userId: number): Promise<number> {
@@ -97,6 +109,80 @@ export class CreditService {
       throw new BadRequestException(error.message);
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  async addCreditBackoffice(
+    payload: AddCreditBackofficeDto,
+    runner?: QueryRunner,
+  ) {
+    if (payload.gameUsdAmount <= 0) {
+      throw new BadRequestException('Invalid game usd amount');
+    }
+
+    const queryRunner = runner ? runner : this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const user = await queryRunner.manager
+        .createQueryBuilder(User, 'user')
+        .leftJoinAndSelect('user.wallet', 'wallet')
+        .where('user.uid = :uid', { uid: payload.uid })
+        .getOne();
+
+      if (!user) throw new BadRequestException('User not found');
+
+      const creditExpirySetting = await queryRunner.manager.findOne(Setting, {
+        where: { key: SettingEnum.CREDIT_EXPIRY_DAYS },
+      });
+
+      const creditExpiryDays = Number(creditExpirySetting?.value) || 90;
+      const today = new Date();
+      const expirationDate = new Date(
+        today.setDate(today.getDate() + creditExpiryDays),
+      );
+
+      const creditTx = new CreditWalletTx();
+      creditTx.amount = payload.gameUsdAmount;
+      creditTx.txType = 'CAMPAIGN';
+      creditTx.status = 'P';
+      creditTx.userWallet = user.wallet;
+      creditTx.walletId = user.wallet.id;
+      creditTx.expirationDate = expirationDate;
+
+      await queryRunner.manager.save(creditTx);
+
+      if (payload.campaignId) {
+        const campaign = await queryRunner.manager.findOne(Campaign, {
+          where: { id: payload.campaignId },
+        });
+        creditTx.campaign = campaign;
+      }
+
+      const gameUsdTx = new GameUsdTx();
+      gameUsdTx.amount = payload.gameUsdAmount;
+      gameUsdTx.status = 'P';
+      gameUsdTx.txHash = null;
+      gameUsdTx.receiverAddress = user.wallet.walletAddress;
+      gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
+      gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
+      gameUsdTx.creditWalletTx = creditTx;
+      gameUsdTx.retryCount = 0;
+
+      console.log('gameUsdTx', gameUsdTx);
+
+      await queryRunner.manager.save(gameUsdTx);
+      creditTx.gameUsdTx = [gameUsdTx];
+      await queryRunner.manager.save(creditTx);
+
+      if (!runner) await queryRunner.commitTransaction();
+      return creditTx;
+    } catch (error) {
+      this.logger.error(error);
+      if (!runner) await queryRunner.rollbackTransaction();
+      throw new BadRequestException('Failed to add credit');
+    } finally {
+      if (!runner && !queryRunner.isReleased) await queryRunner.release();
     }
   }
 
@@ -152,8 +238,14 @@ export class CreditService {
         }
       }
 
+      const creditExpirySetting = await queryRunner.manager.findOne(Setting, {
+        where: { key: SettingEnum.CREDIT_EXPIRY_DAYS },
+      });
+      const creditExpiryDays = Number(creditExpirySetting?.value) || 90;
       const today = new Date();
-      const expirationDate = new Date(today.setDate(today.getDate() + 90));
+      const expirationDate = new Date(
+        today.setDate(today.getDate() + creditExpiryDays),
+      );
 
       //update or insert credit wallet tx
       const creditWalletTx = new CreditWalletTx();
@@ -570,7 +662,29 @@ export class CreditService {
             },
           );
 
+          const gameUsdTx = new GameUsdTx();
+          gameUsdTx.amount = diff;
+          gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
+          gameUsdTx.status = 'P';
+          gameUsdTx.txHash = null;
+          gameUsdTx.senderAddress = userWallet.walletAddress;
+          gameUsdTx.receiverAddress = this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS');
+          gameUsdTx.retryCount = 0;
+          gameUsdTx.creditWalletTx = creditWalletTx;
+          await queryRunner.manager.save(gameUsdTx);
+
           await queryRunner.commitTransaction();
+
+          const jobId = `addCredit-${creditWalletTx.id}`;
+          await this.queueService.addJob(
+            QueueName.CREDIT,
+            jobId,
+            {
+              gameUsdTx: gameUsdTx,
+              queueType: QueueType.REVOKE_CREDIT,
+            },
+            3000,
+          );
         }
       }
     } catch (error) {
@@ -655,4 +769,110 @@ export class CreditService {
   //     if (!queryRunner.isReleased) await queryRunner.release();
   //   }
   // }
+
+  async processRevokeCredit(
+    job: Job<{
+      gameUsdTx: GameUsdTx
+    }, any, string>,
+  ): Promise<any> {
+    const { gameUsdTx } = job.data;
+
+    // execute on-chain tx
+    // check approval
+    const user = await this.getSigner(
+      gameUsdTx.chainId,
+      gameUsdTx.senderAddress,
+    );
+    const gameUsdTokenContract = GameUSD__factory.connect(
+      this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
+      user
+    )
+    const depositContractAddress = this.configService.get(
+      'DEPOSIT_CONTRACT_ADDRESS',
+    );
+    const allowance = await gameUsdTokenContract.allowance(
+      gameUsdTx.senderAddress,
+      depositContractAddress
+    )
+    if (allowance === ethers.toBigInt(0)) {
+      const approveTx = await gameUsdTokenContract.approve(
+        depositContractAddress,
+        ethers.MaxUint256
+      )
+      await approveTx.wait()
+    }
+    // execute revoke credit function
+    const depositBot = await this.getSigner(
+      gameUsdTx.chainId,
+      this.GAMEUSD_TRANFER_INITIATOR,
+    );
+    const depositContract = Deposit__factory.connect(
+      depositContractAddress,
+      depositBot,
+    );
+    const txResponse = await depositContract.revokeExpiredCredit(
+      gameUsdTx.senderAddress,
+      parseUnits(gameUsdTx.amount.toString(), 18),
+    );
+    const txReceipt = await txResponse.wait();
+
+    if (txReceipt.status != 1) {
+      // throw error to retry again in next job
+      throw new Error(`Transaction failed, txHash: ${txReceipt.hash}`);
+    }
+
+    // update status in db
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      await queryRunner.manager.update(GameUsdTx, gameUsdTx.id, {
+        status: 'S',
+        txHash: txReceipt.hash,
+      });
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      this.logger.error(error);
+      await queryRunner.rollbackTransaction();
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async revokeCreditFailed(
+    job: Job<{
+      creditWalletTx: CreditWalletTx,
+      gameUsdTx: GameUsdTx
+    }, any, string>,
+  ): Promise<any> {
+    const { gameUsdTx } = job.data;
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      if (job.attemptsMade >= job.opts.attempts) {
+        gameUsdTx.status = 'F';
+        await queryRunner.manager.save(gameUsdTx);
+        await queryRunner.commitTransaction();
+
+        // inform admin
+        await this.adminNotificationService.setAdminNotification(
+          `Failed to process revoke credit wallet on-chain, gameUsdTx id: ${gameUsdTx.id}`,
+          'REVOKE_CREDIT_ONCHAIN_FAILED',
+          'Failed to revoke credit on-chain',
+          false,
+        );
+      } else {
+        gameUsdTx.retryCount++;
+        await queryRunner.manager.save(gameUsdTx);
+        await queryRunner.commitTransaction();
+      }
+    } catch (error) {
+      this.logger.error(error);
+      await queryRunner.rollbackTransaction();
+    } finally {
+      await queryRunner.release();
+    }
+  }
 }

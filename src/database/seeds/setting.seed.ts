@@ -133,6 +133,10 @@ export default class CreateSettings implements Seeder {
             creditAmount: 5,
           }),
         },
+        {
+          key: SettingEnum.CREDIT_EXPIRY_DAYS,
+          value: 90,
+        },
       ])
       .execute();
   }

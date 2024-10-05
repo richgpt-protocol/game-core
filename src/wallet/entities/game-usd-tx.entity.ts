@@ -49,7 +49,6 @@ export class GameUsdTx {
     nullable: true,
   })
   walletTxId: number;
-  // TO DO: there is only 1 walletTxId, how come @OneToMany?
   @OneToMany(() => WalletTx, (walletTx) => walletTx.gameUsdTx)
   walletTxs: WalletTx[];
 

@@ -416,6 +416,7 @@ export class PublicService {
       if (!miniGameUsdtSender)
         throw new Error('Mini Game USDT Sender not found');
       const usdtTx = new UsdtTx();
+      usdtTx.txType = 'GAME_TRANSACTION';
       usdtTx.amount = amount;
       usdtTx.status = 'P';
       usdtTx.txHash = null;
@@ -444,6 +445,7 @@ export class PublicService {
       const usdtTx = await queryRunner.manager.findOne(UsdtTx, {
         where: {
           status: 'P',
+          txType: 'GAME_TRANSACTION',
         },
       });
 
