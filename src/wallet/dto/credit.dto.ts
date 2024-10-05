@@ -11,3 +11,18 @@ export class AddCreditDto {
   @IsOptional()
   campaignId?: number;
 }
+
+export class AddCreditBackofficeDto {
+  @IsNotEmpty()
+  gameUsdAmount: number;
+
+  @IsNotEmpty()
+  usdtAmount: number;
+
+  @IsNotEmpty()
+  @IsString()
+  uid: string;
+
+  @IsOptional()
+  campaignId?: number;
+}

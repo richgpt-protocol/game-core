@@ -124,6 +124,10 @@ export default class CreateSettings implements Seeder {
           key: SettingEnum.MINI_GAME_USDT_SENDER_ADDRESS,
           value: '0x3559318f1F2e53696D98F78cEe5223b127143AA1', //Testnet address. Should be replaced
         },
+        {
+          key: SettingEnum.CREDIT_EXPIRY_DAYS,
+          value: 90,
+        },
       ])
       .execute();
   }

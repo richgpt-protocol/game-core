@@ -1,9 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
+import { DataSource, Not, QueryRunner, Repository } from 'typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
 import { WalletTx } from './entities/wallet-tx.entity';
 import * as dotenv from 'dotenv';
+import { User } from 'src/user/entities/user.entity';
+import { SettingEnum } from 'src/shared/enum/setting.enum';
+import { Setting } from 'src/setting/entities/setting.entity';
+import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
+import { ConfigService } from 'src/config/config.service';
 dotenv.config();
 
 @Injectable()
@@ -14,6 +19,8 @@ export class WalletService {
     private userWalletRepository: Repository<UserWallet>,
     @InjectRepository(WalletTx)
     private walletTxRepository: Repository<WalletTx>,
+    private datasource: DataSource,
+    private configService: ConfigService,
   ) {
     for (let i = 1; i <= 100; i++) {
       const xp = Math.floor(50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i));
@@ -139,5 +146,62 @@ export class WalletService {
       const { id, updatedDate, walletId, ...rest } = pointTx;
       return rest;
     });
+  }
+
+  async addUSDT(uid: string, amount: number, runner?: QueryRunner) {
+    if (amount <= 0) {
+      throw new BadRequestException('Invalid amount');
+    }
+    const queryRunner = runner || this.datasource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      const user = await queryRunner.manager
+        .createQueryBuilder(User, 'user')
+        .leftJoinAndSelect('user.wallet', 'wallet')
+        .where('user.uid = :uid', { uid })
+        .getOne();
+
+      if (!user) {
+        throw new BadRequestException('User not found');
+      }
+
+      const miniGameUsdtSender = await queryRunner.manager.findOne(Setting, {
+        where: {
+          key: SettingEnum.MINI_GAME_USDT_SENDER_ADDRESS,
+        },
+      });
+      if (!miniGameUsdtSender)
+        throw new Error('Mini Game USDT Sender not found');
+
+      const usdtTx = new UsdtTx();
+      usdtTx.amount = amount;
+      usdtTx.status = 'P';
+      usdtTx.txHash = null;
+      usdtTx.retryCount = 0;
+      usdtTx.receiverAddress = user.wallet.walletAddress;
+      usdtTx.senderAddress = miniGameUsdtSender.value;
+      usdtTx.chainId = +this.configService.get('BASE_CHAIN_ID');
+      usdtTx.txType = 'CAMPAIGN';
+      await queryRunner.manager.save(usdtTx);
+
+      const walletTx = new WalletTx();
+      walletTx.txAmount = amount;
+      walletTx.txType = 'CAMPAIGN';
+      walletTx.status = 'P';
+      walletTx.userWalletId = user.wallet.id;
+      walletTx.usdtTx = usdtTx;
+
+      await queryRunner.manager.save(walletTx);
+      usdtTx.walletTxId = walletTx.id;
+      await queryRunner.manager.save(usdtTx);
+      return walletTx;
+    } catch (error) {
+      console.error(error);
+      if (!runner) await queryRunner.rollbackTransaction();
+    } finally {
+      if (!runner && !queryRunner.isReleased) await queryRunner.release();
+    }
   }
 }
