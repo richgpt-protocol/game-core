@@ -5,13 +5,15 @@ import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { User } from 'src/user/entities/user.entity';
 import { DataSource, Repository, IsNull, Like } from 'typeorm';
-import { Cron } from '@nestjs/schedule';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { PointTx } from './entities/point-tx.entity';
 import { WalletService } from 'src/wallet/wallet.service';
 import { UserService } from 'src/user/user.service';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SetReferralPrizeBonusDto } from './points.dto';
+import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
+import { PointSnapshot } from './entities/PointSnapshot.entity';
 
 @Injectable()
 export class PointService {
@@ -464,6 +466,103 @@ export class PointService {
       );
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  async getAllTimeLeaderBoard(limit: number): Promise<PointSnapshot[]> {
+    const leaderboard = await this.getLeaderBoard(
+      new Date(0),
+      new Date(),
+      limit,
+    );
+
+    return leaderboard;
+  }
+
+  async getCurrentWeekLeaderBoard(limit: number): Promise<PointSnapshot[]> {
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    startOfWeek.setHours(0, 0, 0, 0); // Set to the start of the day
+
+    const endOfWeek = new Date(today);
+    endOfWeek.setHours(23, 59, 59, 999); // Set to the end of the day
+    const leaderboard = await this.getLeaderBoard(
+      startOfWeek,
+      endOfWeek,
+      limit,
+    );
+
+    return leaderboard;
+  }
+
+  async getLeaderBoard(
+    startDate: Date,
+    endDate: Date,
+    limit: number,
+  ): Promise<PointSnapshot[]> {
+    const leaderboard = await this.dataSource
+      .createQueryBuilder()
+      .select('leaderboard.walletId', 'walletId')
+      .addSelect('SUM(leaderboard.xp)', 'totalXp')
+      .addSelect('user.uid', 'uid')
+      .from(PointSnapshot, 'leaderboard')
+      .leftJoin('leaderboard.user', 'user')
+      .where('leaderboard.snapshotDate >= :startDate', { startDate })
+      .andWhere('leaderboard.snapshotDate <= :endDate', { endDate })
+      .groupBy('leaderboard.walletId')
+      .addGroupBy('user.uid')
+      .orderBy('totalXp', 'DESC')
+      .limit(limit)
+      .getRawMany();
+
+    return leaderboard;
+  }
+
+  @Cron(CronExpression.EVERY_WEEK)
+  async updateLeaderBoard() {
+    const today = new Date();
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const userWallets = await queryRunner.manager.find(UserWallet, {
+        where: {
+          user: {
+            status: 'A',
+          },
+        },
+        order: {
+          pointBalance: 'DESC',
+        },
+        relations: ['user'],
+      });
+
+      const leaderboard = userWallets.map((userWallet) => {
+        const leaderBoard = new PointSnapshot();
+        leaderBoard.walletId = userWallet.id;
+        leaderBoard.xp = userWallet.pointBalance;
+        leaderBoard.snapshotDate = today;
+        leaderBoard.user = userWallet.user;
+        return leaderBoard;
+      });
+
+      // console.log(leaderboard);
+
+      await queryRunner.manager.save(leaderboard);
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      console.error(error);
+      await queryRunner.rollbackTransaction();
+      await this.adminNotificationService.setAdminNotification(
+        `Leaderboard snapshot cron failed with error ${error}`,
+        'leaderboardSnapshotError',
+        'Leaderboard Snapshot Error',
+        true,
+      );
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 }
