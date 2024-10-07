@@ -42,12 +42,23 @@ import { CreditService } from 'src/wallet/services/credit.service';
 import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { ReferralTxStatus, TxStatus } from 'src/shared/enum/status.enum';
+import { ReferralTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import { PointTxType } from 'src/shared/enum/point-tx.enum';
 
 interface SubmitBetJobDTO {
   walletTxId: number;
   betOrders: number[];
   gameUsdTxId: number;
 }
+
+interface HandleReferralFlowDTO {
+  userId: number;
+  betAmount: number;
+  betTxHash: string;
+  betOrderId: number;
+}
+
 @Injectable()
 export class BetService implements OnModuleInit {
   private readonly logger = new Logger(BetService.name);
@@ -70,20 +81,30 @@ export class BetService implements OnModuleInit {
   ) {}
   onModuleInit() {
     //Tries to submit bet onchain
-    this.queueService.registerHandler(QueueName.BET, QueueType.SUBMIT_BET, {
-      jobHandler: this.submitBet.bind(this),
+    // this.queueService.registerHandler(QueueName.BET, QueueType.SUBMIT_BET, {
+    //   jobHandler: this.submitBet.bind(this),
 
-      //Executed when onchain tx is failed for 5 times continously
-      failureHandler: this.onOnchainTxFailed.bind(this),
-    });
+    //   //Executed when onchain tx is failed for 5 times continously
+    //   failureHandler: this.onOnchainTxFailed.bind(this),
+    // });
 
     //Executed when onchain tx is successful
+    // this.queueService.registerHandler(
+    //   QueueName.BET,
+    //   QueueType.SUBMIT_SUCCESS_PROCESS,
+    //   {
+    //     jobHandler: this.handleTxSuccess.bind(this),
+    //     failureHandler: this.onOnchainTxFailed.bind(this),
+    //   },
+    // );
+
+    // Executed when distributing referral rewards for betting
     this.queueService.registerHandler(
       QueueName.BET,
-      QueueType.SUBMIT_SUCCESS_PROCESS,
+      QueueType.BETTING_REFERRAL_DISTRIBUTION,
       {
-        jobHandler: this.handleTxSuccess.bind(this),
-        failureHandler: this.onOnchainTxFailed.bind(this),
+        jobHandler: this.handleReferralFlow.bind(this),
+        failureHandler: this.onReferralFailed.bind(this),
       },
     );
   }
@@ -218,12 +239,12 @@ export class BetService implements OnModuleInit {
         .getOne();
 
       payload = this._formatBets(payload);
-
       await this.validateBets(payload);
 
+      // Create wallet tx
       const walletTx = new WalletTx();
-      walletTx.txType = 'PLAY';
-      walletTx.status = 'P';
+      walletTx.txType = WalletTxType.PLAY;
+      walletTx.status = TxStatus.PENDING;
       walletTx.userWalletId = userInfo.wallet.id;
       walletTx.userWallet = userInfo.wallet;
       await queryRunner.manager.save(walletTx);
@@ -257,6 +278,7 @@ export class BetService implements OnModuleInit {
         payload,
         betOrders,
       );
+
       await queryRunner.manager.save(creditWalletTxns);
       await queryRunner.manager.save(betOrders);
 
@@ -266,7 +288,7 @@ export class BetService implements OnModuleInit {
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = walletBalanceUsed;
-      gameUsdTx.status = 'P';
+      gameUsdTx.status = TxStatus.PENDING;
       gameUsdTx.walletTxs = [walletTx];
       gameUsdTx.walletTxId = walletTx.id;
       gameUsdTx.senderAddress = userInfo.wallet.walletAddress;
@@ -277,18 +299,21 @@ export class BetService implements OnModuleInit {
       gameUsdTx.retryCount = 0;
       await queryRunner.manager.save(gameUsdTx);
 
-      await queryRunner.commitTransaction();
-
-      // this.eventEmitter.emit(
-      //   'gas.service.reload',
-      //   userInfo.wallet.walletAddress,
-      //   gameUsdTx.chainId,
-      // );
+      // Used for earlier check and top up for next transaction
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        userInfo.wallet.walletAddress,
+        gameUsdTx.chainId,
+      );
 
       const jobId = `placeBet-${gameUsdTx.id}`;
-      await this.queueService.addJob(
-        QueueName.BET,
+      await this.queueService.addDynamicQueueJob(
+        `${QueueName.BET}_${userInfo.wallet.walletAddress}`,
         jobId,
+        {
+          jobHandler: this.submitBet.bind(this),
+          failureHandler: this.onOnchainTxFailed.bind(this),
+        },
         {
           walletTxId: walletTx.id,
           betOrders: betOrders.map((bet) => bet.id),
@@ -297,6 +322,8 @@ export class BetService implements OnModuleInit {
         },
         0, // no delay
       );
+
+      await queryRunner.commitTransaction();
     } catch (error) {
       this.logger.error(`Rolling back Db transaction`);
       this.logger.error(error);
@@ -661,6 +688,7 @@ export class BetService implements OnModuleInit {
               estimatedGasCost + (estimatedGasCost * BigInt(30)) / BigInt(100),
           });
 
+        // TODO: Shouldn't use eventEmitter here
         this.eventEmitter.emit(
           'gas.service.reload',
           await userSigner.getAddress(),
@@ -679,7 +707,6 @@ export class BetService implements OnModuleInit {
         }
       }
     } catch (error) {
-      this.logger.error(error);
       throw new Error('Error in approve');
     }
   }
@@ -729,11 +756,13 @@ export class BetService implements OnModuleInit {
 
       await this._checkAllowanceAndApprove(userSigner, ethers.MaxUint256);
 
+      console.log('start Estimate gas', uid, ticketId, bets);
       const gasLimit = await coreContract
         .connect(userSigner)
         [
           'bet(uint256,uint256,(uint256,uint256,uint256,uint8)[])'
         ].estimateGas(uid, ticketId, bets);
+      console.log('gasLimit', gasLimit.toString());
 
       const tx = await coreContract
         .connect(userSigner)
@@ -742,17 +771,18 @@ export class BetService implements OnModuleInit {
         ](uid, ticketId, bets, {
           gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
         });
+
       await tx.wait();
 
+      // Used for earlier check and top up for next transaction
       this.eventEmitter.emit(
         'gas.service.reload',
         await userSigner.getAddress(),
         Number(tx.chainId),
       );
-
       return tx;
     } catch (error) {
-      this.logger.error(error);
+      console.log(error);
       throw new Error('Error in betWithoutCredit');
     }
   }
@@ -774,8 +804,6 @@ export class BetService implements OnModuleInit {
         .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
         .getOne();
 
-      console.log('Processing gameUsdTx id:', gameUsdTx.id);
-
       const userWallet = await queryRunner.manager
         .createQueryBuilder(UserWallet, 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
@@ -784,11 +812,16 @@ export class BetService implements OnModuleInit {
         })
         .getOne();
 
+      // Check if txHash is already present and no need to submit again
       if (gameUsdTx.txHash) {
         const jobId = `updateBetStatus-${gameUsdTx.id}`;
-        await this.queueService.addJob(
-          QueueName.BET,
+        await this.queueService.addDynamicQueueJob(
+          `${QueueName.BET}_${userWallet.walletAddress}`,
           jobId,
+          {
+            jobHandler: this.handleTxSuccess.bind(this),
+            failureHandler: this.onOnchainTxFailed.bind(this),
+          },
           {
             gameUsdTxId: gameUsdTx.id,
             queueType: QueueType.SUBMIT_SUCCESS_PROCESS,
@@ -808,6 +841,7 @@ export class BetService implements OnModuleInit {
         await MPC.retrievePrivateKey(userWallet.walletAddress),
         provider,
       );
+
       const onchainTx = await this._bet(
         Number(userWallet.user.uid),
         job.data.walletTxId,
@@ -818,7 +852,11 @@ export class BetService implements OnModuleInit {
 
       const txReceipt = await provider.getTransactionReceipt(onchainTx.hash);
       if (txReceipt && txReceipt.status === 1) {
+        // Need to commit transaction immediately if onchain tx is successful
+        // This is the reason why need queue to prevent re-submit onchain again if failed to execute job and retry
+        // Prevent the resubmission when walletTx are being used in other transactions (faced deadlocks)
         gameUsdTx.txHash = onchainTx.hash;
+        gameUsdTx.status = TxStatus.SUCCESS;
         await queryRunner.manager.save(gameUsdTx);
       } else {
         throw new Error('Error in submitBet');
@@ -827,9 +865,13 @@ export class BetService implements OnModuleInit {
       await queryRunner.commitTransaction();
 
       const jobId = `updateBetStatus-${gameUsdTx.id}`;
-      await this.queueService.addJob(
-        QueueName.BET,
+      await this.queueService.addDynamicQueueJob(
+        `${QueueName.BET}_${userWallet.walletAddress}`,
         jobId,
+        {
+          jobHandler: this.handleTxSuccess.bind(this),
+          failureHandler: this.onOnchainTxFailed.bind(this),
+        },
         {
           gameUsdTxId: gameUsdTx.id,
           queueType: QueueType.SUBMIT_SUCCESS_PROCESS,
@@ -865,8 +907,8 @@ export class BetService implements OnModuleInit {
           .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
           .getOne();
 
-        gameUsdTx.status = 'F';
-        gameUsdTx.walletTxs[0].status = 'F';
+        gameUsdTx.status = TxStatus.FAILED;
+        gameUsdTx.walletTxs[0].status = TxStatus.FAILED;
         const creditTxnIds = gameUsdTx.walletTxs[0].betOrders
           .filter((bet) => bet.creditWalletTx)
           .map((bet) => bet.creditWalletTx.id);
@@ -875,10 +917,11 @@ export class BetService implements OnModuleInit {
           await queryRunner.manager
             .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
             .update()
-            .set({ status: 'F' })
+            .set({ status: TxStatus.FAILED })
             .where('id IN (:...creditTxnIds)', { creditTxnIds })
             .execute();
         }
+
         await queryRunner.manager.save(gameUsdTx);
         await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
 
@@ -908,20 +951,22 @@ export class BetService implements OnModuleInit {
         .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
         .getOne();
 
-      gameUsdTx.status = 'S';
-      gameUsdTx.walletTxs[0].status = 'S';
+      gameUsdTx.walletTxs[0].status = TxStatus.SUCCESS;
       gameUsdTx.walletTxs[0].txHash = gameUsdTx.txHash;
-      gameUsdTx.walletTxs[0].startingBalance =
-        gameUsdTx.walletTxs[0].userWallet.walletBalance;
+      gameUsdTx.walletTxs[0].startingBalance = gameUsdTx.walletTxs[0].userWallet
+        .walletBalance
+        ? gameUsdTx.walletTxs[0].userWallet.walletBalance
+        : 0;
       gameUsdTx.walletTxs[0].endingBalance =
-        gameUsdTx.walletTxs[0].startingBalance - gameUsdTx.amount;
+        gameUsdTx.walletTxs[0].userWallet.walletBalance - gameUsdTx.amount;
 
       const creditWalletTxns = gameUsdTx.walletTxs[0].betOrders
         .filter((bet) => bet.creditWalletTx)
         .map((bet) => bet.creditWalletTx);
 
       let previousEndingCreditBalance =
-        gameUsdTx.walletTxs[0].userWallet.creditBalance;
+        gameUsdTx.walletTxs[0].userWallet.creditBalance || 0;
+
       for (let i = 0; i < creditWalletTxns.length; i++) {
         const creditWalletTx = creditWalletTxns[i];
         creditWalletTx.startingBalance = previousEndingCreditBalance;
@@ -931,7 +976,7 @@ export class BetService implements OnModuleInit {
           : creditWalletTx.amount;
         creditWalletTx.endingBalance = endBalance;
 
-        creditWalletTx.status = 'S';
+        creditWalletTx.status = TxStatus.SUCCESS;
         await queryRunner.manager.save(creditWalletTx);
 
         previousEndingCreditBalance = endBalance;
@@ -944,36 +989,44 @@ export class BetService implements OnModuleInit {
 
       ///////////////Update Points/////////////////////
       const user = userWallet.user;
+
+      // TODO: Using query runner cannot use repository at the same time
       const xpPoints = await this.pointService.getBetPoints(
         user.id,
         gameUsdTx.walletTxs[0].txAmount,
         gameUsdTx.walletTxs[0].id,
       );
-      const pointTxStartingBalance = userWallet.pointBalance;
+
+      const pointTxStartingBalance = userWallet.pointBalance || 0;
       const pointTxEndingBalance =
-        Number(pointTxStartingBalance) + Number(xpPoints);
-      const pointTxInsertResult = await queryRunner.manager.insert(PointTx, {
+        Number(userWallet.pointBalance || 0) + Number(xpPoints);
+      await queryRunner.manager.insert(PointTx, {
         amount: xpPoints,
-        txType: 'BET',
+        txType: PointTxType.BET,
         walletId: userWallet.id,
         userWallet: userWallet,
         walletTx: gameUsdTx.walletTxs[0],
         startingBalance: pointTxStartingBalance,
         endingBalance: pointTxEndingBalance,
       });
+
       userWallet.pointBalance = pointTxEndingBalance;
       await queryRunner.manager.save(userWallet);
       await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
 
-      await this.handleReferralFlow(
-        user.id,
-        gameUsdTx.walletTxs[0].txAmount,
-        gameUsdTx.txHash,
-        gameUsdTx.walletTxs[0].id,
-        queryRunner,
-      );
       await queryRunner.commitTransaction();
 
+      const betOrder = gameUsdTx.walletTxs[0].betOrders[0];
+      const jobId = `handleBetReferral-${gameUsdTx.id}`;
+      await this.queueService.addJob(QueueName.BET, jobId, {
+        userId: user.id,
+        betAmount: gameUsdTx.walletTxs[0].txAmount,
+        betTxHash: gameUsdTx.txHash,
+        betOrderId: betOrder.id,
+        queueType: QueueType.BETTING_REFERRAL_DISTRIBUTION,
+      });
+
+      // TODO: Shouldn't use gameUsdTx (comes from queryRunner)
       await this.userService.setUserNotification(
         gameUsdTx.walletTxs[0].userWallet.userId,
         {
@@ -992,16 +1045,12 @@ export class BetService implements OnModuleInit {
     }
   }
 
-  private async handleReferralFlow(
-    userId: number,
-    betAmount: number,
-    betTxHash: string,
-    betWalletTxId: number,
-    queryRunner?: QueryRunner,
-  ) {
-    // const queryRunner = this.dataSource.createQueryRunner();
+  async handleReferralFlow(job: Job<HandleReferralFlowDTO>) {
+    const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+
+    const { userId, betAmount, betTxHash, betOrderId } = job.data;
 
     try {
       const userInfo = await queryRunner.manager
@@ -1020,27 +1069,22 @@ export class BetService implements OnModuleInit {
         relations: ['wallet'],
       });
 
-      const commisionAmount =
-        betAmount * this.referralCommissionByRank(userInfo.referralRank);
+      const commissionAmount =
+        betAmount *
+        this.referralCommissionByRank(userInfo.referralUser.referralRank);
 
       const walletTxInserted = new WalletTx();
-      walletTxInserted.txType = 'REFERRAL';
-      walletTxInserted.txAmount = commisionAmount;
-      walletTxInserted.status = 'S';
+      walletTxInserted.txType = WalletTxType.REFERRAL;
+      walletTxInserted.txAmount = commissionAmount;
+      walletTxInserted.status = TxStatus.PENDING;
       walletTxInserted.userWalletId = referralUserInfo.wallet.id;
       walletTxInserted.userWallet = referralUserInfo.wallet;
-      walletTxInserted.txHash = betTxHash;
-      walletTxInserted.startingBalance = referralUserInfo.wallet.walletBalance;
+      walletTxInserted.startingBalance =
+        referralUserInfo.wallet.walletBalance || 0;
       walletTxInserted.endingBalance =
-        Number(walletTxInserted.startingBalance) + commisionAmount;
+        Number(referralUserInfo.wallet.walletBalance || 0) + commissionAmount;
 
       await queryRunner.manager.save(walletTxInserted);
-
-      // const walletTx = await queryRunner.manager.findOne(WalletTx, {
-      //   where: {
-      //     id: walletTxInsertResult.identifiers[0].id,
-      //   },
-      // });
 
       const walletTx = await queryRunner.manager
         .createQueryBuilder(WalletTx, 'walletTx')
@@ -1051,8 +1095,8 @@ export class BetService implements OnModuleInit {
         .getOne();
 
       // Returns false if the user doesn't have enough balance and reload is pending
-      const hasBalance = await this.checkNativeBalance(
-        walletTx.userWallet,
+      await this.checkNativeBalance(
+        referralUserInfo.wallet,
         +this.configService.get('BASE_CHAIN_ID'),
       );
 
@@ -1073,45 +1117,39 @@ export class BetService implements OnModuleInit {
       const referralRewardOnchainTx =
         await depositContract.distributeReferralFee(
           userInfo.referralUser.wallet.walletAddress,
-          ethers.parseEther(commisionAmount.toString()),
+          ethers.parseEther(commissionAmount.toString()),
         );
 
       await referralRewardOnchainTx.wait();
 
-      const gameUsdTxInsertResult = await queryRunner.manager.insert(
-        GameUsdTx,
-        {
-          amount: commisionAmount,
-          status: 'S',
-          retryCount: 0,
-          chainId: +this.configService.get('BASE_CHAIN_ID'),
-          senderAddress: this.configService.get(
-            'GAMEUSD_POOL_CONTRACT_ADDRESS',
-          ),
-          receiverAddress: userInfo.referralUser.wallet.walletAddress,
-          walletTxs: [walletTx],
-          walletTxId: walletTx.id,
-          txHash: referralRewardOnchainTx.hash, //betTxHash,
-        },
-      );
-
-      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
-        where: {
-          id: gameUsdTxInsertResult.identifiers[0].id,
-        },
+      await queryRunner.manager.update(WalletTx, walletTx.id, {
+        txHash: referralRewardOnchainTx.hash,
+        status: TxStatus.SUCCESS,
       });
 
-      const referrelTxInsertResult = await queryRunner.manager.insert(
-        ReferralTx,
-        {
-          rewardAmount: gameUsdTx.amount,
-          referralType: 'BET',
-          walletTx: walletTx,
-          userId: userInfo.id,
-          status: 'S',
-          referralUserId: userInfo.referralUserId, //one who receives the referral amount
+      await queryRunner.manager.insert(GameUsdTx, {
+        amount: commissionAmount,
+        status: TxStatus.SUCCESS,
+        retryCount: 0,
+        chainId: +this.configService.get('BASE_CHAIN_ID'),
+        senderAddress: this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
+        receiverAddress: userInfo.referralUser.wallet.walletAddress,
+        walletTxs: [walletTx],
+        walletTxId: walletTx.id,
+        txHash: referralRewardOnchainTx.hash, //betTxHash,
+      });
+
+      await queryRunner.manager.insert(ReferralTx, {
+        rewardAmount: commissionAmount,
+        referralType: ReferralTxType.BET,
+        walletTx: walletTx,
+        userId: userInfo.id,
+        status: ReferralTxStatus.SUCCESS,
+        referralUserId: userInfo.referralUserId, //one who receives the referral amount
+        betOrder: {
+          id: betOrderId,
         },
-      );
+      });
 
       //Update Referrer
       const referrerWallet = await queryRunner.manager.findOne(UserWallet, {
@@ -1121,30 +1159,225 @@ export class BetService implements OnModuleInit {
       });
 
       referrerWallet.walletBalance = walletTx.endingBalance;
-      // referrerWallet.redeemableBalance =
-      // Number(referrerWallet.redeemableBalance) + Number(gameUsdTx.amount); //commision amount
 
       await this.updateReferrerXpPoints(
         queryRunner,
-        userInfo.referralUserId,
+        userId,
         betAmount,
         referrerWallet,
-        betWalletTxId,
         walletTx,
       );
 
       await queryRunner.manager.save(referrerWallet);
-
       await queryRunner.commitTransaction();
     } catch (error) {
       this.logger.error('Error in referral tx', error);
       await queryRunner.rollbackTransaction();
 
       throw new Error('BET: Error processing Referral');
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
-    // } finally {
-    //   if (!queryRunner.isReleased) await queryRunner.release();
-    // }
+  }
+
+  async onReferralFailed(job: Job<HandleReferralFlowDTO>, error: Error) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    const { userId, betAmount, betTxHash, betOrderId } = job.data;
+
+    try {
+      const userInfo = await queryRunner.manager
+        .createQueryBuilder(User, 'user')
+        .leftJoinAndSelect('user.referralUser', 'referralUser')
+        .leftJoinAndSelect('referralUser.wallet', 'wallet')
+        .where('user.id = :id', { id: userId })
+        .getOne();
+
+      if (!userInfo || userInfo.referralUserId == null) return;
+
+      // Check if the referral tx already exists
+      const exist = await queryRunner.manager.findOne(WalletTx, {
+        where: {
+          txHash: betTxHash,
+          userWalletId: userInfo.referralUser.wallet.id,
+        },
+      });
+      if (exist) return;
+
+      const referralUserInfo = await queryRunner.manager.findOne(User, {
+        where: {
+          id: userInfo.referralUserId,
+        },
+        relations: ['wallet'],
+      });
+
+      const commissionAmount =
+        betAmount * this.referralCommissionByRank(userInfo.referralRank);
+
+      const lastValidWalletTx = await queryRunner.manager
+        .createQueryBuilder(WalletTx, 'walletTx')
+        .where(
+          'walletTx.userWalletId = :userWalletId AND walletTx.status = :status',
+          {
+            userWalletId: referralUserInfo.wallet.id,
+            status: 'S',
+          },
+        )
+        .orderBy('walletTx.id', 'DESC')
+        .getOne();
+
+      const walletTxInserted = new WalletTx();
+      walletTxInserted.txType = WalletTxType.REFERRAL;
+      walletTxInserted.txAmount = commissionAmount;
+      walletTxInserted.status = TxStatus.FAILED;
+      walletTxInserted.userWalletId = referralUserInfo.wallet.id;
+      walletTxInserted.userWallet = referralUserInfo.wallet;
+      walletTxInserted.txHash = betTxHash;
+      walletTxInserted.startingBalance = referralUserInfo.wallet.walletBalance;
+      walletTxInserted.endingBalance =
+        Number(lastValidWalletTx?.endingBalance || 0) + commissionAmount;
+
+      await queryRunner.manager.save(walletTxInserted);
+
+      const walletTx = await queryRunner.manager
+        .createQueryBuilder(WalletTx, 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .where('walletTx.id = :id', {
+          id: walletTxInserted.id,
+        })
+        .getOne();
+
+      await queryRunner.manager.insert(ReferralTx, {
+        rewardAmount: commissionAmount,
+        referralType: ReferralTxType.BET,
+        walletTx: walletTx,
+        userId: userInfo.id,
+        status: ReferralTxStatus.FAILED,
+        referralUserId: userInfo.referralUserId, //one who receives the referral amount
+        betOrder: {
+          id: betOrderId,
+        },
+      });
+
+      // TODO: Implement this after we added status column to point_tx
+      // await this.updateReferrerXpPoints(
+      //   queryRunner,
+      //   userId,
+      //   betAmount,
+      //   referralUserInfo.wallet,
+      //   walletTx,
+      // );
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      this.logger.error('Error in [onReferralFailed]', error);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  async restartHandleReferralFlow(walletTxId: number) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const walletTx = await queryRunner.manager.findOne(WalletTx, {
+        where: {
+          id: walletTxId,
+        },
+        relations: ['userWallet'],
+      });
+
+      if (!walletTx) return;
+
+      walletTx.status = TxStatus.SUCCESS;
+      await queryRunner.manager.save(walletTx);
+
+      // Returns false if the user doesn't have enough balance and reload is pending
+      await this.checkNativeBalance(
+        walletTx.userWallet,
+        +this.configService.get('BASE_CHAIN_ID'),
+      );
+
+      const depositContract = Deposit__factory.connect(
+        this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
+        new Wallet(
+          await MPC.retrievePrivateKey(
+            this.configService.get('DEPOSIT_BOT_ADDRESS'),
+          ),
+          new JsonRpcProvider(
+            this.configService.get(
+              'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
+            ),
+          ),
+        ),
+      );
+
+      // Round off to max 2 decimal places
+      const amount = Math.floor(Number(walletTx.txAmount) * 100) / 100;
+      const referralRewardOnchainTx =
+        await depositContract.distributeReferralFee(
+          walletTx.userWallet.walletAddress,
+          ethers.parseEther(amount.toString()),
+        );
+
+
+      await referralRewardOnchainTx.wait();
+
+      // Create gameUsdTx record
+      await queryRunner.manager.insert(GameUsdTx, {
+        amount,
+        status: 'S',
+        retryCount: 0,
+        chainId: +this.configService.get('BASE_CHAIN_ID'),
+        senderAddress: this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
+        receiverAddress: walletTx.userWallet.walletAddress,
+        walletTxs: [walletTx],
+        walletTxId: walletTx.id,
+        txHash: referralRewardOnchainTx.hash, //betTxHash,
+      });
+
+      // Update referral tx to success
+      const referralTx = await queryRunner.manager.findOne(ReferralTx, {
+        where: {
+          walletTx: {
+            id: walletTx.id,
+          },
+        },
+        relations: ['betOrder'],
+      });
+
+      referralTx.status = ReferralTxStatus.SUCCESS;
+      await queryRunner.manager.save(referralTx);
+
+      // Update referrer wallet balance
+      const referrerWallet = await queryRunner.manager.findOne(UserWallet, {
+        where: {
+          id: walletTx.userWalletId,
+        },
+      });
+
+      referrerWallet.walletBalance = walletTx.endingBalance;
+
+      // Update referrer xp points
+      await this.updateReferrerXpPoints(
+        queryRunner,
+        referralTx.userId,
+        Number(referralTx.betOrder.bigForecastAmount) +
+          Number(referralTx.betOrder.smallForecastAmount),
+        referrerWallet,
+        walletTx,
+      );
+      await queryRunner.manager.save(referrerWallet);
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      this.logger.error('Error in [restartHandleReferralFlow]', error);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
   }
 
   async updateReferrerXpPoints(
@@ -1152,7 +1385,6 @@ export class BetService implements OnModuleInit {
     referrer: number,
     betAmount: number,
     referrerWallet: UserWallet,
-    betWalletTxId: number,
     walletTx: WalletTx,
   ) {
     const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
@@ -1164,10 +1396,11 @@ export class BetService implements OnModuleInit {
       },
     });
 
+    // TODO: Shouldn't mix repository with query runner
     const referrerXPAmount = await this.pointService.getBetPointsReferrer(
       referrer,
       betAmount,
-      betWalletTxId,
+      walletTx.id,
     );
     referrerWallet.pointBalance =
       Number(referrerWallet.pointBalance) + referrerXPAmount;
