@@ -77,7 +77,7 @@ import { UserService } from 'src/user/user.service';
     ConfigService,
     DepositService,
     CreditService,
-    UserService,
+    // UserService,
   ],
   controllers: [WalletController],
   exports: [WalletService, CreditService, ClaimService, DepositService],
