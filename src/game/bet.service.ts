@@ -722,6 +722,12 @@ export class BetService implements OnModuleInit {
       const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
       const coreContract = Core__factory.connect(coreContractAddr, provider);
 
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        await userSigner.getAddress(),
+        this.configService.get('BASE_CHAIN_ID'),
+      );
+
       let totalAmount = 0;
       const bets = [];
       payload.map((bet) => {
@@ -1208,8 +1214,7 @@ export class BetService implements OnModuleInit {
       });
 
       const commissionAmount =
-        betAmount *
-        this.referralCommissionByRank(userInfo.referralUser.referralRank);
+        betAmount * this.referralCommissionByRank(userInfo.referralRank);
 
       const lastValidWalletTx = await queryRunner.manager
         .createQueryBuilder(WalletTx, 'walletTx')
@@ -1230,7 +1235,7 @@ export class BetService implements OnModuleInit {
       walletTxInserted.userWalletId = referralUserInfo.wallet.id;
       walletTxInserted.userWallet = referralUserInfo.wallet;
       walletTxInserted.txHash = betTxHash;
-      walletTxInserted.startingBalance = lastValidWalletTx?.endingBalance || 0;
+      walletTxInserted.startingBalance = referralUserInfo.wallet.walletBalance;
       walletTxInserted.endingBalance =
         Number(lastValidWalletTx?.endingBalance || 0) + commissionAmount;
 
@@ -1319,6 +1324,7 @@ export class BetService implements OnModuleInit {
           ethers.parseEther(amount.toString()),
         );
 
+
       await referralRewardOnchainTx.wait();
 
       // Create gameUsdTx record
@@ -1376,7 +1382,7 @@ export class BetService implements OnModuleInit {
 
   async updateReferrerXpPoints(
     queryRunner: QueryRunner,
-    user: number,
+    referrer: number,
     betAmount: number,
     referrerWallet: UserWallet,
     walletTx: WalletTx,
@@ -1392,7 +1398,7 @@ export class BetService implements OnModuleInit {
 
     // TODO: Shouldn't mix repository with query runner
     const referrerXPAmount = await this.pointService.getBetPointsReferrer(
-      user,
+      referrer,
       betAmount,
       walletTx.id,
     );

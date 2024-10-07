@@ -10,7 +10,10 @@ export default class CreateSettings implements Seeder {
    */
   track = false;
 
-  public async run(dataSource: DataSource, factoryManager: SeederFactoryManager): Promise<void> {
+  public async run(
+    dataSource: DataSource,
+    factoryManager: SeederFactoryManager,
+  ): Promise<void> {
     await dataSource
       .createQueryBuilder()
       .insert()
@@ -59,19 +62,19 @@ export default class CreateSettings implements Seeder {
         // withdrawal fees
         {
           key: SettingEnum.WITHDRAWAL_FEES_BNB,
-          value: 0.22,
+          value: 0.01,
         },
         {
           key: SettingEnum.WITHDRAWAL_FEES_BNB_TESTNET,
-          value: 0.22,
+          value: 0.01,
         },
         {
           key: SettingEnum.WITHDRAWAL_FEES_OPBNB,
-          value: 0.2,
+          value: 0.01,
         },
         {
           key: SettingEnum.WITHDRAWAL_FEES_OPBNB_TESTNET,
-          value: 0.2,
+          value: 0.01,
         },
         {
           key: SettingEnum.DEPOSIT_NOTIFY_THRESHOLD,
@@ -107,7 +110,7 @@ export default class CreateSettings implements Seeder {
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_8,
-          value:24,
+          value: 24,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_9,
@@ -116,6 +119,23 @@ export default class CreateSettings implements Seeder {
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_10,
           value: 30,
+        },
+        {
+          key: SettingEnum.MINI_GAME_USDT_SENDER_ADDRESS,
+          value: '0x3559318f1F2e53696D98F78cEe5223b127143AA1', //Testnet address. Should be replaced
+        },
+        {
+          key: SettingEnum.ENABLE_SIGNUP_BONUS,
+          value: JSON.stringify({
+            startTime: 1727807400,
+            endTime: 1733077800,
+            noOfUsers: 1000,
+            creditAmount: 5,
+          }),
+        },
+        {
+          key: SettingEnum.CREDIT_EXPIRY_DAYS,
+          value: 90,
         },
       ])
       .execute();

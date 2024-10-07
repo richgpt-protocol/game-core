@@ -36,8 +36,10 @@ export interface DepositInterface extends Interface {
       | "payoutPool"
       | "proxiableUUID"
       | "renounceOwnership"
+      | "revokeExpiredCredit"
       | "setDepositAdmin"
       | "setGameUSDPoolContract"
+      | "setPayoutPoolContract"
       | "transferOwnership"
       | "upgradeToAndCall"
       | "withdraw"
@@ -47,9 +49,11 @@ export interface DepositInterface extends Interface {
     nameOrSignatureOrTopic:
       | "Deposit"
       | "DepositAdminSet"
+      | "ExpiredCreditRevoked"
       | "GameUSDPoolContractSet"
       | "Initialized"
       | "OwnershipTransferred"
+      | "PayoutPoolContractSet"
       | "ReferralFeeDistributed"
       | "Upgraded"
       | "Withdraw"
@@ -93,11 +97,19 @@ export interface DepositInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "revokeExpiredCredit",
+    values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "setDepositAdmin",
     values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "setGameUSDPoolContract",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setPayoutPoolContract",
     values: [AddressLike]
   ): string;
   encodeFunctionData(
@@ -142,11 +154,19 @@ export interface DepositInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "revokeExpiredCredit",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "setDepositAdmin",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "setGameUSDPoolContract",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "setPayoutPoolContract",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -185,6 +205,19 @@ export namespace DepositAdminSetEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace ExpiredCreditRevokedEvent {
+  export type InputTuple = [user: AddressLike, amount: BigNumberish];
+  export type OutputTuple = [user: string, amount: bigint];
+  export interface OutputObject {
+    user: string;
+    amount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace GameUSDPoolContractSetEvent {
   export type InputTuple = [gameUSDPool: AddressLike];
   export type OutputTuple = [gameUSDPool: string];
@@ -215,6 +248,18 @@ export namespace OwnershipTransferredEvent {
   export interface OutputObject {
     previousOwner: string;
     newOwner: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace PayoutPoolContractSetEvent {
+  export type InputTuple = [payoutPool: AddressLike];
+  export type OutputTuple = [payoutPool: string];
+  export interface OutputObject {
+    payoutPool: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -347,6 +392,12 @@ export interface Deposit extends BaseContract {
 
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
+  revokeExpiredCredit: TypedContractMethod<
+    [recipient: AddressLike, amount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
   setDepositAdmin: TypedContractMethod<
     [_depositAdmin: AddressLike],
     [void],
@@ -355,6 +406,12 @@ export interface Deposit extends BaseContract {
 
   setGameUSDPoolContract: TypedContractMethod<
     [_gameUSDPool: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  setPayoutPoolContract: TypedContractMethod<
+    [_payoutPool: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -424,11 +481,21 @@ export interface Deposit extends BaseContract {
     nameOrSignature: "renounceOwnership"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "revokeExpiredCredit"
+  ): TypedContractMethod<
+    [recipient: AddressLike, amount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "setDepositAdmin"
   ): TypedContractMethod<[_depositAdmin: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setGameUSDPoolContract"
   ): TypedContractMethod<[_gameUSDPool: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setPayoutPoolContract"
+  ): TypedContractMethod<[_payoutPool: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
@@ -462,6 +529,13 @@ export interface Deposit extends BaseContract {
     DepositAdminSetEvent.OutputObject
   >;
   getEvent(
+    key: "ExpiredCreditRevoked"
+  ): TypedContractEvent<
+    ExpiredCreditRevokedEvent.InputTuple,
+    ExpiredCreditRevokedEvent.OutputTuple,
+    ExpiredCreditRevokedEvent.OutputObject
+  >;
+  getEvent(
     key: "GameUSDPoolContractSet"
   ): TypedContractEvent<
     GameUSDPoolContractSetEvent.InputTuple,
@@ -481,6 +555,13 @@ export interface Deposit extends BaseContract {
     OwnershipTransferredEvent.InputTuple,
     OwnershipTransferredEvent.OutputTuple,
     OwnershipTransferredEvent.OutputObject
+  >;
+  getEvent(
+    key: "PayoutPoolContractSet"
+  ): TypedContractEvent<
+    PayoutPoolContractSetEvent.InputTuple,
+    PayoutPoolContractSetEvent.OutputTuple,
+    PayoutPoolContractSetEvent.OutputObject
   >;
   getEvent(
     key: "ReferralFeeDistributed"
@@ -527,6 +608,17 @@ export interface Deposit extends BaseContract {
       DepositAdminSetEvent.OutputObject
     >;
 
+    "ExpiredCreditRevoked(address,uint256)": TypedContractEvent<
+      ExpiredCreditRevokedEvent.InputTuple,
+      ExpiredCreditRevokedEvent.OutputTuple,
+      ExpiredCreditRevokedEvent.OutputObject
+    >;
+    ExpiredCreditRevoked: TypedContractEvent<
+      ExpiredCreditRevokedEvent.InputTuple,
+      ExpiredCreditRevokedEvent.OutputTuple,
+      ExpiredCreditRevokedEvent.OutputObject
+    >;
+
     "GameUSDPoolContractSet(address)": TypedContractEvent<
       GameUSDPoolContractSetEvent.InputTuple,
       GameUSDPoolContractSetEvent.OutputTuple,
@@ -558,6 +650,17 @@ export interface Deposit extends BaseContract {
       OwnershipTransferredEvent.InputTuple,
       OwnershipTransferredEvent.OutputTuple,
       OwnershipTransferredEvent.OutputObject
+    >;
+
+    "PayoutPoolContractSet(address)": TypedContractEvent<
+      PayoutPoolContractSetEvent.InputTuple,
+      PayoutPoolContractSetEvent.OutputTuple,
+      PayoutPoolContractSetEvent.OutputObject
+    >;
+    PayoutPoolContractSet: TypedContractEvent<
+      PayoutPoolContractSetEvent.InputTuple,
+      PayoutPoolContractSetEvent.OutputTuple,
+      PayoutPoolContractSetEvent.OutputObject
     >;
 
     "ReferralFeeDistributed(address,uint256)": TypedContractEvent<

@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -475,9 +480,7 @@ export class GameService implements OnModuleInit {
       walletTx.txType = 'REFERRAL';
       walletTx.txAmount = bonusAmount;
       walletTx.status = 'S';
-      walletTx.startingBalance = lastValidWalletTx
-        ? lastValidWalletTx.endingBalance
-        : 0;
+      walletTx.startingBalance = referralUser.wallet.walletBalance;
       walletTx.endingBalance =
         Number(walletTx.startingBalance) + Number(bonusAmount);
       walletTx.userWalletId = referralUser.wallet.id;
@@ -485,9 +488,7 @@ export class GameService implements OnModuleInit {
 
       const chainId = this.configService.get('BASE_CHAIN_ID');
       const provider = new ethers.JsonRpcProvider(
-        this.configService.get(
-          'PROVIDER_RPC_URL_' + chainId,
-        ),
+        this.configService.get('PROVIDER_RPC_URL_' + chainId),
       );
       const signer = new ethers.Wallet(
         await MPC.retrievePrivateKey(
@@ -704,7 +705,9 @@ export class GameService implements OnModuleInit {
         betOrder,
         drawResult,
       );
-      allObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
+      allObj[walletAddress] +=
+        winningAmount.bigForecastWinAmount +
+        winningAmount.smallForecastWinAmount;
     }
     let total = [];
     for (const walletAddress in allObj) {
@@ -733,17 +736,19 @@ export class GameService implements OnModuleInit {
         if (!dailyObj.hasOwnProperty(walletAddress))
           dailyObj[walletAddress] = 0;
         const drawResult = await this.drawResultRepository
-        .createQueryBuilder('drawResult')
-        .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
-        .andWhere('drawResult.numberPair = :numberPair', {
-          numberPair: betOrder.numberPair,
-        })
-        .getOne();
+          .createQueryBuilder('drawResult')
+          .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+          .andWhere('drawResult.numberPair = :numberPair', {
+            numberPair: betOrder.numberPair,
+          })
+          .getOne();
         const winningAmount = this.claimService.calculateWinningAmount(
           betOrder,
           drawResult,
         );
-        dailyObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
+        dailyObj[walletAddress] +=
+          winningAmount.bigForecastWinAmount +
+          winningAmount.smallForecastWinAmount;
       }
     }
     let daily = [];
@@ -781,7 +786,9 @@ export class GameService implements OnModuleInit {
           betOrder,
           drawResult,
         );
-        weeklyObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
+        weeklyObj[walletAddress] +=
+          winningAmount.bigForecastWinAmount +
+          winningAmount.smallForecastWinAmount;
       }
     }
     let weekly = [];
@@ -819,7 +826,9 @@ export class GameService implements OnModuleInit {
           betOrder,
           drawResult,
         );
-        monthlyObj[walletAddress] += winningAmount.bigForecastWinAmount + winningAmount.smallForecastWinAmount;
+        monthlyObj[walletAddress] +=
+          winningAmount.bigForecastWinAmount +
+          winningAmount.smallForecastWinAmount;
       }
     }
     let monthly = [];

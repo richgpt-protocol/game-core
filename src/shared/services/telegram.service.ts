@@ -88,7 +88,9 @@ export class TelegramService {
           existing.status != UserStatus.UNVERIFIED &&
           existing.status != UserStatus.PENDING
         ) {
-          return await ctx.reply('Please Contact Admin');
+          return await ctx.reply(
+            'Please Contact Admin. Telegram already registered',
+          );
         }
 
         user.tgId = id;

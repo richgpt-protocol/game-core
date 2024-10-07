@@ -218,7 +218,7 @@ export class WithdrawService implements OnModuleInit {
         receiverAddress: payload.receiverAddress,
         isPayoutTransferred: false,
         chainId: payload.chainId,
-        fees: Number(setting?.value) || 0,
+        fees: setting ? Number(setting.value) * payload.amount : 0,
         tokenSymbol: payload.tokenSymbol,
         tokenAddress: payload.tokenAddress,
         amount: payload.amount,
@@ -553,9 +553,11 @@ export class WithdrawService implements OnModuleInit {
         redeemTx.isPayoutTransferred = true;
         redeemTx.payoutStatus = 'S';
         redeemTx.walletTx.status = 'S';
-        redeemTx.walletTx.startingBalance = lastWalletTx?.endingBalance || 0;
+        redeemTx.walletTx.startingBalance =
+          redeemTx.walletTx.userWallet.walletBalance;
         redeemTx.walletTx.endingBalance =
-          lastWalletTx?.endingBalance - redeemTx.walletTx.txAmount;
+          redeemTx.walletTx.userWallet.walletBalance -
+          redeemTx.walletTx.txAmount;
         redeemTx.walletTx.userWallet.walletBalance =
           redeemTx.walletTx.endingBalance;
 

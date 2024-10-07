@@ -272,18 +272,11 @@ export class ClaimService {
       }
 
       // fetch endingBalance of last pointTx and create new pointTx
-      const latestPointTx = await this.pointTxRepository.findOne({
-        where: { walletId: userWallet.id },
-        order: { id: 'DESC' },
-      });
-      const lastEndingBalance = latestPointTx
-        ? Number(latestPointTx.endingBalance)
-        : 0;
       const pointTx = this.pointTxRepository.create({
         txType: 'CLAIM',
         amount: totalPointAmount,
-        startingBalance: lastEndingBalance,
-        endingBalance: lastEndingBalance + totalPointAmount,
+        startingBalance: userWallet.pointBalance,
+        endingBalance: userWallet.pointBalance + totalPointAmount,
         walletId: userWallet.id,
         userWallet,
         walletTxId: walletTx.id,
@@ -401,20 +394,15 @@ export class ClaimService {
         await queryRunner.manager.save(gameUsdTx);
 
         // update walletTx
-        const latestWalletTx = await this.walletTxRepository.findOne({
-          where: { userWalletId: payload.userId, status: 'S' },
-          order: { id: 'DESC' },
+        const userWallet = await this.userWalletRepository.findOneBy({
+          id: walletTx.userWalletId,
         });
-        walletTx.startingBalance = latestWalletTx.endingBalance;
+        walletTx.startingBalance = userWallet.walletBalance;
         walletTx.endingBalance =
           Number(walletTx.startingBalance) + Number(walletTx.txAmount);
         walletTx.status = 'S';
         await queryRunner.manager.save(walletTx);
 
-        // update userWallet
-        const userWallet = await this.userWalletRepository.findOneBy({
-          id: walletTx.userWalletId,
-        });
         userWallet.walletBalance =
           Number(userWallet.walletBalance) + Number(walletTx.txAmount);
         // userWallet.redeemableBalance =

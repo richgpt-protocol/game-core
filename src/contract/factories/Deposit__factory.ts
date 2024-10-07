@@ -147,6 +147,24 @@ const _abi = [
   },
   {
     type: "function",
+    name: "revokeExpiredCredit",
+    inputs: [
+      {
+        name: "recipient",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "setDepositAdmin",
     inputs: [
       {
@@ -164,6 +182,19 @@ const _abi = [
     inputs: [
       {
         name: "_gameUSDPool",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setPayoutPoolContract",
+    inputs: [
+      {
+        name: "_payoutPool",
         type: "address",
         internalType: "address",
       },
@@ -259,6 +290,25 @@ const _abi = [
   },
   {
     type: "event",
+    name: "ExpiredCreditRevoked",
+    inputs: [
+      {
+        name: "user",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "GameUSDPoolContractSet",
     inputs: [
       {
@@ -295,6 +345,19 @@ const _abi = [
       },
       {
         name: "newOwner",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "PayoutPoolContractSet",
+    inputs: [
+      {
+        name: "payoutPool",
         type: "address",
         indexed: true,
         internalType: "address",
