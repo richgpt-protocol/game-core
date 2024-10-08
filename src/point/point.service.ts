@@ -469,7 +469,7 @@ export class PointService {
     }
   }
 
-  async getAllTimeLeaderBoard(limit: number): Promise<PointSnapshot[]> {
+  async getAllTimeLeaderBoard(limit: number) {
     const leaderboard = await this.getLeaderBoard(
       new Date(0),
       new Date(),
@@ -479,7 +479,7 @@ export class PointService {
     return leaderboard;
   }
 
-  async getCurrentWeekLeaderBoard(limit: number): Promise<PointSnapshot[]> {
+  async getCurrentWeekLeaderBoard(limit: number) {
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay());
@@ -496,18 +496,17 @@ export class PointService {
     return leaderboard;
   }
 
-  async getLeaderBoard(
-    startDate: Date,
-    endDate: Date,
-    limit: number,
-  ): Promise<PointSnapshot[]> {
+  async getLeaderBoard(startDate: Date, endDate: Date, limit: number) {
     const leaderboard = await this.dataSource
       .createQueryBuilder()
       .select('leaderboard.walletId', 'walletId')
       .addSelect('SUM(leaderboard.xp)', 'totalXp')
       .addSelect('user.uid', 'uid')
+      .addSelect('MAX(wallet.pointBalance)', 'pointBalance') // Using MAX as workaround for group by issue
+      // .addSelect('wallet.pointBalance', 'pointBalance')
       .from(PointSnapshot, 'leaderboard')
       .leftJoin('leaderboard.user', 'user')
+      .leftJoin('user.wallet', 'wallet', 'wallet.id = leaderboard.walletId')
       .where('leaderboard.snapshotDate >= :startDate', { startDate })
       .andWhere('leaderboard.snapshotDate <= :endDate', { endDate })
       .groupBy('leaderboard.walletId')
@@ -516,7 +515,18 @@ export class PointService {
       .limit(limit)
       .getRawMany();
 
-    return leaderboard;
+    // console.log(leaderboard);
+
+    const result = leaderboard.map((item) => {
+      return {
+        uid: item.uid,
+        pointBalance: item.pointBalance,
+        totalXp: item.totalXp,
+        level: this.walletService.calculateLevel(item.pointBalance),
+      };
+    });
+
+    return result;
   }
 
   @Cron(CronExpression.EVERY_WEEK)
