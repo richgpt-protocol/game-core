@@ -1449,6 +1449,7 @@ export class BetService implements OnModuleInit {
   ) {
     // TODO: Shouldn't mix repository with query runner
     const referrerXPAmount = await this.pointService.getBetPointsReferrer(
+      referrerWallet.user.id,
       betAmount,
       gameUsdTx.id,
     );
