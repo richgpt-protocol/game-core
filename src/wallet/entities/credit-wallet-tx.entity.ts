@@ -55,6 +55,7 @@ export class CreditWalletTx {
   status: string;
 
   @Column({
+    type: 'timestamp',
     nullable: true,
   })
   expirationDate: Date;
