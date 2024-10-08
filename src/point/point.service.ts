@@ -4,7 +4,7 @@ import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { User } from 'src/user/entities/user.entity';
-import { DataSource, Repository, IsNull, Like } from 'typeorm';
+import { DataSource, Repository, IsNull, Like, Brackets } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { PointTx } from './entities/point-tx.entity';
@@ -12,6 +12,7 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { UserService } from 'src/user/user.service';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SetReferralPrizeBonusDto } from './points.dto';
+import { TxStatus } from 'src/shared/enum/status.enum';
 
 @Injectable()
 export class PointService {
@@ -73,9 +74,9 @@ export class PointService {
   }
 
   async getBetPointsReferrer(
-    reffererId: number,
+    userId: number,
     betAmount: number,
-    currentBetWalletTxId: number,
+    currentGameUsdTxId: number,
   ): Promise<number> {
     const baseBetPointsPerUSD = 200;
     const pointPer10s = 2_000;
@@ -95,11 +96,29 @@ export class PointService {
     const currentDate = new Date();
     const pastBets = await this.betOrderRepository
       .createQueryBuilder('betOrder')
-      .innerJoin('betOrder.walletTx', 'walletTx')
-      .innerJoin('walletTx.userWallet', 'userWallet')
-      .innerJoin('userWallet.user', 'user')
-      .where('user.referralUserId = :reffererId', { reffererId })
-      .andWhere('walletTx.status = :status', { status: 'S' })
+      .innerJoin('betOrder.gameUsdTx', 'gameUsdTx')
+      .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTx')
+      .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'walletUserWallet')
+      .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+      .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
+      .leftJoinAndSelect('walletUserWallet.user', 'walletUser')
+      .where('gameUsdTx.status = :status', { status: TxStatus.SUCCESS })
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('creditUser.id = :userId', { userId }).orWhere(
+            'walletUser.id = :userId',
+            { userId },
+          );
+        }),
+      )
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('creditUser.id IS NOT NULL').orWhere(
+            'walletUser.id IS NOT NULL',
+          );
+        }),
+      )
       .andWhere('betOrder.createdDate >= :date', {
         date: new Date(
           currentDate.getUTCFullYear(),
@@ -107,17 +126,16 @@ export class PointService {
           1,
         ),
       })
-      .andWhere('walletTx.txType = :txType', {
-        txType: 'PLAY',
-      })
-      .andWhere('betOrder.walletTxId != :currentBetWalletTxId', {
-        currentBetWalletTxId,
+      .andWhere('betOrder.gameUsdTx != :currentGameUsdTxId', {
+        currentGameUsdTxId,
       })
       .getMany();
 
     const currentBetOrders = await this.betOrderRepository.find({
       where: {
-        walletTxId: currentBetWalletTxId,
+        gameUsdTx: {
+          id: currentGameUsdTxId,
+        },
       },
     });
 
@@ -177,11 +195,7 @@ export class PointService {
     return betPoints;
   }
 
-  async getBetPoints(
-    userId: number,
-    betAmount: number,
-    currentBetWalletTxId: number,
-  ): Promise<number> {
+  async getBetPoints(betAmount: number, gameUsdTxId: number): Promise<number> {
     const baseBetPointsPerUSD = 1000;
     const pointPer10s = 10_000;
     const pointPer100s = 100_000;
@@ -200,10 +214,8 @@ export class PointService {
     const currentDate = new Date();
     const pastBets = await this.betOrderRepository
       .createQueryBuilder('betOrder')
-      .innerJoin('betOrder.walletTx', 'walletTx')
-      .innerJoin('walletTx.userWallet', 'userWallet')
-      .where('userWallet.userId = :userId', { userId })
-      .andWhere('walletTx.status = :status', { status: 'S' })
+      .innerJoin('betOrder.gameUsdTx', 'gameUsdTx')
+      .andWhere('gameUsdTx.status = :status', { status: TxStatus.SUCCESS })
       .andWhere('betOrder.createdDate >= :date', {
         date: new Date(
           currentDate.getUTCFullYear(),
@@ -211,14 +223,16 @@ export class PointService {
           1,
         ),
       })
-      .andWhere('betOrder.walletTxId != :currentBetWalletTxId', {
-        currentBetWalletTxId,
+      .andWhere('gameUsdTxId != :gameUsdTxId', {
+        gameUsdTxId,
       })
       .getMany();
 
     const currentBets = await this.betOrderRepository.find({
       where: {
-        walletTxId: currentBetWalletTxId,
+        gameUsdTx: {
+          id: gameUsdTxId,
+        },
       },
     });
 

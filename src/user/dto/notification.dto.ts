@@ -1,10 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsNumber,
-} from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsNumber } from 'class-validator';
 export class NotificationDto {
   @IsString()
   @IsOptional()
@@ -20,5 +14,9 @@ export class NotificationDto {
 
   @IsNumber()
   @IsOptional()
-  walletTxId: number | null;
+  walletTxId?: number | null;
+
+  @IsNumber()
+  @IsOptional()
+  gameUsdTxId?: number | null;
 }

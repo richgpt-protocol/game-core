@@ -23,7 +23,7 @@ import { UserRole } from 'src/shared/enum/role.enum';
 import { PastResultDto } from './dto/pastResult.dto';
 import { BetDto } from './dto/Bet.dto';
 import { BetService } from './bet.service';
-import { RestartReferralDistribution } from './dto/restart.dto';
+import { RestartBetDto, RestartReferralDistribution } from './dto/restart.dto';
 
 @ApiTags('Game')
 @Controller('api/v1/game')
@@ -193,10 +193,13 @@ export class GameController {
   })
   async restartBet(
     @Request() req,
-    @Body() payload: { gameUsdId: number },
+    @Body() payload: RestartBetDto,
   ): Promise<ResponseVo<any>> {
     try {
-      const data = await this.betService.restartBet(payload.gameUsdId);
+      const data = await this.betService.restartBet(
+        payload.gameUsdTxId,
+        payload.userId,
+      );
       return {
         statusCode: HttpStatus.OK,
         data,
@@ -257,6 +260,7 @@ export class GameController {
     try {
       const data = await this.betService.restartHandleReferralFlow(
         payload.walletTxId,
+        payload.gameUsdTxId,
       );
       return {
         statusCode: HttpStatus.OK,
