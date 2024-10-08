@@ -331,9 +331,9 @@ export class PublicService {
       const pointTx = new PointTx();
       pointTx.amount = xpAmount;
       pointTx.walletId = userWallet.id;
-      pointTx.startingBalance = lastValidPointTx?.endingBalance || 0;
+      pointTx.startingBalance = userWallet.pointBalance;
       pointTx.endingBalance =
-        Number(lastValidPointTx?.endingBalance || 0) + Number(xpAmount);
+        Number(pointTx.startingBalance) + Number(xpAmount);
       pointTx.userWallet = userWallet;
       pointTx.txType = txType;
 
@@ -381,12 +381,13 @@ export class PublicService {
         },
       });
 
-      const creditWalletTx = await this.creditService.addCreditMiniGame(
+      const creditWalletTx = await this.creditService.addCreditQueryRunner(
         {
           amount: creditAmount,
           walletAddress: userWallet.walletAddress,
         },
         queryRunner,
+        true,
       );
 
       gameTx.creditWalletTx = creditWalletTx;
@@ -415,6 +416,7 @@ export class PublicService {
       if (!miniGameUsdtSender)
         throw new Error('Mini Game USDT Sender not found');
       const usdtTx = new UsdtTx();
+      usdtTx.txType = 'GAME_TRANSACTION';
       usdtTx.amount = amount;
       usdtTx.status = 'P';
       usdtTx.txHash = null;
@@ -443,6 +445,7 @@ export class PublicService {
       const usdtTx = await queryRunner.manager.findOne(UsdtTx, {
         where: {
           status: 'P',
+          txType: 'GAME_TRANSACTION',
         },
       });
 

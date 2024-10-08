@@ -140,6 +140,24 @@
   },
   {
     "type": "function",
+    "name": "revokeExpiredCredit",
+    "inputs": [
+      {
+        "name": "recipient",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setDepositAdmin",
     "inputs": [
       {
@@ -157,6 +175,19 @@
     "inputs": [
       {
         "name": "_gameUSDPool",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setPayoutPoolContract",
+    "inputs": [
+      {
+        "name": "_payoutPool",
         "type": "address",
         "internalType": "address"
       }
@@ -252,6 +283,25 @@
   },
   {
     "type": "event",
+    "name": "ExpiredCreditRevoked",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "GameUSDPoolContractSet",
     "inputs": [
       {
@@ -288,6 +338,19 @@
       },
       {
         "name": "newOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PayoutPoolContractSet",
+    "inputs": [
+      {
+        "name": "payoutPool",
         "type": "address",
         "indexed": true,
         "internalType": "address"

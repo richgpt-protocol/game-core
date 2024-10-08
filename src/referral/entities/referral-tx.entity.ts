@@ -1,6 +1,6 @@
-import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { User } from 'src/user/entities/user.entity';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
+import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import {
   Column,
@@ -39,7 +39,8 @@ export class ReferralTx {
 
   @Column({
     nullable: true,
-    comment: 'S - success, P - pending, PD - Pending Developer, F - failed, only used for SET_REFERRAL',
+    comment:
+      'S - success, P - pending, PD - Pending Developer, F - failed, only used for SET_REFERRAL',
   })
   status: 'S' | 'P' | 'PD' | 'F';
 
@@ -73,11 +74,11 @@ export class ReferralTx {
   @JoinColumn()
   depositTx: DepositTx;
 
-  @OneToOne(() => BetOrder, (betOrder) => betOrder.referralTx)
-  @JoinColumn()
-  betOrder: BetOrder;
-
   @OneToOne(() => WalletTx, (walletTx) => walletTx.referralTx)
   @JoinColumn()
   walletTx: WalletTx;
+
+  @OneToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.referralTx)
+  @JoinColumn()
+  gameUsdTx: GameUsdTx; // only used for BET
 }

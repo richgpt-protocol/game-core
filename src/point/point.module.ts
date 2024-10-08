@@ -27,7 +27,7 @@ import { PermissionModule } from 'src/permission/permission.module';
     SharedModule,
     PermissionModule,
     forwardRef(() => WalletModule),
-    UserModule,
+    forwardRef(() => UserModule),
   ],
   providers: [PointService],
   exports: [PointService, TypeOrmModule.forFeature([ChatLog])],

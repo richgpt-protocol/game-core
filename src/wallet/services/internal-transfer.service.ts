@@ -155,7 +155,7 @@ export class InternalTransferService {
       receiverWalletTx.internalTransferReceiver = internalTransfer;
       receiverWalletTx.gameUsdTx = gameUsdTx;
       await queryRunner.manager.save(receiverWalletTx);
-      
+
       await queryRunner.commitTransaction();
 
       this.eventEmitter.emit('internal-transfer', {
@@ -301,7 +301,9 @@ export class InternalTransferService {
       const receiverUserWallet = receiverWalletTx.userWallet;
 
       const provider = new JsonRpcProvider(
-        this.configService.get('PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID')),
+        this.configService.get(
+          'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
+        ),
       );
 
       const userSigner = new Wallet(
@@ -341,15 +343,12 @@ export class InternalTransferService {
           senderWalletTx.txHash = tx.hash;
           receiverWalletTx.txHash = tx.hash;
 
-          senderWalletTx.startingBalance =
-            senderLastValidWalletTx.endingBalance;
+          senderWalletTx.startingBalance = senderUserWallet.walletBalance;
           senderWalletTx.endingBalance =
-            Number(senderLastValidWalletTx.endingBalance) -
+            Number(senderWalletTx.startingBalance) -
             Number(senderWalletTx.txAmount);
 
-          receiverWalletTx.startingBalance = receiverLastValidWalletTx
-            ? receiverLastValidWalletTx.endingBalance
-            : 0;
+          receiverWalletTx.startingBalance = receiverUserWallet.walletBalance;
           receiverWalletTx.endingBalance =
             Number(receiverWalletTx.startingBalance) +
             Number(senderWalletTx.txAmount);
@@ -362,15 +361,12 @@ export class InternalTransferService {
             Number(receiverUserWallet.walletBalance) +
             Number(senderWalletTx.txAmount);
 
-          await this.userService.setUserNotification(
-            senderUserWallet.userId,
-            {
-              type: 'Transfer',
-              title: 'Transfer Processed Successfully',
-              message: 'Your Transfer has been successfully processed',
-              walletTxId: senderWalletTx.id,
-            }
-          );
+          await this.userService.setUserNotification(senderUserWallet.userId, {
+            type: 'Transfer',
+            title: 'Transfer Processed Successfully',
+            message: 'Your Transfer has been successfully processed',
+            walletTxId: senderWalletTx.id,
+          });
 
           await this.userService.setUserNotification(
             receiverUserWallet.userId,

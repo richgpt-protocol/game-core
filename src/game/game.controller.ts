@@ -12,7 +12,6 @@ import {
 import {
   ApiBody,
   ApiHeader,
-  ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -24,6 +23,7 @@ import { UserRole } from 'src/shared/enum/role.enum';
 import { PastResultDto } from './dto/pastResult.dto';
 import { BetDto } from './dto/Bet.dto';
 import { BetService } from './bet.service';
+import { RestartBetDto, RestartReferralDistribution } from './dto/restart.dto';
 
 @ApiTags('Game')
 @Controller('api/v1/game')
@@ -193,10 +193,13 @@ export class GameController {
   })
   async restartBet(
     @Request() req,
-    @Body() payload: { gameUsdId: number },
+    @Body() payload: RestartBetDto,
   ): Promise<ResponseVo<any>> {
     try {
-      const data = await this.betService.restartBet(payload.gameUsdId);
+      const data = await this.betService.restartBet(
+        payload.gameUsdTxId,
+        payload.userId,
+      );
       return {
         statusCode: HttpStatus.OK,
         data,
@@ -232,6 +235,37 @@ export class GameController {
         statusCode: HttpStatus.OK,
         data,
         message: 'Processing referral bonus',
+      };
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Secure(null, UserRole.ADMIN)
+  @Post('restart-referral-distribution')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async restartReferralDistribution(
+    @Request() req,
+    @Body() payload: RestartReferralDistribution,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.betService.restartHandleReferralFlow(
+        payload.walletTxId,
+        payload.gameUsdTxId,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'update referral distribution success',
       };
     } catch (error) {
       console.log(error);

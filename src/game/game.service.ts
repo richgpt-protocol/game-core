@@ -480,9 +480,7 @@ export class GameService implements OnModuleInit {
       walletTx.txType = 'REFERRAL';
       walletTx.txAmount = bonusAmount;
       walletTx.status = 'S';
-      walletTx.startingBalance = lastValidWalletTx
-        ? lastValidWalletTx.endingBalance
-        : 0;
+      walletTx.startingBalance = referralUser.wallet.walletBalance;
       walletTx.endingBalance =
         Number(walletTx.startingBalance) + Number(bonusAmount);
       walletTx.userWalletId = referralUser.wallet.id;

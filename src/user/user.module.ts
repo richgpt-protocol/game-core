@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -17,6 +17,8 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
 import { Notification } from 'src/notification/entities/notification.entity';
 import { ConfigModule } from 'src/config/config.module';
 import { ConfigService } from 'src/config/config.service';
+import { WalletModule } from 'src/wallet/wallet.module';
+import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 
 @Module({
   imports: [
@@ -27,6 +29,7 @@ import { ConfigService } from 'src/config/config.service';
       WalletTx,
       Notification,
       UserNotification,
+      GameUsdTx,
     ]),
     AuditLogModule,
     ConfigModule,
@@ -35,6 +38,7 @@ import { ConfigService } from 'src/config/config.service';
     AdminModule,
     SseModule,
     ConfigModule,
+    forwardRef(() => WalletModule),
     CacheModule.register(),
   ],
   providers: [UserService, WalletService, ConfigService],

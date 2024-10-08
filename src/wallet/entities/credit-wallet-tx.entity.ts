@@ -72,7 +72,6 @@ export class CreditWalletTx {
   userWallet: UserWallet;
 
   @OneToOne(() => BetOrder, (betOrder) => betOrder.creditWalletTx)
-  @JoinColumn()
   betOrder: BetOrder;
 
   @ManyToOne(() => Campaign, (campaign) => campaign.creditWalletTx)
