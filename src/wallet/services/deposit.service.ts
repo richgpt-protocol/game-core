@@ -118,6 +118,7 @@ export class DepositService implements OnModuleInit {
         where: {
           walletAddress: payload.walletAddress,
         },
+        relations: ['user'],
       });
       const miniGameUSDTSenderSetting = await queryRunner.manager.findOne(
         Setting,
@@ -155,6 +156,24 @@ export class DepositService implements OnModuleInit {
       await queryRunner.commitTransaction();
 
       await this.addToEscrowQueue(depositTx.id);
+
+      if (userWallet.user.referralUserId) {
+        await this.adminNotificationService.setAdminNotification(
+          `User ${userWallet.user.uid}, referred by ${userWallet.user.referralUserId}, has deposited ${payload.amount} USD`,
+          'REFERRAL_SUCCESS',
+          'Referral Success',
+          false,
+          true,
+        );
+      } else {
+        await this.adminNotificationService.setAdminNotification(
+          `Deposit of ${payload.amount} ${payload.tokenAddress} received at ${payload.walletAddress}`,
+          'DEPOSIT_RECEIVED',
+          'Deposit Received',
+          false,
+          true,
+        );
+      }
     } catch (error) {
       // queryRunner
       this.logger.error(
