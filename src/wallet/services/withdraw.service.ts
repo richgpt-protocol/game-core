@@ -314,6 +314,14 @@ export class WithdrawService implements OnModuleInit {
         );
       }
 
+      await this.adminNotificationService.setAdminNotification(
+        `User ${userId} has requested withdrawl of amount ${payload.amount} USD`,
+        'WITHDRAWL_REQUEST',
+        'Withdraw Requested',
+        false,
+        true,
+      );
+
       return { error: null, data: redeemTx };
     } catch (error) {
       this.logger.error(error);
