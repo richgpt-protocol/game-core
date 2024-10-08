@@ -43,20 +43,22 @@ import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { ReferralTxStatus, TxStatus } from 'src/shared/enum/status.enum';
-import { ReferralTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import {
+  CreditWalletTxType,
+  ReferralTxType,
+  WalletTxType,
+} from 'src/shared/enum/txType.enum';
 import { PointTxType } from 'src/shared/enum/point-tx.enum';
 
 interface SubmitBetJobDTO {
-  walletTxId: number;
-  betOrders: number[];
+  userWalletId: number;
   gameUsdTxId: number;
 }
 
 interface HandleReferralFlowDTO {
   userId: number;
   betAmount: number;
-  betTxHash: string;
-  betOrderId: number;
+  gameUsdTxId: number;
 }
 
 @Injectable()
@@ -80,24 +82,6 @@ export class BetService implements OnModuleInit {
     private readonly queueService: QueueService,
   ) {}
   onModuleInit() {
-    //Tries to submit bet onchain
-    // this.queueService.registerHandler(QueueName.BET, QueueType.SUBMIT_BET, {
-    //   jobHandler: this.submitBet.bind(this),
-
-    //   //Executed when onchain tx is failed for 5 times continously
-    //   failureHandler: this.onOnchainTxFailed.bind(this),
-    // });
-
-    //Executed when onchain tx is successful
-    // this.queueService.registerHandler(
-    //   QueueName.BET,
-    //   QueueType.SUBMIT_SUCCESS_PROCESS,
-    //   {
-    //     jobHandler: this.handleTxSuccess.bind(this),
-    //     failureHandler: this.onOnchainTxFailed.bind(this),
-    //   },
-    // );
-
     // Executed when distributing referral rewards for betting
     this.queueService.registerHandler(
       QueueName.BET,
@@ -134,7 +118,10 @@ export class BetService implements OnModuleInit {
       const bets = await this.betRepository
         .createQueryBuilder('bet')
         .leftJoinAndSelect('bet.game', 'game')
-        .leftJoinAndSelect('bet.walletTx', 'walletTx')
+        .leftJoinAndSelect('bet.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('bet.gameUsdTx', 'gameUsdTx')
+        .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
         .where('userWallet.userId = :userId', { userId })
         .andWhere('game.epoch >= :startEpoch', { startEpoch: startEpoch || 0 })
@@ -151,33 +138,38 @@ export class BetService implements OnModuleInit {
 
   async getRecentBets(count: number = 50) {
     try {
-      const betsDb = await this.betRepository
-        .createQueryBuilder('bet')
-        .leftJoinAndSelect('bet.game', 'game')
-        .leftJoinAndSelect('bet.walletTx', 'walletTx')
-        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-        .leftJoinAndSelect('userWallet.user', 'user')
-        .orderBy('bet.id', 'DESC')
-        .where('walletTx.status = :status', { status: 'S' })
-        // .andWhere('walletTx.status = :status', { status: 'S' })
+      const gameUsdTxs = await this.gameUsdTxRepository
+        .createQueryBuilder('gameUsdTx')
+        .leftJoinAndSelect('gameUsdTx.betOrders', 'betOrder')
+        .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'walletUserWallet')
+        .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+        .leftJoinAndSelect('walletUserWallet.user', 'walletUser')
+        .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
+        .orderBy('gameUsdTx.id', 'DESC')
+        .where('gameUsdTx.status = :status', { status: TxStatus.SUCCESS })
         .limit(count)
-        .orderBy('walletTx.createdDate', 'DESC')
+        .orderBy('betOrder.createdDate', 'DESC')
         .getMany();
 
-      if (betsDb.length === 0) return [];
+      if (gameUsdTxs.length === 0) return [];
 
-      const bets = betsDb.map((bet) => {
-        const uid = bet.walletTx.userWallet.user.uid;
+      const bets = gameUsdTxs.map((bet) => {
+        let uid;
+        if (bet.walletTxs.length > 0) {
+          uid = bet.walletTxs[0].userWallet.user.uid;
+        } else if (bet.creditWalletTx) {
+          uid = bet.creditWalletTx.userWallet.user.uid;
+        }
+
         const maskedUID = uid.slice(0, 3) + '****' + uid.slice(uid.length - 3);
         return {
           user: maskedUID,
-          amount:
-            Number(bet.bigForecastAmount) + Number(bet.smallForecastAmount),
-          txHash: bet.walletTx.txHash,
+          amount: parseFloat(Number(bet.amount).toFixed(2)),
+          txHash: bet.txHash,
           url:
-            this.configService.get('EXPLORER_BASE_URL') +
-            '/tx/' +
-            bet.walletTx.txHash,
+            this.configService.get('EXPLORER_BASE_URL') + '/tx/' + bet.txHash,
         };
       });
 
@@ -241,17 +233,6 @@ export class BetService implements OnModuleInit {
       payload = this._formatBets(payload);
       await this.validateBets(payload);
 
-      // Create wallet tx
-      const walletTx = new WalletTx();
-      walletTx.txType = WalletTxType.PLAY;
-      walletTx.status = TxStatus.PENDING;
-      walletTx.userWalletId = userInfo.wallet.id;
-      walletTx.userWallet = userInfo.wallet;
-      await queryRunner.manager.save(walletTx);
-
-      const betOrders = await this.createBetOrders(payload, walletTx);
-      await queryRunner.manager.save(betOrders);
-
       const pendingAmountResult = await queryRunner.manager.query(
         `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
           WHERE
@@ -266,38 +247,61 @@ export class BetService implements OnModuleInit {
           ? 0
           : userInfo.wallet.walletBalance - pendingAmount;
 
-      const {
-        creditRemaining,
-        walletBalanceRemaining,
-        walletBalanceUsed,
-        creditBalanceUsed,
-        creditWalletTxns,
-      } = this.validateCreditAndBalance(
-        actualWalletBalance,
-        userInfo,
-        payload,
-        betOrders,
-      );
-
-      await queryRunner.manager.save(creditWalletTxns);
-      await queryRunner.manager.save(betOrders);
-
-      walletTx.txAmount = walletBalanceUsed + creditBalanceUsed;
-      walletTx.betOrders = betOrders;
-      await queryRunner.manager.save(walletTx);
+      // eslint-disable-next-line prefer-const
+      let { betOrders, totalWalletBalanceUsed, creditWalletTxns, totalAmount } =
+        await this.createBetOrders(actualWalletBalance, userInfo, payload);
 
       const gameUsdTx = new GameUsdTx();
-      gameUsdTx.amount = walletBalanceUsed;
+      gameUsdTx.amount = totalAmount;
       gameUsdTx.status = TxStatus.PENDING;
-      gameUsdTx.walletTxs = [walletTx];
-      gameUsdTx.walletTxId = walletTx.id;
       gameUsdTx.senderAddress = userInfo.wallet.walletAddress;
       gameUsdTx.receiverAddress = this.configService.get(
         'GAMEUSD_POOL_CONTRACT_ADDRESS',
       );
       gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.retryCount = 0;
-      await queryRunner.manager.save(gameUsdTx);
+      const gameUsdResult = await queryRunner.manager.save(gameUsdTx);
+
+      let walletTx: WalletTx;
+      if (totalWalletBalanceUsed > 0) {
+        if (totalWalletBalanceUsed > actualWalletBalance) {
+          throw new BadRequestException('Insufficient balance');
+        }
+
+        // Create wallet tx
+        walletTx = new WalletTx();
+        walletTx.txType = WalletTxType.PLAY;
+        walletTx.status = TxStatus.PENDING;
+        walletTx.userWalletId = userInfo.wallet.id;
+        walletTx.userWallet = userInfo.wallet;
+        walletTx.txAmount = totalWalletBalanceUsed;
+        walletTx.gameUsdTx = gameUsdResult;
+
+        const updatedWalletTx = await queryRunner.manager.save(walletTx);
+
+        await queryRunner.manager.update(GameUsdTx, gameUsdResult.id, {
+          walletTxId: updatedWalletTx.id,
+        });
+      }
+
+      if (creditWalletTxns.length > 0) {
+        creditWalletTxns = creditWalletTxns.map((tx) => {
+          tx.gameUsdTx = [gameUsdResult];
+          return tx;
+        });
+        await queryRunner.manager.save(creditWalletTxns);
+      }
+
+      betOrders = betOrders.map((bet) => {
+        if (totalWalletBalanceUsed > 0) {
+          bet.walletTx = walletTx;
+        }
+        bet.gameUsdTx = gameUsdResult;
+        return bet;
+      });
+
+      await queryRunner.manager.save(betOrders);
+      await queryRunner.commitTransaction();
 
       // Used for earlier check and top up for next transaction
       this.eventEmitter.emit(
@@ -315,15 +319,12 @@ export class BetService implements OnModuleInit {
           failureHandler: this.onOnchainTxFailed.bind(this),
         },
         {
-          walletTxId: walletTx.id,
-          betOrders: betOrders.map((bet) => bet.id),
+          userWalletId: userInfo.wallet.id,
           gameUsdTxId: gameUsdTx.id,
           queueType: QueueType.SUBMIT_BET,
         },
         0, // no delay
       );
-
-      await queryRunner.commitTransaction();
     } catch (error) {
       this.logger.error(`Rolling back Db transaction`);
       this.logger.error(error);
@@ -339,32 +340,33 @@ export class BetService implements OnModuleInit {
     }
   }
 
-  async restartBet(gameTxId: number) {
+  async restartBet(gameTxId: number, userId: number): Promise<boolean> {
     try {
-      const gameusdTx = await this.gameUsdTxRepository.findOne({
+      const gameuUsdTx = await this.gameUsdTxRepository.findOne({
         where: {
           id: gameTxId,
-          status: Not('S'),
+          status: Not(TxStatus.SUCCESS),
         },
         relations: ['walletTxs', 'walletTxs.betOrders'],
       });
 
-      if (!gameusdTx) {
+      if (!gameuUsdTx) {
         throw new BadRequestException('Invalid gameTxId');
       }
 
-      if (gameusdTx.walletTxs[0].txType !== 'PLAY') {
-        throw new BadRequestException('Invalid txType');
-      }
+      const userInfo = await this.userService.getUserInfo(userId);
 
-      const jobId = `placeBet-${gameusdTx.id}`;
-      await this.queueService.addJob(
-        QueueName.BET,
+      const jobId = `placeBet-${gameuUsdTx.id}`;
+      await this.queueService.addDynamicQueueJob(
+        `${QueueName.BET}_${userInfo.wallet.walletAddress}`,
         jobId,
         {
-          gameUsdTxId: gameusdTx.id,
-          walletTxId: gameusdTx.walletTxId,
-          betOrders: gameusdTx.walletTxs[0].betOrders.map((bet) => bet.id),
+          jobHandler: this.submitBet.bind(this),
+          failureHandler: this.onOnchainTxFailed.bind(this),
+        },
+        {
+          userWalletId: userInfo.wallet.id,
+          gameUsdTxId: gameuUsdTx.id,
           queueType: QueueType.SUBMIT_BET,
         },
         0, // no delay
@@ -495,69 +497,54 @@ export class BetService implements OnModuleInit {
 
   private validateCreditAndBalance(
     actualWalletBalance: number,
+    creditRemaining: number,
     userInfo: User,
-    payload: BetDto[],
-    bets: BetOrder[],
+    bet: BetOrder,
   ): {
     creditRemaining: number;
     walletBalanceRemaining: number;
     walletBalanceUsed: number;
     creditBalanceUsed: number;
-    creditWalletTxns: CreditWalletTx[];
+    creditWalletTxn: CreditWalletTx;
   } {
-    const totalCredits = userInfo.wallet.creditBalance;
     const walletBalance = actualWalletBalance;
+    let creditWalletTxn: CreditWalletTx;
 
     const maxAllowedCreditAmount =
-      this.configService.get('MAX_CREDIT_AMOUNT') || 1;
+      Number(this.configService.get('MAX_CREDIT_AMOUNT')) || 1;
     let totalBetAmount = 0;
-    let creditRemaining = Number(totalCredits);
     let totalCreditUsed = 0;
     let walletBalanceUsed = 0;
 
-    const creditWalletTxns = [];
+    const betAmount =
+      Number(bet.bigForecastAmount) + Number(bet.smallForecastAmount);
+    totalBetAmount += betAmount;
 
-    bets.forEach((bet) => {
-      if (creditRemaining > 0) {
-        const betAmonut =
-          Number(bet.bigForecastAmount) + Number(bet.smallForecastAmount);
-        const creditAvailable =
-          creditRemaining > +maxAllowedCreditAmount
-            ? +maxAllowedCreditAmount
-            : creditRemaining;
+    if (creditRemaining > 0) {
+      const creditAvailable =
+        creditRemaining > +maxAllowedCreditAmount
+          ? +maxAllowedCreditAmount
+          : creditRemaining;
 
-        const creditToBeUsed =
-          betAmonut > creditAvailable ? creditAvailable : betAmonut;
+      const creditToBeUsed =
+        betAmount > creditAvailable ? creditAvailable : betAmount;
 
-        const gameUsdAmount = betAmonut - creditToBeUsed;
-        // betAmonut > creditToBeUsed ? betAmonut - creditToBeUsed : 0;
+      const walletAmount = betAmount - creditToBeUsed;
 
-        walletBalanceUsed += gameUsdAmount;
+      walletBalanceUsed += walletAmount;
 
-        totalBetAmount += betAmonut;
-        totalCreditUsed += creditToBeUsed;
-        creditRemaining -= creditToBeUsed;
+      totalCreditUsed += creditToBeUsed;
+      creditRemaining -= creditToBeUsed;
 
-        const creditWalletTxn = new CreditWalletTx();
-        creditWalletTxn.amount = creditToBeUsed;
-        creditWalletTxn.txType = 'PLAY';
-        creditWalletTxn.status = 'P';
-        creditWalletTxn.walletId = userInfo.wallet.id;
-        creditWalletTxn.userWallet = userInfo.wallet;
-        // creditWalletTxn.campaignId = 0; //TODO
-
-        creditWalletTxns.push(creditWalletTxn);
-
-        bet.creditWalletTx = creditWalletTxn;
-      } else {
-        bet.creditWalletTx = null;
-        totalBetAmount += +bet.bigForecastAmount + +bet.smallForecastAmount;
-        walletBalanceUsed += +bet.bigForecastAmount + +bet.smallForecastAmount;
-      }
-    });
-
-    if (walletBalanceUsed > walletBalance) {
-      throw new BadRequestException('Insufficient balance');
+      creditWalletTxn = new CreditWalletTx();
+      creditWalletTxn.amount = creditToBeUsed;
+      creditWalletTxn.txType = CreditWalletTxType.PLAY;
+      creditWalletTxn.status = TxStatus.PENDING;
+      creditWalletTxn.walletId = userInfo.wallet.id;
+      creditWalletTxn.userWallet = userInfo.wallet;
+      // creditWalletTxn.campaignId = 0; //TODO
+    } else {
+      walletBalanceUsed += betAmount;
     }
 
     return {
@@ -565,14 +552,21 @@ export class BetService implements OnModuleInit {
       walletBalanceRemaining: walletBalance - walletBalanceUsed,
       walletBalanceUsed,
       creditBalanceUsed: totalCreditUsed,
-      creditWalletTxns,
+      creditWalletTxn,
     };
   }
 
   private async createBetOrders(
+    actualWalletBalance: number,
+    userInfo: User,
     payload: BetDto[],
-    walletTx: WalletTx,
-  ): Promise<Array<BetOrder>> {
+    // walletTx: WalletTx,
+  ): Promise<{
+    betOrders: BetOrder[];
+    totalWalletBalanceUsed: number;
+    creditWalletTxns: CreditWalletTx[];
+    totalAmount: number;
+  }> {
     const allEpochs = payload.map((bet) => bet.epochs).flat();
     const allGames = await this.gameRepository.find({
       where: {
@@ -581,6 +575,10 @@ export class BetService implements OnModuleInit {
     });
 
     const betOrders: Array<BetOrder> = [];
+    let totalWalletBalanceUsed = 0;
+    let totalAmount = 0;
+    let creditRemaining = Number(userInfo.wallet.creditBalance);
+    const creditWalletTxns: Array<CreditWalletTx> = [];
 
     payload.map((bet) => {
       const numberPairs = new Set();
@@ -601,8 +599,30 @@ export class BetService implements OnModuleInit {
           betOrder.game = allGames.find(
             (game) => game.epoch === epoch.toString(),
           );
+
+          const {
+            creditRemaining: creditAmountRemaining,
+            walletBalanceRemaining,
+            walletBalanceUsed,
+            creditBalanceUsed,
+            creditWalletTxn,
+          } = this.validateCreditAndBalance(
+            actualWalletBalance,
+            creditRemaining,
+            userInfo,
+            betOrder,
+          );
+
+          if (creditWalletTxn) {
+            creditRemaining = creditAmountRemaining;
+            betOrder.creditWalletTx = creditWalletTxn;
+            creditWalletTxns.push(creditWalletTxn);
+          }
+
+          totalWalletBalanceUsed += walletBalanceUsed;
+          totalAmount += walletBalanceUsed + creditBalanceUsed;
+
           betOrder.gameId = betOrder.game.id;
-          betOrder.walletTxId = walletTx.id;
           betOrder.motherPair = bet.numberPair; //user entered numberPair, not the generated one
           betOrder.type = bet.isPermutation ? 'P' : 'S';
 
@@ -611,7 +631,12 @@ export class BetService implements OnModuleInit {
       });
     });
 
-    return betOrders;
+    return {
+      betOrders,
+      totalWalletBalanceUsed,
+      creditWalletTxns,
+      totalAmount,
+    };
   }
 
   private async _getCurrentEpoch() {
@@ -782,6 +807,8 @@ export class BetService implements OnModuleInit {
   }
 
   async submitBet(job: Job<SubmitBetJobDTO>): Promise<any> {
+    const { gameUsdTxId, userWalletId } = job.data;
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
@@ -795,14 +822,20 @@ export class BetService implements OnModuleInit {
         .leftJoinAndSelect('userWallet.user', 'user')
         .leftJoinAndSelect('betOrders.creditWalletTx', 'creditWalletTx')
         .leftJoinAndSelect('betOrders.game', 'game')
-        .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
+        .where('gameUsdTx.id = :id', { id: gameUsdTxId })
         .getOne();
+
+      const betOrders = await queryRunner.manager
+        .createQueryBuilder(BetOrder, 'betOrder')
+        .leftJoinAndSelect('betOrder.game', 'game')
+        .where('betOrder.gameUsdTxId = :id', { id: gameUsdTx.id })
+        .getMany();
 
       const userWallet = await queryRunner.manager
         .createQueryBuilder(UserWallet, 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
         .where('userWallet.id = :id', {
-          id: gameUsdTx.walletTxs[0].userWalletId,
+          id: userWalletId,
         })
         .getOne();
 
@@ -838,8 +871,8 @@ export class BetService implements OnModuleInit {
 
       const onchainTx = await this._bet(
         Number(userWallet.user.uid),
-        job.data.walletTxId,
-        gameUsdTx.walletTxs[0].betOrders,
+        gameUsdTxId,
+        betOrders,
         userSigner,
         provider,
       );
@@ -883,6 +916,8 @@ export class BetService implements OnModuleInit {
   }
 
   async onOnchainTxFailed(job: Job<SubmitBetJobDTO>, error: Error) {
+    const { gameUsdTxId, userWalletId } = job.data;
+
     const queryRunner = this.dataSource.createQueryRunner();
 
     try {
@@ -892,20 +927,30 @@ export class BetService implements OnModuleInit {
 
         const gameUsdTx = await queryRunner.manager
           .createQueryBuilder(GameUsdTx, 'gameUsdTx')
-          .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
-          .leftJoinAndSelect('walletTxs.userWallet', 'userWallet')
-          .leftJoinAndSelect('walletTxs.betOrders', 'betOrders')
-          .leftJoinAndSelect('userWallet.user', 'user')
-          .leftJoinAndSelect('betOrders.creditWalletTx', 'creditWalletTx')
-          .leftJoinAndSelect('betOrders.game', 'game')
-          .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
+          .where('gameUsdTx.id = :id', { id: gameUsdTxId })
           .getOne();
 
+        const walletTx = await queryRunner.manager
+          .createQueryBuilder(WalletTx, 'walletTx')
+          .leftJoinAndSelect('walletTx.gameUsdTx', 'gameUsdTx')
+          .where('gameUsdTx.id = :id', { id: gameUsdTx.id })
+          .getOne();
+
+        const creditWalletTxns = await queryRunner.manager
+          .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
+          .leftJoinAndSelect('creditWalletTx.gameUsdTx', 'gameUsdTx')
+          .where('gameUsdTx.id = :id', { id: gameUsdTx.id })
+          .getMany();
+
         gameUsdTx.status = TxStatus.FAILED;
-        gameUsdTx.walletTxs[0].status = TxStatus.FAILED;
-        const creditTxnIds = gameUsdTx.walletTxs[0].betOrders
-          .filter((bet) => bet.creditWalletTx)
-          .map((bet) => bet.creditWalletTx.id);
+        await queryRunner.manager.save(gameUsdTx);
+
+        if (walletTx) {
+          walletTx.status = TxStatus.FAILED;
+          await queryRunner.manager.save(walletTx);
+        }
+
+        const creditTxnIds = creditWalletTxns.map((tx) => tx.id);
 
         if (creditTxnIds.length > 0) {
           await queryRunner.manager
@@ -915,9 +960,6 @@ export class BetService implements OnModuleInit {
             .where('id IN (:...creditTxnIds)', { creditTxnIds })
             .execute();
         }
-
-        await queryRunner.manager.save(gameUsdTx);
-        await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
 
         await queryRunner.commitTransaction();
       }
@@ -937,58 +979,76 @@ export class BetService implements OnModuleInit {
       const gameUsdTx = await queryRunner.manager
         .createQueryBuilder(GameUsdTx, 'gameUsdTx')
         .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
-        .leftJoinAndSelect('walletTxs.userWallet', 'userWallet')
-        .leftJoinAndSelect('userWallet.user', 'user')
-        .leftJoinAndSelect('walletTxs.betOrders', 'betOrders')
-        .leftJoinAndSelect('betOrders.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('gameUsdTx.betOrders', 'betOrders')
         .leftJoinAndSelect('betOrders.game', 'game')
         .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
         .getOne();
 
-      gameUsdTx.walletTxs[0].status = TxStatus.SUCCESS;
-      gameUsdTx.walletTxs[0].txHash = gameUsdTx.txHash;
-      gameUsdTx.walletTxs[0].startingBalance = gameUsdTx.walletTxs[0].userWallet
-        .walletBalance
-        ? gameUsdTx.walletTxs[0].userWallet.walletBalance
-        : 0;
-      gameUsdTx.walletTxs[0].endingBalance =
-        gameUsdTx.walletTxs[0].userWallet.walletBalance - gameUsdTx.amount;
+      const creditWalletTxns = await queryRunner.manager
+        .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
+        .leftJoinAndSelect('creditWalletTx.gameUsdTx', 'gameUsdTx')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .where('gameUsdTx.id = :id', { id: gameUsdTx.id })
+        .getMany();
 
-      const creditWalletTxns = gameUsdTx.walletTxs[0].betOrders
-        .filter((bet) => bet.creditWalletTx)
-        .map((bet) => bet.creditWalletTx);
+      let userWallet: UserWallet;
+      let walletTx: WalletTx;
 
-      let previousEndingCreditBalance =
-        gameUsdTx.walletTxs[0].userWallet.creditBalance || 0;
+      if (gameUsdTx.walletTxs && gameUsdTx.walletTxs.length > 0) {
+        walletTx = await queryRunner.manager
+          .createQueryBuilder(WalletTx, 'walletTx')
+          .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+          .leftJoinAndSelect('userWallet.user', 'user')
+          .where('walletTx.id = :id', { id: gameUsdTx.walletTxs[0].id })
+          .getOne();
 
-      for (let i = 0; i < creditWalletTxns.length; i++) {
-        const creditWalletTx = creditWalletTxns[i];
-        creditWalletTx.startingBalance = previousEndingCreditBalance;
+        walletTx.status = TxStatus.SUCCESS;
+        walletTx.txHash = gameUsdTx.txHash;
+        walletTx.startingBalance = walletTx.userWallet.walletBalance
+          ? walletTx.userWallet.walletBalance
+          : 0;
+        walletTx.endingBalance =
+          walletTx.userWallet.walletBalance - walletTx.txAmount;
 
-        const endBalance = previousEndingCreditBalance
-          ? previousEndingCreditBalance - creditWalletTx.amount
-          : creditWalletTx.amount;
-        creditWalletTx.endingBalance = endBalance;
+        userWallet = walletTx.userWallet;
+        userWallet.walletBalance = walletTx.endingBalance;
 
-        creditWalletTx.status = TxStatus.SUCCESS;
-        await queryRunner.manager.save(creditWalletTx);
-
-        previousEndingCreditBalance = endBalance;
+        await queryRunner.manager.save(walletTx);
       }
-      await queryRunner.manager.save(gameUsdTx);
-      //update wallet and credit balance
-      const userWallet = gameUsdTx.walletTxs[0].userWallet;
-      userWallet.walletBalance = gameUsdTx.walletTxs[0].endingBalance;
-      userWallet.creditBalance = previousEndingCreditBalance;
+
+      if (creditWalletTxns.length > 0) {
+        let previousEndingCreditBalance =
+          creditWalletTxns[0].userWallet.creditBalance || 0;
+
+        for (let i = 0; i < creditWalletTxns.length; i++) {
+          const creditWalletTx = creditWalletTxns[i];
+          creditWalletTx.startingBalance = previousEndingCreditBalance;
+
+          const endBalance = previousEndingCreditBalance
+            ? previousEndingCreditBalance - creditWalletTx.amount
+            : creditWalletTx.amount;
+          creditWalletTx.endingBalance = endBalance;
+
+          creditWalletTx.status = TxStatus.SUCCESS;
+          await queryRunner.manager.save(creditWalletTx);
+
+          previousEndingCreditBalance = endBalance;
+        }
+
+        if (!userWallet) {
+          userWallet = creditWalletTxns[0].userWallet;
+        }
+        userWallet.creditBalance = previousEndingCreditBalance;
+      }
 
       ///////////////Update Points/////////////////////
       const user = userWallet.user;
 
       // TODO: Using query runner cannot use repository at the same time
       const xpPoints = await this.pointService.getBetPoints(
-        user.id,
-        gameUsdTx.walletTxs[0].txAmount,
-        gameUsdTx.walletTxs[0].id,
+        gameUsdTx.amount, // total amount of betting
+        gameUsdTx.id,
       );
 
       const pointTxStartingBalance = userWallet.pointBalance || 0;
@@ -999,37 +1059,31 @@ export class BetService implements OnModuleInit {
         txType: PointTxType.BET,
         walletId: userWallet.id,
         userWallet: userWallet,
-        walletTx: gameUsdTx.walletTxs[0],
+        gameUsdTx,
         startingBalance: pointTxStartingBalance,
         endingBalance: pointTxEndingBalance,
       });
 
       userWallet.pointBalance = pointTxEndingBalance;
       await queryRunner.manager.save(userWallet);
-      await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
 
       await queryRunner.commitTransaction();
 
-      const betOrder = gameUsdTx.walletTxs[0].betOrders[0];
       const jobId = `handleBetReferral-${gameUsdTx.id}`;
       await this.queueService.addJob(QueueName.BET, jobId, {
         userId: user.id,
-        betAmount: gameUsdTx.walletTxs[0].txAmount,
-        betTxHash: gameUsdTx.txHash,
-        betOrderId: betOrder.id,
+        betAmount: walletTx ? Number(walletTx.txAmount) : 0,
+        gameUsdTxId: gameUsdTx.id,
         queueType: QueueType.BETTING_REFERRAL_DISTRIBUTION,
       });
 
       // TODO: Shouldn't use gameUsdTx (comes from queryRunner)
-      await this.userService.setUserNotification(
-        gameUsdTx.walletTxs[0].userWallet.userId,
-        {
-          type: 'bet',
-          title: 'Buy Order Processed Successfully',
-          message: 'Your Buy has been successfully processed',
-          walletTxId: gameUsdTx.walletTxs[0].id,
-        },
-      );
+      await this.userService.setUserNotification(userWallet.userId, {
+        type: 'bet',
+        title: 'Buy Order Processed Successfully',
+        message: 'Your Buy has been successfully processed',
+        gameUsdTxId: gameUsdTx.id,
+      });
     } catch (error) {
       this.logger.error(error);
       await queryRunner.rollbackTransaction();
@@ -1044,7 +1098,7 @@ export class BetService implements OnModuleInit {
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
-    const { userId, betAmount, betTxHash, betOrderId } = job.data;
+    const { userId, betAmount, gameUsdTxId } = job.data;
 
     try {
       const userInfo = await queryRunner.manager
@@ -1116,12 +1170,7 @@ export class BetService implements OnModuleInit {
 
       await referralRewardOnchainTx.wait();
 
-      await queryRunner.manager.update(WalletTx, walletTx.id, {
-        txHash: referralRewardOnchainTx.hash,
-        status: TxStatus.SUCCESS,
-      });
-
-      await queryRunner.manager.insert(GameUsdTx, {
+      const gameUsdTxInserted = await queryRunner.manager.insert(GameUsdTx, {
         amount: commissionAmount,
         status: TxStatus.SUCCESS,
         retryCount: 0,
@@ -1133,6 +1182,14 @@ export class BetService implements OnModuleInit {
         txHash: referralRewardOnchainTx.hash, //betTxHash,
       });
 
+      await queryRunner.manager.update(WalletTx, walletTx.id, {
+        txHash: referralRewardOnchainTx.hash,
+        status: TxStatus.SUCCESS,
+        gameUsdTx: {
+          id: gameUsdTxInserted.identifiers[0].id,
+        },
+      });
+
       await queryRunner.manager.insert(ReferralTx, {
         rewardAmount: commissionAmount,
         referralType: ReferralTxType.BET,
@@ -1140,8 +1197,8 @@ export class BetService implements OnModuleInit {
         userId: userInfo.id,
         status: ReferralTxStatus.SUCCESS,
         referralUserId: userInfo.referralUserId, //one who receives the referral amount
-        betOrder: {
-          id: betOrderId,
+        gameUsdTx: {
+          id: gameUsdTxId, // Store the betting gameUsdTx to keep track the commission coming from which bets
         },
       });
 
@@ -1154,12 +1211,18 @@ export class BetService implements OnModuleInit {
 
       referrerWallet.walletBalance = walletTx.endingBalance;
 
+      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
+        where: {
+          id: gameUsdTxId,
+        },
+      });
+
       await this.updateReferrerXpPoints(
         queryRunner,
-        userId,
         betAmount,
         referrerWallet,
-        walletTx,
+        gameUsdTx,
+        gameUsdTxInserted.identifiers[0].id,
       );
 
       await queryRunner.manager.save(referrerWallet);
@@ -1179,7 +1242,7 @@ export class BetService implements OnModuleInit {
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
-    const { userId, betAmount, betTxHash, betOrderId } = job.data;
+    const { userId, betAmount, gameUsdTxId } = job.data;
 
     try {
       const userInfo = await queryRunner.manager
@@ -1194,8 +1257,10 @@ export class BetService implements OnModuleInit {
       // Check if the referral tx already exists
       const exist = await queryRunner.manager.findOne(WalletTx, {
         where: {
-          txHash: betTxHash,
           userWalletId: userInfo.referralUser.wallet.id,
+          gameUsdTx: {
+            id: gameUsdTxId,
+          },
         },
       });
       if (exist) return;
@@ -1211,28 +1276,17 @@ export class BetService implements OnModuleInit {
         betAmount *
         this.referralCommissionByRank(userInfo.referralUser.referralRank);
 
-      const lastValidWalletTx = await queryRunner.manager
-        .createQueryBuilder(WalletTx, 'walletTx')
-        .where(
-          'walletTx.userWalletId = :userWalletId AND walletTx.status = :status',
-          {
-            userWalletId: referralUserInfo.wallet.id,
-            status: 'S',
-          },
-        )
-        .orderBy('walletTx.id', 'DESC')
-        .getOne();
-
       const walletTxInserted = new WalletTx();
       walletTxInserted.txType = WalletTxType.REFERRAL;
       walletTxInserted.txAmount = commissionAmount;
       walletTxInserted.status = TxStatus.FAILED;
       walletTxInserted.userWalletId = referralUserInfo.wallet.id;
       walletTxInserted.userWallet = referralUserInfo.wallet;
-      walletTxInserted.txHash = betTxHash;
-      walletTxInserted.startingBalance = lastValidWalletTx?.endingBalance || 0;
+      walletTxInserted.startingBalance = Number(
+        referralUserInfo.wallet.walletBalance || 0,
+      );
       walletTxInserted.endingBalance =
-        Number(lastValidWalletTx?.endingBalance || 0) + commissionAmount;
+        Number(referralUserInfo.wallet.walletBalance || 0) + commissionAmount;
 
       await queryRunner.manager.save(walletTxInserted);
 
@@ -1247,12 +1301,12 @@ export class BetService implements OnModuleInit {
       await queryRunner.manager.insert(ReferralTx, {
         rewardAmount: commissionAmount,
         referralType: ReferralTxType.BET,
-        walletTx: walletTx,
+        walletTx,
         userId: userInfo.id,
         status: ReferralTxStatus.FAILED,
         referralUserId: userInfo.referralUserId, //one who receives the referral amount
-        betOrder: {
-          id: betOrderId,
+        gameUsdTx: {
+          id: gameUsdTxId, // Store the betting gameUsdTx to keep track the commission coming from which bets
         },
       });
 
@@ -1273,7 +1327,7 @@ export class BetService implements OnModuleInit {
     }
   }
 
-  async restartHandleReferralFlow(walletTxId: number) {
+  async restartHandleReferralFlow(walletTxId: number, gameUsdTxId: number) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1324,7 +1378,7 @@ export class BetService implements OnModuleInit {
       // Create gameUsdTx record
       await queryRunner.manager.insert(GameUsdTx, {
         amount,
-        status: 'S',
+        status: TxStatus.SUCCESS,
         retryCount: 0,
         chainId: +this.configService.get('BASE_CHAIN_ID'),
         senderAddress: this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
@@ -1341,7 +1395,7 @@ export class BetService implements OnModuleInit {
             id: walletTx.id,
           },
         },
-        relations: ['betOrder'],
+        relations: ['gameUsdTx'],
       });
 
       referralTx.status = ReferralTxStatus.SUCCESS;
@@ -1356,14 +1410,19 @@ export class BetService implements OnModuleInit {
 
       referrerWallet.walletBalance = walletTx.endingBalance;
 
+      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
+        where: {
+          id: gameUsdTxId,
+        },
+      });
+
       // Update referrer xp points
       await this.updateReferrerXpPoints(
         queryRunner,
-        referralTx.userId,
-        Number(referralTx.betOrder.bigForecastAmount) +
-          Number(referralTx.betOrder.smallForecastAmount),
+        Number(referralTx.gameUsdTx.amount),
         referrerWallet,
-        walletTx,
+        gameUsdTx,
+        null,
       );
       await queryRunner.manager.save(referrerWallet);
       await queryRunner.commitTransaction();
@@ -1376,42 +1435,41 @@ export class BetService implements OnModuleInit {
 
   async updateReferrerXpPoints(
     queryRunner: QueryRunner,
-    user: number,
     betAmount: number,
     referrerWallet: UserWallet,
-    walletTx: WalletTx,
+    gameUsdTx: GameUsdTx,
+    distributeReferralGameUsdTxId: number,
   ) {
-    const lastValidPointTx = await queryRunner.manager.findOne(PointTx, {
-      where: {
-        walletId: referrerWallet.id,
-      },
-      order: {
-        createdDate: 'DESC',
-      },
-    });
-
     // TODO: Shouldn't mix repository with query runner
     const referrerXPAmount = await this.pointService.getBetPointsReferrer(
-      user,
       betAmount,
-      walletTx.id,
+      gameUsdTx.id,
     );
-    referrerWallet.pointBalance =
-      Number(referrerWallet.pointBalance) + referrerXPAmount;
+
+    const startingBalance = Number(referrerWallet.pointBalance) || 0;
+
+    const gameUsdTxObj = {};
+    if (distributeReferralGameUsdTxId) {
+      Object.assign(gameUsdTxObj, {
+        gameUsdTx: {
+          id: distributeReferralGameUsdTxId,
+        },
+      });
+    }
 
     const pointTxInsertResult = await queryRunner.manager.insert(PointTx, {
       amount: referrerXPAmount,
-      txType: 'REFERRAL',
+      txType: PointTxType.REFERRAL,
       walletId: referrerWallet.id,
       userWallet: referrerWallet,
-      startingBalance: lastValidPointTx?.endingBalance || 0,
-      endingBalance:
-        Number(lastValidPointTx?.endingBalance || 0) + referrerXPAmount,
-      walletTx: walletTx,
+      startingBalance,
+      endingBalance: startingBalance + referrerXPAmount,
+      ...gameUsdTxObj,
     });
 
-    referrerWallet.pointBalance =
-      pointTxInsertResult.generatedMaps[0].endingBalance;
+    referrerWallet.pointBalance = Number(
+      pointTxInsertResult.generatedMaps[0].endingBalance,
+    );
   }
 
   /**

@@ -1,5 +1,6 @@
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
+import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import {
@@ -69,10 +70,15 @@ export class PointTx {
   })
   walletTxId: number;
 
-  // Used for CLAIM, DEPOSIT, BET, REFERRAL
+  // Used for CLAIM, DEPOSIT, REFERRAL
   @OneToOne(() => WalletTx, (walletTx) => walletTx.pointTx)
   @JoinColumn()
   walletTx: WalletTx;
+
+  // Used for BET only
+  @OneToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.pointTx)
+  @JoinColumn()
+  gameUsdTx: GameUsdTx;
 
   // Used for CAMPAIGN
   @Column({

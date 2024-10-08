@@ -13,3 +13,8 @@ export enum ReferralTxType {
   BET = 'BET',
   SET_REFERRAL = 'SET_REFERRAL',
 }
+
+export enum CreditWalletTxType {
+  CREDIT = 'CREDIT',
+  PLAY = 'PLAY',
+}

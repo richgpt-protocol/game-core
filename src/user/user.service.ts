@@ -35,6 +35,7 @@ import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { Telegraf } from 'telegraf';
 import { ConfigService } from 'src/config/config.service';
 import { Update } from 'telegraf/typings/core/types/typegram';
+import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -66,6 +67,8 @@ export class UserService {
     private notificationRepository: Repository<Notification>,
     @InjectRepository(UserNotification)
     private userNotificationRepository: Repository<UserNotification>,
+    @InjectRepository(GameUsdTx)
+    private gameUsdTxRepository: Repository<GameUsdTx>,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
     private adminNotificationService: AdminNotificationService,
@@ -907,6 +910,12 @@ export class UserService {
       if (_notification.walletTxId) {
         notification.walletTx = await this.walletTxRepository.findOneBy({
           id: _notification.walletTxId,
+        });
+      }
+
+      if (_notification.gameUsdTxId) {
+        notification.gameUsdTx = await this.gameUsdTxRepository.findOneBy({
+          id: _notification.gameUsdTxId,
         });
       }
       await this.notificationRepository.save(notification);

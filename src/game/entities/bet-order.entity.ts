@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
   ManyToOne,
   OneToOne,
   PrimaryGeneratedColumn,
@@ -11,7 +12,7 @@ import { Game } from './game.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
-import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 
 @Entity()
 export class BetOrder {
@@ -80,17 +81,13 @@ export class BetOrder {
   @ManyToOne(() => WalletTx, (walletTx) => walletTx.betOrders)
   walletTx: WalletTx;
 
-  @Column({
-    nullable: true,
-  })
-  creditWalletTxId: number;
-
   @OneToOne(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.betOrder)
+  @JoinColumn()
   creditWalletTx: CreditWalletTx;
 
   @OneToOne(() => ClaimDetail, (claimDetail) => claimDetail.betOrder)
   claimDetail: ClaimDetail;
 
-  @OneToOne(() => ReferralTx, (referralTx) => referralTx.betOrder)
-  referralTx: ReferralTx;
+  @ManyToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.betOrders)
+  gameUsdTx: GameUsdTx;
 }

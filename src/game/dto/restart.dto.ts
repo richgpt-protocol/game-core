@@ -6,4 +6,21 @@ export class RestartReferralDistribution {
   @IsNumber()
   @IsNotEmpty()
   walletTxId: number;
+
+  @ApiProperty()
+  @IsNumber()
+  @IsNotEmpty()
+  gameUsdTxId: number; // The betting gameUsdTx
+}
+
+export class RestartBetDto {
+  @ApiProperty()
+  @IsNumber()
+  @IsNotEmpty()
+  userId: number;
+
+  @ApiProperty()
+  @IsNumber()
+  @IsNotEmpty()
+  gameUsdTxId: number; // The betting gameUsdTx
 }

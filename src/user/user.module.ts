@@ -17,6 +17,7 @@ import { UserNotification } from 'src/notification/entities/user-notification.en
 import { Notification } from 'src/notification/entities/notification.entity';
 import { ConfigModule } from 'src/config/config.module';
 import { ConfigService } from 'src/config/config.service';
+import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ConfigService } from 'src/config/config.service';
       WalletTx,
       Notification,
       UserNotification,
+      GameUsdTx,
     ]),
     AuditLogModule,
     ConfigModule,
