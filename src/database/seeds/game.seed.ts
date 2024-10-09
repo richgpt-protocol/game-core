@@ -20,11 +20,11 @@ export default class CreateGames implements Seeder {
     let endDate = new Date(startDate);
     endDate.setUTCHours(startDate.getUTCHours() + 1, 0, 0, 0); // set endDate to nextHour:00:00 from current time
 
-    // pre-created 100 game records
+    // pre-created 168 game records
     let provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
     let core_contract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, provider);
     let currentEpoch = Number(await core_contract.currentEpoch());
-    for (let epoch = currentEpoch; epoch < currentEpoch + 100; epoch++) {
+    for (let epoch = currentEpoch; epoch < currentEpoch + 168; epoch++) {
       await dataSource
         .createQueryBuilder()
         .insert()
@@ -65,7 +65,7 @@ export default class CreateGames implements Seeder {
         { updatedBy: 0, key: 'maxTicketEndEpoch', value: null },
         // least first
         { updatedBy: 0, key: 'leastFirstPriority', value: 1 },
-        { updatedBy: 0, key: 'leastFirstRandomLevel', value: 2 },
+        { updatedBy: 0, key: 'leastFirstRandomLevel', value: 3 },
         { updatedBy: 0, key: 'leastFirstStartEpoch', value: null },
         { updatedBy: 0, key: 'leastFirstEndEpoch', value: null },
         // fixed number
