@@ -1101,12 +1101,12 @@ export class BetService implements OnModuleInit {
 
   async handleReferralFlow(job: Job<HandleReferralFlowDTO>) {
     const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     const { userId, betAmount, gameUsdTxId } = job.data;
 
     try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
       const userInfo = await queryRunner.manager
         .createQueryBuilder(User, 'user')
         .leftJoinAndSelect('user.referralUser', 'referralUser')
@@ -1202,6 +1202,7 @@ export class BetService implements OnModuleInit {
         walletTx: walletTx,
         userId: userInfo.id,
         status: ReferralTxStatus.SUCCESS,
+        txHash: referralRewardOnchainTx.hash,
         referralUserId: userInfo.referralUserId, //one who receives the referral amount
         gameUsdTx: {
           id: gameUsdTxId, // Store the betting gameUsdTx to keep track the commission coming from which bets
@@ -1235,10 +1236,10 @@ export class BetService implements OnModuleInit {
       await queryRunner.manager.save(referrerWallet);
       await queryRunner.commitTransaction();
     } catch (error) {
-      this.logger.error('Error in referral tx', error);
+      this.logger.error('Error in handleReferralFlow', error);
       await queryRunner.rollbackTransaction();
 
-      throw new Error('BET: Error processing Referral');
+      throw new Error('BET: Error processing handleReferralFlow');
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
@@ -1246,12 +1247,12 @@ export class BetService implements OnModuleInit {
 
   async onReferralFailed(job: Job<HandleReferralFlowDTO>, error: Error) {
     const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     const { userId, betAmount, gameUsdTxId } = job.data;
 
     try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
       const userInfo = await queryRunner.manager
         .createQueryBuilder(User, 'user')
         .leftJoinAndSelect('user.referralUser', 'referralUser')
@@ -1328,6 +1329,8 @@ export class BetService implements OnModuleInit {
       await queryRunner.commitTransaction();
     } catch (error) {
       this.logger.error('Error in [onReferralFailed]', error);
+      await queryRunner.rollbackTransaction();
+      throw new Error('BET: Error processing onReferralFailed');
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
