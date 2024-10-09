@@ -1263,9 +1263,9 @@ export class BetService implements OnModuleInit {
       if (!userInfo || userInfo.referralUserId == null) return;
 
       // Check if the referral tx already exists
-      const exist = await queryRunner.manager.findOne(WalletTx, {
+      const exist = await queryRunner.manager.findOne(ReferralTx, {
         where: {
-          userWalletId: userInfo.referralUser.wallet.id,
+          userId: userInfo.referralUser.wallet.id,
           gameUsdTx: {
             id: gameUsdTxId,
           },
