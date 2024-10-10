@@ -212,7 +212,11 @@ export class QueueService {
     const queue = this.queues.get(queueName);
 
     const jobCounts = await queue.getJobCounts();
-    if (jobCounts.waiting === 0 && jobCounts.active === 0) {
+    if (
+      jobCounts.waiting === 0 &&
+      jobCounts.active === 0 &&
+      jobCounts.delayed === 0
+    ) {
       const worker = this.workers.get(queueName);
       worker.close();
       this.workers.delete(queueName);
