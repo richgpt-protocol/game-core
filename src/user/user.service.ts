@@ -64,8 +64,6 @@ export class UserService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
-    @InjectRepository(UserWallet)
-    private userWalletRepository: Repository<UserWallet>,
     @InjectRepository(WalletTx)
     private walletTxRepository: Repository<WalletTx>,
     @InjectRepository(ReferralTx)
@@ -83,7 +81,6 @@ export class UserService {
     private cacheSettingService: CacheSettingService,
     private configService: ConfigService,
     private creditService: CreditService,
-    private datasource: DataSource,
   ) {
     this.telegramOTPBotUserName = this.configService.get(
       'TELEGRAM_OTP_BOT_USERNAME',
@@ -111,7 +108,7 @@ export class UserService {
     if (!id)
       throw new Error('UserService.findOneWithoutHiddenFields() - id is null');
 
-    const queryRunner = this.datasource.createQueryRunner();
+    const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
@@ -413,7 +410,7 @@ export class UserService {
     payload: LoginWithTelegramDTO,
   ): Promise<{ error: string; data: User }> {
     console.log('signInWithTelegram', payload);
-    const queryRunner = this.datasource.createQueryRunner();
+    const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
