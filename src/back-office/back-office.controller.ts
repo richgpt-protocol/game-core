@@ -375,8 +375,8 @@ export class BackOfficeController {
     const leastFirstEndEpoch = payload.lfee ? onlyNumber('leastFirstEndEpoch', payload.lfee) : null;
 
     const fixedNumberPriority = payload.fnp ? onlyNumber('fixedNumberPriority', payload.fnp) : null;
-    const fixedNumberNumberPair = onlyNumberPair(payload.fnnp);
-    const fixedNumberIndex = onlyNumber('fixedNumberIndex', payload.fni);
+    const fixedNumberNumberPair = payload.fnnp ? onlyNumberPair(payload.fnnp) : null;
+    const fixedNumberIndex = payload.fni ? onlyNumber('fixedNumberIndex', payload.fni) : null;
     const fixedNumberStartEpoch = payload.fnse ? onlyNumber('fixedNumberStartEpoch', payload.fnse) : null;
     const fixedNumberEndEpoch = payload.fnee ? onlyNumber('fixedNumberEndEpoch', payload.fnee) : null;
 
