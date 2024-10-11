@@ -30,9 +30,6 @@ export class AdminService {
   constructor(
     @InjectRepository(Admin)
     private adminRepository: Repository<Admin>,
-    // @InjectRepository(Notification)
-    // private notificationRepository: Repository<Notification>,
-    private connection: Connection,
     @Inject(forwardRef(() => PermissionService))
     private permissionService: PermissionService,
   ) {}
