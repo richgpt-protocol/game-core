@@ -19,7 +19,8 @@ export class BetDto {
 
   @ApiProperty()
   @IsNotEmpty()
-  epochs: number[];
+  @IsNumber()
+  numberOfDraws: number;
 
   @ApiProperty()
   @IsNotEmpty()
@@ -31,6 +32,7 @@ export class EstimateBetResponseDTO {
     id: number;
     numberPairs: string;
     calculatedAmount: number;
+    numberSize: number;
   }[];
   totalAmount: number;
 }

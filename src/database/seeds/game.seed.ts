@@ -24,7 +24,7 @@ export default class CreateGames implements Seeder {
     let provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
     let core_contract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, provider);
     let currentEpoch = Number(await core_contract.currentEpoch());
-    for (let epoch = currentEpoch; epoch < currentEpoch + 100; epoch++) {
+    for (let epoch = currentEpoch; epoch < currentEpoch + 168; epoch++) {
       await dataSource
         .createQueryBuilder()
         .insert()
