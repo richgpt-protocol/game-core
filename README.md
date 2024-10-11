@@ -1,5 +1,7 @@
 # Execute app through Docker
 
+Check seeds in `database/seeds` folder, update & push to GitHub because seeds need to be run inside the Docker below.
+
 ## Main app
 
 `git clone git@github.com:richgpt-protocol/game-core.git`
