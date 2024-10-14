@@ -2,6 +2,7 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   OnModuleInit,
 } from '@nestjs/common';
@@ -64,6 +65,7 @@ interface HandleReferralFlowDTO {
 @Injectable()
 export class BetService implements OnModuleInit {
   private readonly logger = new Logger(BetService.name);
+  private readonly MAX_NUMBER_OF_DRAWS = 168;
 
   constructor(
     @InjectRepository(Game)
@@ -197,14 +199,19 @@ export class BetService implements OnModuleInit {
           );
         }
 
-        totalAmount +=
-          (+bet.bigForecastAmount + +bet.smallForecastAmount) *
-          (bet.epochs.length * numberPairs.size);
+        const bettingAmount =
+          (bet.bigForecastAmount + bet.smallForecastAmount) *
+          bet.numberOfDraws *
+          numberPairs.size;
+
+        totalAmount += bettingAmount;
 
         return {
           id: index,
           numberPairs: bet.numberPair,
-          calculatedAmount: +bet.bigForecastAmount + +bet.smallForecastAmount,
+          calculatedAmount: bettingAmount,
+          numberSize: numberPairs.size,
+          allNumberPairs: Array.from(numberPairs),
         };
       });
 
@@ -400,20 +407,20 @@ export class BetService implements OnModuleInit {
   }
   private async validateBets(payload: BetDto[]) {
     const currentEpoch = await this._getCurrentEpoch();
-
-    const allEpochs = payload.map((bet) => bet.epochs).flat();
     const numberPairs = payload.map((bet) => bet.numberPair);
 
     const allGamesArr = await this.gameRepository.find({
       where: {
-        epoch: In(allEpochs),
+        isClosed: false,
+      },
+      order: {
+        epoch: 'ASC',
       },
     });
 
-    const allGamesObj = allGamesArr.reduce((acc, game) => {
-      acc[game.epoch] = game;
-      return acc;
-    }, {});
+    if (allGamesArr.length < this.MAX_NUMBER_OF_DRAWS) {
+      throw new InternalServerErrorException('Invalid game data');
+    }
 
     const betHistory = await this.betRepository
       .createQueryBuilder('bet')
@@ -425,18 +432,9 @@ export class BetService implements OnModuleInit {
       .getMany();
 
     for (const bet of payload) {
-      bet.epochs.forEach((epoch) => {
-        if (!allGamesObj[epoch]) {
-          throw new BadRequestException('Invalid Epoch');
-        }
-
-        if (allGamesObj[epoch].isClosed) {
-          throw new BadRequestException('Bet for this epoch is closed');
-        }
-
+      for (let i = 0; i < bet.numberOfDraws; i++) {
         if (
-          (new Date().getUTCDate() - allGamesObj[epoch].endDate.getTime()) /
-            1000 >
+          (new Date().getUTCDate() - allGamesArr[i].endDate.getTime()) / 1000 >
           this.maskingIntervalInSeconds
         ) {
           throw new BadRequestException(
@@ -444,24 +442,19 @@ export class BetService implements OnModuleInit {
           );
         }
 
-        if (epoch < +currentEpoch.toString()) {
+        if (+allGamesArr[i].epoch < +currentEpoch) {
           throw new BadRequestException('Epoch is in the past');
         }
 
-        // if (epoch > +currentEpoch.toString() + 30) {
-        //   throw new BadRequestException('Invalid Epoch');
-        // }
-
         const totalAmount = +bet.bigForecastAmount + bet.smallForecastAmount;
-
-        if (totalAmount < +allGamesObj[epoch].minBetAmount) {
+        if (totalAmount < +allGamesArr[i].minBetAmount) {
           throw new BadRequestException('Bet amount is less than min allowed');
         }
 
         const betHistoryForThisBet = betHistory.filter(
           (_betHistory) =>
             _betHistory.numberPair === bet.numberPair &&
-            _betHistory.game.epoch === epoch.toString(),
+            _betHistory.game.epoch === allGamesArr[i].epoch,
         );
 
         const totalPastBetAmountsForThisBet = betHistoryForThisBet.reduce(
@@ -474,7 +467,7 @@ export class BetService implements OnModuleInit {
 
         const drawsForThisNumberPair = payload.filter(
           (_bet) =>
-            _bet.numberPair === bet.numberPair && _bet.epochs.includes(epoch),
+            _bet.numberPair === bet.numberPair && _bet.numberOfDraws - 1 >= i,
         );
 
         const totalAmountForThisNumberPair = drawsForThisNumberPair.reduce(
@@ -487,11 +480,11 @@ export class BetService implements OnModuleInit {
 
         if (
           totalPastBetAmountsForThisBet + totalAmountForThisNumberPair >
-          allGamesObj[epoch].maxBetAmount
+          allGamesArr[i].maxBetAmount
         ) {
           throw new BadRequestException('Bet amount exceeds max allowed');
         }
-      });
+      }
     }
   }
 
@@ -567,10 +560,12 @@ export class BetService implements OnModuleInit {
     creditWalletTxns: CreditWalletTx[];
     totalAmount: number;
   }> {
-    const allEpochs = payload.map((bet) => bet.epochs).flat();
     const allGames = await this.gameRepository.find({
       where: {
-        epoch: In(allEpochs),
+        isClosed: false,
+      },
+      order: {
+        epoch: 'ASC',
       },
     });
 
@@ -590,15 +585,13 @@ export class BetService implements OnModuleInit {
         );
       }
 
-      return bet.epochs.map((epoch) => {
+      for (let i = 0; i < bet.numberOfDraws; i++) {
         numberPairs.forEach((numberPair) => {
           const betOrder = new BetOrder();
           betOrder.numberPair = numberPair.toString();
           betOrder.bigForecastAmount = bet.bigForecastAmount;
           betOrder.smallForecastAmount = bet.smallForecastAmount;
-          betOrder.game = allGames.find(
-            (game) => game.epoch === epoch.toString(),
-          );
+          betOrder.game = allGames[i];
 
           const {
             creditRemaining: creditAmountRemaining,
@@ -628,7 +621,7 @@ export class BetService implements OnModuleInit {
 
           betOrders.push(betOrder);
         });
-      });
+      }
     });
 
     return {
