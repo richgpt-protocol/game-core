@@ -9,7 +9,15 @@ import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
 import { ConfigService } from 'src/config/config.service';
+import { GameUsdTx } from './entities/game-usd-tx.entity';
 dotenv.config();
+
+type TransactionHistory = {
+  txType: string;
+  txAmount: number;
+  createdDate: Date;
+  status: string;
+};
 
 @Injectable()
 export class WalletService {
@@ -19,6 +27,8 @@ export class WalletService {
     private userWalletRepository: Repository<UserWallet>,
     @InjectRepository(WalletTx)
     private walletTxRepository: Repository<WalletTx>,
+    @InjectRepository(GameUsdTx)
+    private gameUsdTxRepository: Repository<GameUsdTx>,
     private datasource: DataSource,
     private configService: ConfigService,
   ) {
@@ -93,23 +103,55 @@ export class WalletService {
     return levelData.level === 1 ? 0 : this.levelMap[levelData.level - 2].xp;
   }
 
-  async getWalletTx(userId: number, count: number) {
+  async getWalletTx(
+    userId: number,
+    count: number,
+  ): Promise<Array<TransactionHistory>> {
     const wallet = await this.userWalletRepository.findOne({
       where: { userId },
     });
-    const walletTxs = await this.walletTxRepository.find({
-      where: {
-        userWalletId: wallet.id,
-        status: 'S',
-        txType: Not('GAME_TRANSACTION'),
-      },
-      order: { createdDate: 'DESC' },
+
+    const gameTxnsDb = await this.gameUsdTxRepository
+      .createQueryBuilder('gameUsdTx')
+      .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
+      .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
+      .where('gameUsdTx.status = :status', { status: 'S' })
+      .andWhere(
+        'walletTxs.userWalletId = :userWalletId AND walletTxs.txType != :txType',
+        {
+          userWalletId: wallet.id,
+          txType: 'GAME_TRANSACTION',
+        },
+      )
+      .orWhere('creditWalletTx.walletId = :walletId', {
+        walletId: wallet.id,
+      })
+      .getMany();
+
+    const allTxs = gameTxnsDb.map((gameUsdTx) => {
+      let amount = 0;
+
+      if (gameUsdTx.walletTxs[0]) {
+        amount = gameUsdTx.walletTxs[0].txAmount;
+      }
+
+      if (gameUsdTx.creditWalletTx) {
+        amount = Number(amount) + Number(gameUsdTx.creditWalletTx.amount);
+      }
+
+      return {
+        txType: gameUsdTx.creditWalletTx
+          ? gameUsdTx.creditWalletTx.txType
+          : gameUsdTx.walletTxs[0].txType,
+        txAmount: amount,
+        createdDate: gameUsdTx.walletTxs[0]
+          ? gameUsdTx.walletTxs[0].createdDate
+          : gameUsdTx.creditWalletTx.createdDate,
+        status: gameUsdTx.status,
+      };
     });
 
-    return walletTxs.map((walletTx) => {
-      const { id, txHash, updatedDate, userWalletId, ...rest } = walletTx;
-      return rest;
-    });
+    return allTxs;
   }
 
   async getTicket(userId: number) {
