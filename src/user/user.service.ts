@@ -513,6 +513,7 @@ export class UserService {
         const creditTx = await this.processSignUpBonus(
           walletAddress,
           queryRunner,
+          referralUserId,
         );
 
         if (creditTx) {
@@ -815,6 +816,7 @@ export class UserService {
         const creditTx = await this.processSignUpBonus(
           userWallet.walletAddress,
           queryRunner,
+          user.referralUserId,
         );
 
         if (creditTx) {
@@ -851,8 +853,37 @@ export class UserService {
   private async processSignUpBonus(
     walletAddress: string,
     queryRunner: QueryRunner,
+    referralUserId?: number,
   ): Promise<CreditWalletTx> {
     try {
+      if (referralUserId) {
+        const referrer = await queryRunner.manager.findOne(User, {
+          where: { id: referralUserId },
+        });
+
+        const ignoredReferrersSetting = await queryRunner.manager.findOne(
+          Setting,
+          {
+            where: {
+              key: SettingEnum.FILTERED_REFERRAL_CODES,
+            },
+          },
+        );
+
+        const ignoredRefferers: Array<string> | null =
+          ignoredReferrersSetting.value
+            ? JSON.parse(ignoredReferrersSetting.value)
+            : null;
+
+        if (
+          ignoredRefferers &&
+          ignoredRefferers.length > 0 &&
+          ignoredRefferers.includes(referrer.referralCode)
+        ) {
+          return;
+        }
+      }
+
       const signupBonusSetting = await queryRunner.manager.findOne(Setting, {
         where: {
           key: SettingEnum.ENABLE_SIGNUP_BONUS,

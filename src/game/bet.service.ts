@@ -50,6 +50,8 @@ import {
   WalletTxType,
 } from 'src/shared/enum/txType.enum';
 import { PointTxType } from 'src/shared/enum/point-tx.enum';
+import { Setting } from 'src/setting/entities/setting.entity';
+import { SettingEnum } from 'src/shared/enum/setting.enum';
 
 interface SubmitBetJobDTO {
   userWalletId: number;
@@ -151,6 +153,7 @@ export class BetService implements OnModuleInit {
         .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
         .orderBy('gameUsdTx.id', 'DESC')
         .where('gameUsdTx.status = :status', { status: TxStatus.SUCCESS })
+        .andWhere('walletTx.txType = :txType', { txType: WalletTxType.PLAY })
         .limit(count)
         .orderBy('betOrder.createdDate', 'DESC')
         .getMany();
@@ -1108,6 +1111,28 @@ export class BetService implements OnModuleInit {
         .getOne();
 
       if (!userInfo || userInfo.referralUserId == null) return;
+
+      const ignoredReferrersSetting = await queryRunner.manager.findOne(
+        Setting,
+        {
+          where: {
+            key: SettingEnum.FILTERED_REFERRAL_CODES,
+          },
+        },
+      );
+
+      const ignoredRefferers: Array<string> | null =
+        ignoredReferrersSetting.value
+          ? JSON.parse(ignoredReferrersSetting.value)
+          : null;
+
+      if (
+        ignoredRefferers &&
+        ignoredRefferers.length > 0 &&
+        ignoredRefferers.includes(userInfo.referralUser.referralCode)
+      ) {
+        return;
+      }
 
       const referralUserInfo = await queryRunner.manager.findOne(User, {
         where: {

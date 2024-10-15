@@ -918,6 +918,27 @@ export class DepositService implements OnModuleInit {
         return;
       }
 
+      const ignoredReferrersSetting = await queryRunner.manager.findOne(
+        Setting,
+        {
+          where: {
+            key: SettingEnum.FILTERED_REFERRAL_CODES,
+          },
+        },
+      );
+
+      const ignoredRefferers: Array<string> | null =
+        ignoredReferrersSetting.value
+          ? JSON.parse(ignoredReferrersSetting.value)
+          : null;
+
+      if (
+        ignoredRefferers &&
+        ignoredRefferers.length > 0 &&
+        ignoredRefferers.includes(userInfo.referralUser.referralCode)
+      ) {
+        return;
+      }
       // create pointTx
       const referrerXp = this.pointService.getReferralDepositXp(
         Number(depositAmount),
