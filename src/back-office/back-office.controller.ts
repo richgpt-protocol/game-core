@@ -1,4 +1,13 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, Render, Request } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Render,
+  Request,
+} from '@nestjs/common';
 import { BackOfficeService } from './back-office.service';
 import { ApiExcludeEndpoint, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from 'src/config/config.service';
@@ -104,6 +113,7 @@ export class BackOfficeController {
     };
   }
 
+  @SecureEJS(null, UserRole.ADMIN)
   @Get('pending-withdraw')
   @ApiExcludeEndpoint()
   @Render('pending-withdraw')
@@ -112,6 +122,24 @@ export class BackOfficeController {
     @Query('limit') limit?: number,
   ) {
     const data = await this.backOfficeService.getPendingWithdraw(page, limit);
+    return {
+      data: {
+        transactions: data.data,
+        currentPage: data.currentPage,
+        totalPages: data.totalPages,
+      },
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('pending-deposit')
+  @ApiExcludeEndpoint()
+  @Render('pending-deposits')
+  async pendingDeposits(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const data = await this.backOfficeService.getPendingDeposits(page, limit);
     return {
       data: {
         transactions: data.data,
@@ -252,9 +280,7 @@ export class BackOfficeController {
   @SecureEJS(null, UserRole.ADMIN)
   @Get('sales-report-epoch')
   @Render('sales-report-epoch')
-  async salesReportByEpoch(
-    @Query('epoch') epoch: number,
-  ) {
+  async salesReportByEpoch(@Query('epoch') epoch: number) {
     const result = await this.backOfficeService.salesReportByEpoch(epoch);
     return {
       data: {
@@ -313,12 +339,19 @@ export class BackOfficeController {
           fnee: this.getValue(res.data, 'fixedNumberEndEpoch'),
 
           app: this.getValue(res.data, 'allowPrizePriority'),
-          afp: this.getValue(res.data, 'allowFirstPrize') === '1' ? true : false,
-          asp: this.getValue(res.data, 'allowSecondPrize') === '1' ? true : false,
-          atp: this.getValue(res.data, 'allowThirdPrize') === '1' ? true : false,
-          aspp: this.getValue(res.data, 'allowSpecialPrize') === '1' ? true : false,
+          afp:
+            this.getValue(res.data, 'allowFirstPrize') === '1' ? true : false,
+          asp:
+            this.getValue(res.data, 'allowSecondPrize') === '1' ? true : false,
+          atp:
+            this.getValue(res.data, 'allowThirdPrize') === '1' ? true : false,
+          aspp:
+            this.getValue(res.data, 'allowSpecialPrize') === '1' ? true : false,
           asppc: this.getValue(res.data, 'allowSpecialPrizeCount'),
-          acp: this.getValue(res.data, 'allowConsolationPrize') === '1' ? true : false,
+          acp:
+            this.getValue(res.data, 'allowConsolationPrize') === '1'
+              ? true
+              : false,
           acpc: this.getValue(res.data, 'allowConsolationPrizeCount'),
           apse: this.getValue(res.data, 'allowPrizeStartEpoch'),
           apee: this.getValue(res.data, 'allowPrizeEndEpoch'),
@@ -331,65 +364,125 @@ export class BackOfficeController {
   @Post('update-pa')
   @ApiExcludeEndpoint()
   @Render('pa')
-  async updatePrizeAlgo(
-    @Request() req,
-    @Body() payload
-  ) {
+  async updatePrizeAlgo(@Request() req, @Body() payload) {
     const onlyNumber = (name: string, value: any): number => {
-      if (isNaN(Number(value))) throw new BadRequestException(`${name} must be a number`);
-      if (name === 'fixedNumberIndex' && (Number(value) < 0 || Number(value) > 32)) throw new BadRequestException('fixedNumberIndex must be between 0 and 32');
+      if (isNaN(Number(value)))
+        throw new BadRequestException(`${name} must be a number`);
+      if (
+        name === 'fixedNumberIndex' &&
+        (Number(value) < 0 || Number(value) > 32)
+      )
+        throw new BadRequestException(
+          'fixedNumberIndex must be between 0 and 32',
+        );
       return Number(value);
-    }
+    };
 
     const only123 = (value: any): number => {
-      if (!value) throw new BadRequestException('leastFirstRandomLevel is required');
-      if (value !== '1' && value !== '2' && value !== '3') throw new BadRequestException('leastFirstRandomLevel must be 1, 2, or 3');
+      if (!value)
+        throw new BadRequestException('leastFirstRandomLevel is required');
+      if (value !== '1' && value !== '2' && value !== '3')
+        throw new BadRequestException(
+          'leastFirstRandomLevel must be 1, 2, or 3',
+        );
       return Number(value);
-    }
+    };
 
     const onlyNumberPair = (value: any): string => {
-      if (!value) throw new BadRequestException('fixedNumberNumberPair is required');
-      if (value.length !== 4) throw new BadRequestException('fixedNumberNumberPair must has 4 digits');
-      if (isNaN(Number(value))) throw new BadRequestException('fixedNumberNumberPair must be 4 digits number');
+      if (!value)
+        throw new BadRequestException('fixedNumberNumberPair is required');
+      if (value.length !== 4)
+        throw new BadRequestException(
+          'fixedNumberNumberPair must has 4 digits',
+        );
+      if (isNaN(Number(value)))
+        throw new BadRequestException(
+          'fixedNumberNumberPair must be 4 digits number',
+        );
       return value;
-    }
+    };
 
     const onlyBoolean = (name: string, value: any): boolean => {
       if (value === 'true') return true;
       else if (value === 'false') return false;
       else throw new BadRequestException(`${name} must be true or false`);
-    }
+    };
 
-    const maxTicketPriority = payload.mtp ? onlyNumber('maxTicketPriority', payload.mtp) : null;
-    const maxTicketFirstPrizeCount = payload.mtfpc ? onlyNumber('maxTicketFirstPrizeCount', payload.mtfpc) : null;
-    const maxTicketSecondPrizeCount = payload.mtspc ? onlyNumber('maxTicketSecondPrizeCount', payload.mtspc) : null;
-    const maxTicketThirdPrizeCount = payload.mttpc ? onlyNumber('maxTicketThirdPrizeCount', payload.mttpc) : null;
-    const maxTicketSpecialPrizeCount = payload.mtsppc ? onlyNumber('maxTicketSpecialPrizeCount', payload.mtsppc) : null;
-    const maxTicketConsolationPrizeCount = payload.mtcpc ? onlyNumber('maxTicketConsolationPrizeCount', payload.mtcpc) : null;
-    const maxTicketStartEpoch = payload.mtse ? onlyNumber('maxTicketStartEpoch', payload.mtse) : null;
-    const maxTicketEndEpoch = payload.mtee ? onlyNumber('maxTicketEndEpoch', payload.mtee) : null;
+    const maxTicketPriority = payload.mtp
+      ? onlyNumber('maxTicketPriority', payload.mtp)
+      : null;
+    const maxTicketFirstPrizeCount = payload.mtfpc
+      ? onlyNumber('maxTicketFirstPrizeCount', payload.mtfpc)
+      : null;
+    const maxTicketSecondPrizeCount = payload.mtspc
+      ? onlyNumber('maxTicketSecondPrizeCount', payload.mtspc)
+      : null;
+    const maxTicketThirdPrizeCount = payload.mttpc
+      ? onlyNumber('maxTicketThirdPrizeCount', payload.mttpc)
+      : null;
+    const maxTicketSpecialPrizeCount = payload.mtsppc
+      ? onlyNumber('maxTicketSpecialPrizeCount', payload.mtsppc)
+      : null;
+    const maxTicketConsolationPrizeCount = payload.mtcpc
+      ? onlyNumber('maxTicketConsolationPrizeCount', payload.mtcpc)
+      : null;
+    const maxTicketStartEpoch = payload.mtse
+      ? onlyNumber('maxTicketStartEpoch', payload.mtse)
+      : null;
+    const maxTicketEndEpoch = payload.mtee
+      ? onlyNumber('maxTicketEndEpoch', payload.mtee)
+      : null;
 
-    const leastFirstPriority = payload.lfp ? onlyNumber('leastFirstPriority', payload.lfp) : null;
+    const leastFirstPriority = payload.lfp
+      ? onlyNumber('leastFirstPriority', payload.lfp)
+      : null;
     const leastFirstRandomLevel = only123(payload.lfrl) as 1 | 2 | 3;
-    const leastFirstStartEpoch = payload.lfse ? onlyNumber('leastFirstStartEpoch', payload.lfse) : null;
-    const leastFirstEndEpoch = payload.lfee ? onlyNumber('leastFirstEndEpoch', payload.lfee) : null;
+    const leastFirstStartEpoch = payload.lfse
+      ? onlyNumber('leastFirstStartEpoch', payload.lfse)
+      : null;
+    const leastFirstEndEpoch = payload.lfee
+      ? onlyNumber('leastFirstEndEpoch', payload.lfee)
+      : null;
 
-    const fixedNumberPriority = payload.fnp ? onlyNumber('fixedNumberPriority', payload.fnp) : null;
-    const fixedNumberNumberPair = payload.fnnp ? onlyNumberPair(payload.fnnp) : null;
-    const fixedNumberIndex = payload.fni ? onlyNumber('fixedNumberIndex', payload.fni) : null;
-    const fixedNumberStartEpoch = payload.fnse ? onlyNumber('fixedNumberStartEpoch', payload.fnse) : null;
-    const fixedNumberEndEpoch = payload.fnee ? onlyNumber('fixedNumberEndEpoch', payload.fnee) : null;
+    const fixedNumberPriority = payload.fnp
+      ? onlyNumber('fixedNumberPriority', payload.fnp)
+      : null;
+    const fixedNumberNumberPair = payload.fnnp
+      ? onlyNumberPair(payload.fnnp)
+      : null;
+    const fixedNumberIndex = payload.fni
+      ? onlyNumber('fixedNumberIndex', payload.fni)
+      : null;
+    const fixedNumberStartEpoch = payload.fnse
+      ? onlyNumber('fixedNumberStartEpoch', payload.fnse)
+      : null;
+    const fixedNumberEndEpoch = payload.fnee
+      ? onlyNumber('fixedNumberEndEpoch', payload.fnee)
+      : null;
 
-    const allowPrizePriority = payload.app ? onlyNumber('allowPrizePriority', payload.app) : null;
+    const allowPrizePriority = payload.app
+      ? onlyNumber('allowPrizePriority', payload.app)
+      : null;
     const allowFirstPrize = onlyBoolean('allowFirstPrize', payload.afp);
     const allowSecondPrize = onlyBoolean('allowSecondPrize', payload.asp);
     const allowThirdPrize = onlyBoolean('allowThirdPrize', payload.atp);
     const allowSpecialPrize = onlyBoolean('allowSpecialPrize', payload.aspp);
-    const allowSpecialPrizeCount = payload.asppc ? onlyNumber('allowSpecialPrizeCount', payload.asppc) : null;
-    const allowConsolationPrize = onlyBoolean('allowConsolationPrize', payload.acp);
-    const allowConsolationPrizeCount = payload.acpc ? onlyNumber('allowConsolationPrizeCount', payload.acpc) : null;
-    const allowPrizeStartEpoch = payload.apse ? onlyNumber('allowPrizeStartEpoch', payload.apse) : null;
-    const allowPrizeEndEpoch = payload.apee ? onlyNumber('allowPrizeEndEpoch', payload.apee) : null;
+    const allowSpecialPrizeCount = payload.asppc
+      ? onlyNumber('allowSpecialPrizeCount', payload.asppc)
+      : null;
+    const allowConsolationPrize = onlyBoolean(
+      'allowConsolationPrize',
+      payload.acp,
+    );
+    const allowConsolationPrizeCount = payload.acpc
+      ? onlyNumber('allowConsolationPrizeCount', payload.acpc)
+      : null;
+    const allowPrizeStartEpoch = payload.apse
+      ? onlyNumber('allowPrizeStartEpoch', payload.apse)
+      : null;
+    const allowPrizeEndEpoch = payload.apee
+      ? onlyNumber('allowPrizeEndEpoch', payload.apee)
+      : null;
 
     const prizeAlgo = [
       { key: 'maxTicketPriority', value: maxTicketPriority },
@@ -397,7 +490,10 @@ export class BackOfficeController {
       { key: 'maxTicketSecondPrizeCount', value: maxTicketSecondPrizeCount },
       { key: 'maxTicketThirdPrizeCount', value: maxTicketThirdPrizeCount },
       { key: 'maxTicketSpecialPrizeCount', value: maxTicketSpecialPrizeCount },
-      { key: 'maxTicketConsolationPrizeCount', value: maxTicketConsolationPrizeCount },
+      {
+        key: 'maxTicketConsolationPrizeCount',
+        value: maxTicketConsolationPrizeCount,
+      },
       { key: 'maxTicketStartEpoch', value: maxTicketStartEpoch },
       { key: 'maxTicketEndEpoch', value: maxTicketEndEpoch },
 
@@ -422,7 +518,7 @@ export class BackOfficeController {
       { key: 'allowConsolationPrizeCount', value: allowConsolationPrizeCount },
       { key: 'allowPrizeStartEpoch', value: allowPrizeStartEpoch },
       { key: 'allowPrizeEndEpoch', value: allowPrizeEndEpoch },
-    ]
+    ];
 
     const adminId = req.user.userId;
     await this.backOfficeService.updatePrizeAlgo(adminId, prizeAlgo);
@@ -455,12 +551,19 @@ export class BackOfficeController {
           fnee: this.getValue(res.data, 'fixedNumberEndEpoch'),
 
           app: this.getValue(res.data, 'allowPrizePriority'),
-          afp: this.getValue(res.data, 'allowFirstPrize') === '1' ? true : false,
-          asp: this.getValue(res.data, 'allowSecondPrize') === '1' ? true : false,
-          atp: this.getValue(res.data, 'allowThirdPrize') === '1' ? true : false,
-          aspp: this.getValue(res.data, 'allowSpecialPrize') === '1' ? true : false,
+          afp:
+            this.getValue(res.data, 'allowFirstPrize') === '1' ? true : false,
+          asp:
+            this.getValue(res.data, 'allowSecondPrize') === '1' ? true : false,
+          atp:
+            this.getValue(res.data, 'allowThirdPrize') === '1' ? true : false,
+          aspp:
+            this.getValue(res.data, 'allowSpecialPrize') === '1' ? true : false,
           asppc: this.getValue(res.data, 'allowSpecialPrizeCount'),
-          acp: this.getValue(res.data, 'allowConsolationPrize') === '1' ? true : false,
+          acp:
+            this.getValue(res.data, 'allowConsolationPrize') === '1'
+              ? true
+              : false,
           acpc: this.getValue(res.data, 'allowConsolationPrizeCount'),
           apse: this.getValue(res.data, 'allowPrizeStartEpoch'),
           apee: this.getValue(res.data, 'allowPrizeEndEpoch'),

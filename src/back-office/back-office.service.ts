@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
@@ -226,12 +230,54 @@ export class BackOfficeService {
         };
       });
 
-      console.log(transactions);
+      // console.log(transactions);
 
       return {
         data: transactions,
         currentPage: page,
         totalPages: Math.ceil(data[1] / limit),
+      };
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Internal Server Error');
+    }
+  }
+
+  async getPendingDeposits(page: number = 1, limit: number = 10): Promise<any> {
+    try {
+      const pendingDeposits = await this.walletTxRepository
+        .createQueryBuilder('walletTx')
+        .select([
+          'walletTx.id',
+          'walletTx.txType',
+          'walletTx.txAmount',
+          'walletTx.status',
+          'walletTx.depositTx',
+          'walletTx.createdDate',
+          'walletTx.userWalletId',
+          'userWallet.walletAddress',
+          'userWallet.userId',
+        ])
+        .leftJoin('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('walletTx.depositTx', 'depositTx')
+        .where('walletTx.txType = :type', { type: 'DEPOSIT' })
+        .andWhere('walletTx.status = :status', { status: 'PA' })
+        .orderBy('walletTx.createdDate', 'DESC')
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getManyAndCount();
+
+      const deposits = pendingDeposits[0].map((deposit) => {
+        return {
+          ...deposit,
+          createdDate: deposit.createdDate.toLocaleDateString(),
+        };
+      });
+
+      return {
+        data: deposits,
+        currentPage: page,
+        totalPages: Math.ceil(pendingDeposits[1] / limit),
       };
     } catch (error) {
       console.log(error);
@@ -673,7 +719,7 @@ export class BackOfficeService {
       };
     }
 
-    let result = {
+    const result = {
       totalBetUser: 0,
       totalBetCount: 0,
       totalBetAmount: 0,
@@ -690,16 +736,23 @@ export class BackOfficeService {
       },
     };
 
-    let totalBetUser = new Set();
+    const totalBetUser = new Set();
     for (const betOrder of betOrders) {
       totalBetUser.add(betOrder.walletTx.userWalletId);
       result.totalBetCount += 1;
-      const betAmount = Number(betOrder.bigForecastAmount) + Number(betOrder.smallForecastAmount);
+      const betAmount =
+        Number(betOrder.bigForecastAmount) +
+        Number(betOrder.smallForecastAmount);
       result.totalBetAmount += betAmount;
-      result.totalCreditUsed += betOrder.creditWalletTx ? Number(betOrder.creditWalletTx.amount) : 0;
+      result.totalCreditUsed += betOrder.creditWalletTx
+        ? Number(betOrder.creditWalletTx.amount)
+        : 0;
       result.totalWinCount += betOrder.availableClaim ? 1 : 0;
       if (betOrder.availableClaim) {
-        const { winAmount, prizeCategory } = this.getWinAmountAndPrizeCategory(betOrder, drawResults);
+        const { winAmount, prizeCategory } = this.getWinAmountAndPrizeCategory(
+          betOrder,
+          drawResults,
+        );
         result.totalWinAmount += winAmount;
         result.totalProfit += betAmount - winAmount;
         if (prizeCategory === '1') {
@@ -730,16 +783,23 @@ export class BackOfficeService {
     };
   }
 
-  private getWinAmountAndPrizeCategory(betOrder: BetOrder, drawResults: DrawResult[]): { winAmount: number, prizeCategory: string } {
+  private getWinAmountAndPrizeCategory(
+    betOrder: BetOrder,
+    drawResults: DrawResult[],
+  ): { winAmount: number; prizeCategory: string } {
     const drawResult = drawResults.find(
       (drawResult) => drawResult.numberPair === betOrder.numberPair,
     );
     // drawResult must not null because betOrder.availableClaim is true in parent function
-    const winAmount = this.claimService.calculateWinningAmount(betOrder, drawResult);
+    const winAmount = this.claimService.calculateWinningAmount(
+      betOrder,
+      drawResult,
+    );
     return {
-      winAmount: winAmount.bigForecastWinAmount + winAmount.smallForecastWinAmount,
+      winAmount:
+        winAmount.bigForecastWinAmount + winAmount.smallForecastWinAmount,
       prizeCategory: drawResult.prizeCategory,
-    }
+    };
   }
 
   async getCurrentPrizeAlgo() {

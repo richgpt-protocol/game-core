@@ -12,7 +12,7 @@ export class DepositTx {
   id: number;
 
   @Column({
-    comment: 'token address deposited'
+    comment: 'token address deposited',
   })
   currency: string;
 
@@ -42,6 +42,12 @@ export class DepositTx {
     nullable: true,
   })
   txHash: string;
+
+  @Column({
+    nullable: true,
+    comment: 'Note from admin when deposit is approved/rejected by admin',
+  })
+  note: string;
 
   @Column()
   walletTxId: number;
