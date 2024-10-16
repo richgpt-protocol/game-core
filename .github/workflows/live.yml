@@ -1,0 +1,28 @@
+name: Build and Push to GCR
+
+on:
+  push:
+    branches:
+      - "live"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Authenticate with GCP
+        run: echo "${{ secrets.GCP_SA_KEY }}" | gcloud auth activate-service-account --key-file=-
+
+      - name: Set GCP Project
+        run: gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker
+
+      - name: Build Docker Image
+        run: docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/core-backend:latest .
+
+      - name: Push to GCR
+        run: docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/core-backend:latest
