@@ -43,6 +43,7 @@ import { Setting } from 'src/setting/entities/setting.entity';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
+import { keywords } from 'src/shared/constants/referralCodeKeyword.constant';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -513,6 +514,7 @@ export class UserService {
         const creditTx = await this.processSignUpBonus(
           walletAddress,
           queryRunner,
+          referralUserId,
         );
 
         if (creditTx) {
@@ -815,6 +817,7 @@ export class UserService {
         const creditTx = await this.processSignUpBonus(
           userWallet.walletAddress,
           queryRunner,
+          user.referralUserId,
         );
 
         if (creditTx) {
@@ -851,8 +854,37 @@ export class UserService {
   private async processSignUpBonus(
     walletAddress: string,
     queryRunner: QueryRunner,
+    referralUserId?: number,
   ): Promise<CreditWalletTx> {
     try {
+      if (referralUserId) {
+        const referrer = await queryRunner.manager.findOne(User, {
+          where: { id: referralUserId },
+        });
+
+        const ignoredReferrersSetting = await queryRunner.manager.findOne(
+          Setting,
+          {
+            where: {
+              key: SettingEnum.FILTERED_REFERRAL_CODES,
+            },
+          },
+        );
+
+        const ignoredRefferers: Array<string> | null =
+          ignoredReferrersSetting.value
+            ? JSON.parse(ignoredReferrersSetting.value)
+            : null;
+
+        if (
+          ignoredRefferers &&
+          ignoredRefferers.length > 0 &&
+          ignoredRefferers.includes(referrer.referralCode)
+        ) {
+          return;
+        }
+      }
+
       const signupBonusSetting = await queryRunner.manager.findOne(Setting, {
         where: {
           key: SettingEnum.ENABLE_SIGNUP_BONUS,
@@ -963,7 +995,9 @@ export class UserService {
   }
 
   private generateReferralCode(id: number) {
-    return RandomUtil.generateRandomCode(8) + id;
+    // return RandomUtil.generateRandomCode(8) + id;
+    const randomKeyword = keywords[Math.floor(Math.random() * keywords.length)];
+    return `fuyo-${randomKeyword}-${id}`;
   }
 
   private async verifyPassword(
