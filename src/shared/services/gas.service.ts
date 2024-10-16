@@ -180,11 +180,9 @@ export class GasService {
 
   private _isAdmin(userAddress: string): boolean {
     const adminAddress = [
-      process.env.WALLET_CREATION_BOT_ADDRESS,
       process.env.DEPOSIT_BOT_ADDRESS,
       process.env.PAYOUT_BOT_ADDRESS,
       process.env.RESULT_BOT_ADDRESS,
-      process.env.POINT_REWARD_BOT_ADDRESS,
       process.env.HELPER_BOT_ADDRESS,
     ]
     return adminAddress.includes(userAddress);

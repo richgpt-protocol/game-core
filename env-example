@@ -79,11 +79,9 @@ CORE_CONTRACT_ADDRESS=
 HELPER_CONTRACT_ADDRESS=
 
 # bot address
-WALLET_CREATION_BOT_ADDRESS=
 DEPOSIT_BOT_ADDRESS=
 PAYOUT_BOT_ADDRESS=
 RESULT_BOT_ADDRESS=
-POINT_REWARD_BOT_ADDRESS=
 HELPER_BOT_ADDRESS=
 SUPPLY_ACCOUNT_ADDRESS= # account to supply all native token, must often check balance, need to make sure there is balance for all deposit support chain
 COMMISION_DISTRIBUTOR_BOT_ADDRESS= #Address which can call distributeReferralFee()
