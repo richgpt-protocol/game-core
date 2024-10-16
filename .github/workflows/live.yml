@@ -23,10 +23,10 @@ jobs:
         run: gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker us-docker.pkg.dev
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
       - name: Build Docker Image
-        run: docker build -t us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/core-backend/live:latest .
+        run: docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/core-backend/live:latest .
 
       - name: Push to GAR
-        run: docker push us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/core-backend/live:latest
+        run: docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/core-backend/live:latest
