@@ -258,6 +258,7 @@ export class BackOfficeController {
     const result = await this.backOfficeService.salesReportByEpoch(epoch);
     return {
       data: {
+        currentEpoch: result.currentEpoch,
         bets: result.data,
       },
     };

@@ -645,6 +645,10 @@ export class BackOfficeService {
   }
 
   async salesReportByEpoch(epoch: number) {
+    const game = await this.gameRepository.findOne({
+      where: { isClosed: false },
+    });
+
     const betOrders = await this.betOrderRepository
       .createQueryBuilder('betOrder')
       .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
@@ -656,6 +660,7 @@ export class BackOfficeService {
     if (betOrders.length === 0) {
       // no bet in this epoch
       return {
+        currentEpoch: game.epoch,
         data: null,
       };
     }
@@ -669,6 +674,7 @@ export class BackOfficeService {
     if (drawResults.length === 0) {
       // draw result for this epoch haven't come out yet
       return {
+        currentEpoch: game.epoch,
         data: null,
       };
     }
@@ -726,6 +732,7 @@ export class BackOfficeService {
     result.totalBetUser = totalBetUser.size;
 
     return {
+      currentEpoch: game.epoch,
       data: result,
     };
   }
