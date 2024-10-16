@@ -234,18 +234,18 @@ export class UserService {
       },
     });
 
+    const pendingAmountResult = await this.dataSource.manager.query(
+      `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
+        WHERE
+          userWalletId = ${result.wallet.id} AND
+          txType IN ('REDEEM', 'PLAY', 'INTERNAL_TRANSFER') AND
+          status IN ('P', 'PD', 'PA')`,
+    );
+
     {
       const { id, updatedDate, userId, ...wallet } = result.wallet;
       result.wallet = wallet as UserWallet;
     }
-
-    const pendingAmountResult = await this.dataSource.manager.query(
-      `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
-        WHERE
-          userWalletId = ${userId} AND
-          txType IN ('REDEEM', 'PLAY', 'INTERNAL_TRANSFER') AND
-          status IN ('P', 'PD', 'PA')`,
-    );
 
     const pendingAmount = Number(pendingAmountResult[0]?.pendingAmount) || 0;
     const withdrawableBalance =
