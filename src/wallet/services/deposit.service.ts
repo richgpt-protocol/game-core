@@ -12,7 +12,7 @@ import { ConfigService } from 'src/config/config.service';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
-import { DepositDTO } from '../dto/deposit.dto';
+import { DepositDTO, ReviewDepositDto } from '../dto/deposit.dto';
 import { ethers, parseEther, parseUnits } from 'ethers';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { User } from 'src/user/entities/user.entity';
@@ -118,7 +118,11 @@ export class DepositService implements OnModuleInit {
         where: {
           walletAddress: payload.walletAddress,
         },
-        relations: ['user'],
+      });
+      const user = await queryRunner.manager.findOne(User, {
+        where: {
+          id: userWallet.userId,
+        },
       });
       const miniGameUSDTSenderSetting = await queryRunner.manager.findOne(
         Setting,
@@ -151,15 +155,41 @@ export class DepositService implements OnModuleInit {
         return;
       }
 
-      const depositTx = await this._processDeposit(payload, queryRunner);
+      const deposit_notify_threshold = await queryRunner.manager.findOne(
+        Setting,
+        {
+          where: {
+            key: SettingEnum.DEPOSIT_NOTIFY_THRESHOLD,
+          },
+        },
+      );
+      const canProceed =
+        payload.amount <= Number(deposit_notify_threshold.value);
+
+      const depositTx = await this._processDeposit(
+        payload,
+        queryRunner,
+        canProceed,
+      );
 
       await queryRunner.commitTransaction();
 
-      await this.addToEscrowQueue(depositTx.id);
-
-      if (userWallet.user.referralUserId) {
+      if (canProceed) {
+        await this.addToEscrowQueue(depositTx.id);
+      } else {
+        // deposit amount more than deposit_notify_threshold, inform admin
         await this.adminNotificationService.setAdminNotification(
-          `User ${userWallet.user.uid}, referred by ${userWallet.user.referralUserId}, has deposited ${payload.amount} USD`,
+          `Deposit of ${payload.amount} ${payload.tokenAddress} received at ${payload.walletAddress}. Please Approve/Reject in backOffice`,
+          'DEPOSIT_THRESHOLD_NOTIFICATION',
+          'Deposit Threshold Notification',
+          false,
+          true,
+        );
+      }
+
+      if (user.referralUserId) {
+        await this.adminNotificationService.setAdminNotification(
+          `User ${user.uid}, referred by ${user.referralUserId}, has deposited ${payload.amount} USD`,
           'REFERRAL_SUCCESS',
           'Referral Success',
           false,
@@ -195,7 +225,11 @@ export class DepositService implements OnModuleInit {
     }
   }
 
-  private async _processDeposit(payload: DepositDTO, queryRunner: QueryRunner) {
+  private async _processDeposit(
+    payload: DepositDTO,
+    queryRunner: QueryRunner,
+    canProceed: boolean = true,
+  ) {
     try {
       const userWallet = await queryRunner.manager.findOne(UserWallet, {
         where: {
@@ -204,32 +238,13 @@ export class DepositService implements OnModuleInit {
       });
       if (!userWallet) return;
 
-      const deposit_notify_threshold = await queryRunner.manager.findOne(
-        Setting,
-        {
-          where: {
-            key: SettingEnum.DEPOSIT_NOTIFY_THRESHOLD,
-          },
-        },
-      );
-      if (payload.amount >= Number(deposit_notify_threshold.value)) {
-        // deposit amount more than deposit_notify_threshold, inform admin and proceed
-        await this.adminNotificationService.setAdminNotification(
-          `Deposit of ${payload.amount} ${payload.tokenAddress} received at ${payload.walletAddress}`,
-          'DEPOSIT_THRESHOLD_NOTIFICATION',
-          'Deposit Threshold Notification',
-          false,
-          true,
-        );
-      }
-
       let walletTx = new WalletTx();
       walletTx.usdtTx = null;
       walletTx.gameTx = null;
       walletTx.txType = 'DEPOSIT';
       walletTx.txAmount = payload.amount;
       walletTx.txHash = payload.txHash;
-      walletTx.status = 'P';
+      walletTx.status = canProceed ? 'P' : 'PA';
       walletTx.userWalletId = userWallet.id;
       walletTx.userWallet = userWallet;
 
@@ -274,7 +289,7 @@ export class DepositService implements OnModuleInit {
       depositTx.receiverAddress = payload.walletAddress;
       depositTx.chainId = payload.chainId;
       depositTx.isTransferred = false;
-      depositTx.status = 'P';
+      depositTx.status = canProceed ? 'P' : 'PA';
       depositTx.walletTxId = walletTxResult.id;
       depositTx.walletTx = walletTx;
       await queryRunner.manager.save(depositTx);
@@ -298,6 +313,53 @@ export class DepositService implements OnModuleInit {
     } catch (error) {
       this.logger.error('processDeposit() error:', error);
       throw error;
+    }
+  }
+
+  /// Used by Admin to approve/reject deposit
+  async processDepositAdmin(payload: ReviewDepositDto) {
+    const { depositTxId, note, status } = payload;
+    const queryRunner = this.dataSource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      const depositTx = await queryRunner.manager.findOne(DepositTx, {
+        where: {
+          id: depositTxId,
+        },
+        relations: ['walletTx'],
+      });
+
+      if (!depositTx) {
+        throw new BadRequestException('Deposit not found');
+      }
+
+      if (depositTx.status != 'PA' || depositTx.walletTx.status != 'PA') {
+        throw new BadRequestException('Deposit already processed by admin');
+      }
+
+      depositTx.note = note;
+      const dbStatus = status ? 'P' : 'F';
+      depositTx.status = dbStatus;
+      depositTx.walletTx.status = dbStatus;
+
+      await queryRunner.manager.save(depositTx);
+      await queryRunner.manager.save(depositTx.walletTx);
+      await queryRunner.commitTransaction();
+
+      if (status) {
+        await this.addToEscrowQueue(depositTx.id);
+      }
+    } catch (error) {
+      this.logger.error(`processDepositAdmin() error: ${error}`);
+      await queryRunner.rollbackTransaction();
+
+      throw new BadRequestException(
+        `Error processing deposit: ${error.message}`,
+      );
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
@@ -776,6 +838,12 @@ export class DepositService implements OnModuleInit {
         .where('walletTx.id = :id', { id: gameUsdTx.walletTxId })
         .getOne();
 
+      const user = await queryRunner.manager.findOne(User, {
+        where: {
+          id: walletTx.userWallet.userId,
+        },
+      });
+
       // update walletTx
       walletTx.status = 'S';
       walletTx.startingBalance = walletTx.userWallet.walletBalance;
@@ -813,11 +881,7 @@ export class DepositService implements OnModuleInit {
       walletTx.userWallet.pointBalance = pointTxEndingBalance;
       await queryRunner.manager.save(walletTx.userWallet);
 
-      await this.handleReferralFlow(
-        walletTx.userWallet.user.id,
-        walletTx.txAmount,
-        queryRunner,
-      );
+      await this.handleReferralFlow(user.id, walletTx.txAmount, queryRunner);
 
       await queryRunner.commitTransaction();
       if (!queryRunner.isReleased) await queryRunner.release();
