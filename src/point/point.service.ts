@@ -427,7 +427,10 @@ export class PointService {
   }
 
   async getReferralPrizeBonusTier(level: number): Promise<number> {
-    const tier = Math.ceil(level / 10); //each tier has 10 levels
+    // each tier has 10 levels started from level 10
+    // i.e. level 10-19 is tier 1, level 20-29 is tier 2, etc.
+    // under level 10 no referral prize bonus
+    const tier = Math.floor(level / 10);
     const setting = await this.settingRepository.findOne({
       where: {
         key: `REFERRAL_PRIZE_BONUS_TIER_${tier}`,
