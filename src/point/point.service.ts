@@ -370,43 +370,43 @@ export class PointService {
     await this.settingRepository.upsert(
       [
         {
-          key: 'referralPrizeBonusTier1',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_1',
           value: data.referralPrizeBonusTier1.toString(),
         },
         {
-          key: 'referralPrizeBonusTier2',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_2',
           value: data.referralPrizeBonusTier2.toString(),
         },
         {
-          key: 'referralPrizeBonusTier3',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_3',
           value: data.referralPrizeBonusTier3.toString(),
         },
         {
-          key: 'referralPrizeBonusTier4',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_4',
           value: data.referralPrizeBonusTier4.toString(),
         },
         {
-          key: 'referralPrizeBonusTier5',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_5',
           value: data.referralPrizeBonusTier5.toString(),
         },
         {
-          key: 'referralPrizeBonusTier6',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_6',
           value: data.referralPrizeBonusTier6.toString(),
         },
         {
-          key: 'referralPrizeBonusTier7',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_7',
           value: data.referralPrizeBonusTier7.toString(),
         },
         {
-          key: 'referralPrizeBonusTier8',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_8',
           value: data.referralPrizeBonusTier8.toString(),
         },
         {
-          key: 'referralPrizeBonusTier9',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_9',
           value: data.referralPrizeBonusTier9.toString(),
         },
         {
-          key: 'referralPrizeBonusTier10',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_10',
           value: data.referralPrizeBonusTier10.toString(),
         },
       ],
@@ -423,7 +423,19 @@ export class PointService {
       },
     });
 
-    return Object.assign({}, ...setting.map((s) => ({ [s.key]: +s.value })));
+    const settingObj = Object.assign({}, ...setting.map((s) => ({ [s.key]: +s.value })));
+    return {
+      referralPrizeBonusTier1: settingObj['REFERRAL_PRIZE_BONUS_TIER_1'],
+      referralPrizeBonusTier2: settingObj['REFERRAL_PRIZE_BONUS_TIER_2'],
+      referralPrizeBonusTier3: settingObj['REFERRAL_PRIZE_BONUS_TIER_3'],
+      referralPrizeBonusTier4: settingObj['REFERRAL_PRIZE_BONUS_TIER_4'],
+      referralPrizeBonusTier5: settingObj['REFERRAL_PRIZE_BONUS_TIER_5'],
+      referralPrizeBonusTier6: settingObj['REFERRAL_PRIZE_BONUS_TIER_6'],
+      referralPrizeBonusTier7: settingObj['REFERRAL_PRIZE_BONUS_TIER_7'],
+      referralPrizeBonusTier8: settingObj['REFERRAL_PRIZE_BONUS_TIER_8'],
+      referralPrizeBonusTier9: settingObj['REFERRAL_PRIZE_BONUS_TIER_9'],
+      referralPrizeBonusTier10: settingObj['REFERRAL_PRIZE_BONUS_TIER_10'],
+    }
   }
 
   async getReferralPrizeBonusTier(level: number): Promise<number> {

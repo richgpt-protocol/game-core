@@ -604,7 +604,6 @@ export class BackOfficeController {
   @Render('set-referral-prize-bonus')
   async setReferralPrizeBonus() {
     const data = await this.pointService.getAllReferralPrizeBonus();
-    console.log(data);
     return {
       data,
     };
