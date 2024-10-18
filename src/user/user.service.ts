@@ -275,10 +275,15 @@ export class UserService {
     // check if referralCode valid
     let referralUserId = null;
     if (payload.referralCode !== null) {
-      const referralUser = await this.userRepository.findOne({
-        where: { referralCode: payload.referralCode },
-        relations: { wallet: true },
-      });
+      // const referralUser = await this.userRepository.findOne({
+      //   where: { referralCode: payload.referralCode },
+      //   relations: { wallet: true },
+      // });
+      const referralUser = await this.userRepository
+        .createQueryBuilder('user')
+        .leftJoinAndSelect('user.wallet', 'wallet')
+        .where('LOWER(user.referralCode) = LOWER(:referralCode)', { referralCode: payload.referralCode })
+        .getOne();
       if (!referralUser) {
         return { error: 'invalid referral code', data: null };
       }
@@ -997,7 +1002,7 @@ export class UserService {
   private generateReferralCode(id: number) {
     // return RandomUtil.generateRandomCode(8) + id;
     const randomKeyword = keywords[Math.floor(Math.random() * keywords.length)];
-    return `fuyo-${randomKeyword}-${id}`;
+    return `fuyo${randomKeyword.toUpperCase()}${id}`;
   }
 
   private async verifyPassword(
