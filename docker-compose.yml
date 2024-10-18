@@ -1,7 +1,7 @@
 services:
   main:
     container_name: main
-    image: ccsiew/game-core:latest
+    image: us-central1-docker.pkg.dev/${GCP_PROJECT_ID}/core-backend/live:latest
     restart: always
     ports:
       - "8080:8080"
@@ -15,69 +15,3 @@ services:
       - redis
     volumes:
       - ./.env:/app/.env
-  mysql:
-    image: mysql:latest
-    restart: always
-    container_name: mysql
-    networks:
-      - webnet
-    environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
-      MYSQL_DATABASE: ${DB_DATABASE}
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-  mongodb:
-    image: mongo:latest
-    container_name: mongodb
-    networks:
-      - webnet
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD}
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-      - ./backup:/data/backup
-  redis:
-    image: redis:latest
-    container_name: redis
-    networks:
-      - webnet
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-  webserver:
-    image: nginx:latest
-    container_name: webserver
-    ports:
-      - "80:80"
-      - "443:443"
-    restart: always
-    volumes:
-      - ./data/nginx:/etc/nginx/conf.d
-      - ./data/certbot/conf:/etc/letsencrypt
-      - ./data/certbot/www:/var/www/certbot
-    depends_on:
-      - main
-    networks:
-      - webnet
-    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
-  certbot:
-    image: certbot/certbot
-    volumes:
-      - ./data/certbot/conf:/etc/letsencrypt
-      - ./data/certbot/www:/var/www/certbot
-    networks:
-      - webnet
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-networks:
-  webnet:
-    driver: bridge
-volumes:
-  mysql_data:
-  mongo_data:
-  redis_data:

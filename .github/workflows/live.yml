@@ -1,4 +1,4 @@
-name: Build and Push to GCR
+name: Build and Push to GAR
 
 on:
   push:
