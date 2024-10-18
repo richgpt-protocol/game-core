@@ -7,7 +7,5 @@ services:
       - "3000:3000"
     env_file:
       - .env
-    networks:
-      - webnet
     volumes:
       - ./.env:/app/.env
