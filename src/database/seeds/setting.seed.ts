@@ -62,19 +62,19 @@ export default class CreateSettings implements Seeder {
         // withdrawal fees
         {
           key: SettingEnum.WITHDRAWAL_FEES_BNB,
-          value: 0.01,
+          value: 0.01, // 1%
         },
         {
           key: SettingEnum.WITHDRAWAL_FEES_BNB_TESTNET,
-          value: 0.01,
+          value: 0.01, // 1%
         },
         {
           key: SettingEnum.WITHDRAWAL_FEES_OPBNB,
-          value: 0.01,
+          value: 0.01, // 1%
         },
         {
           key: SettingEnum.WITHDRAWAL_FEES_OPBNB_TESTNET,
-          value: 0.01,
+          value: 0.01, // 1%
         },
         {
           key: SettingEnum.DEPOSIT_NOTIFY_THRESHOLD,
@@ -82,43 +82,43 @@ export default class CreateSettings implements Seeder {
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_1,
-          value: 3,
+          value: 0.01, // 1%
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_2,
-          value: 6,
+          value: 0.02, // 2%
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_3,
-          value: 9,
+          value: 0.03, // 3%
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_4,
-          value: 12,
+          value: 0.04, // 4%
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_5,
-          value: 15,
+          value: 0.05, // 5%
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_6,
-          value: 18,
+          value: 0.06, // 6%
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_7,
-          value: 21,
+          value: 0.07, // 7%
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_8,
-          value: 24,
+          value: 0.08, // 8%
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_9,
-          value: 27,
+          value: 0.09, // 9%
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_10,
-          value: 30,
+          value: 0.1, // 10%
         },
         {
           key: SettingEnum.MINI_GAME_USDT_SENDER_ADDRESS,
