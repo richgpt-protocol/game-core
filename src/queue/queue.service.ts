@@ -16,6 +16,7 @@ export class QueueService {
   private queues: Map<string, Queue> = new Map();
   private redisHost: string;
   private redisPort: number;
+  private redisPassword: string;
   private workers: Map<string, Worker> = new Map(); // Track active workers by queue name
   private maxWorkers = 10; // Number of workers in the pool
   private waitingQueue: Array<{ queueName: string; jobData: any }> = []; // Track waiting jobs
@@ -23,6 +24,7 @@ export class QueueService {
   constructor(private readonly configService: ConfigService) {
     this.redisHost = this.configService.get('REDIS_HOST');
     this.redisPort = +this.configService.get('REDIS_PORT');
+    this.redisPassword = this.configService.get('REDIS_PASSWORD');
   }
 
   async onFailed(job: Job, error: Error) {
@@ -85,6 +87,7 @@ export class QueueService {
       connection: {
         host: this.redisHost,
         port: this.redisPort,
+        password: this.redisPassword,
       },
     });
     this.queues.set(queueName, queue);

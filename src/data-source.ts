@@ -1,8 +1,7 @@
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { SeederOptions } from 'typeorm-extension';
-
-import * as dotenv from 'dotenv';
-dotenv.config();
+import { join } from 'path';
+import 'dotenv/config';
 
 const options: DataSourceOptions & SeederOptions = {
   type: process.env.DB_TYPE as any,
@@ -11,16 +10,15 @@ const options: DataSourceOptions & SeederOptions = {
   host: process.env.DB_HOST,
   port: process.env.DB_PORT as any,
   database: process.env.DB_DATABASE,
-  synchronize: true,
+  synchronize: false,
   entities: [
     'dist/**/entities/*.entity{.ts,.js}',
     'dist/**/**/*.entity{.ts,.js}',
   ],
-
   seeds: ['src/database/seeds/*{.ts,.js}'],
-  // seeds: ['src/database/seeds/test.seed.ts'],
+  migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
   seedTracking: false,
   factories: ['src/database/factories/**/*{.ts,.js}'],
 };
 
-export const dataSource = new DataSource(options);
+export const AppDataSource = new DataSource(options);

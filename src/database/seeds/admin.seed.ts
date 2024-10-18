@@ -17,7 +17,11 @@ export default class CreateAdmins implements Seeder {
    */
   track = false;
 
-  public async run(dataSource: DataSource, factoryManager: SeederFactoryManager): Promise<void> {
+  public async run(
+    dataSource: DataSource,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    factoryManager: SeederFactoryManager,
+  ): Promise<void> {
     await this.insertPermissions(dataSource);
 
     const admins = await dataSource
@@ -54,7 +58,7 @@ export default class CreateAdmins implements Seeder {
       '../sql_scripts/permission_script.sql',
     );
 
-    let arr = fs.readFileSync(filePath.toString(), 'utf-8').split('\n');
+    const arr = fs.readFileSync(filePath.toString(), 'utf-8').split('\n');
     for (let i = 0; i < arr.length; i++) {
       await dataSource.query(arr[i]);
     }

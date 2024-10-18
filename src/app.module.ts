@@ -15,7 +15,6 @@ import * as path from 'path';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from './config/config.module';
-import { ConfigService } from './config/config.service';
 import { PermissionModule } from './permission/permission.module';
 import { SettingModule } from './setting/setting.module';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
@@ -33,6 +32,7 @@ import { PointModule } from './point/point.module';
 import { PublicModule } from './public/public.module';
 // import { BullModule } from '@nestjs/bullmq';
 import { QueueModule } from './queue/queue.module';
+import { AppDataSource } from './data-source';
 // import { QueueOptions } from 'bullmq';
 
 @Module({
@@ -48,37 +48,8 @@ import { QueueModule } from './queue/queue.module';
     GameModule,
     CampaignModule,
     TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        // type: configService.get('DB_TYPE') as 'mysql',
-        type: 'mysql',
-        host: configService.get('DB_HOST'),
-        port: +configService.get('DB_PORT'),
-        username: configService.get('DB_USERNAME'),
-        password: configService.get('DB_PASSWORD'),
-        database: configService.get('DB_DATABASE'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: configService.isDev ? true : false,
-      }),
-      inject: [ConfigService],
+      ...AppDataSource.options,
     }),
-    // BullModule.forRootAsync({
-    //   imports: [ConfigModule],
-    //   useFactory: async (configService: ConfigService) =>
-    //     ({
-    //       connection: {
-    //         host: configService.get('REDIS_HOST'),
-    //         port: +configService.get('REDIS_PORT'),
-    //       },
-    //     }) as QueueOptions,
-    //   inject: [ConfigService],
-    // }),
-    // BullModule.forRoot({
-    //   connection: {
-    //     host: 'redis',
-    //     port: 6380,
-    //   },
-    // }),
     UserModule,
     SettingModule,
     I18nModule.forRoot({

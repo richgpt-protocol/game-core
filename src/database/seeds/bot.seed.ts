@@ -2,8 +2,6 @@ import { AdminType, UserRole } from '../../shared/enum/role.enum';
 import { AdminStatus } from '../../shared/enum/status.enum';
 import { DataSource } from 'typeorm';
 import { Seeder, SeederFactoryManager } from 'typeorm-extension';
-import * as fs from 'fs';
-import * as path from 'path';
 import { Permission } from '../../permission/entities/permission.entity';
 import { PermissionAccess } from '../../permission/entities/permission-access.entity';
 import { PermissionAccessDto } from '../../permission/dto/permission-access.dto';
@@ -17,7 +15,11 @@ export default class CreateBots implements Seeder {
    */
   track = false;
 
-  public async run(dataSource: DataSource, factoryManager: SeederFactoryManager): Promise<void> {
+  public async run(
+    dataSource: DataSource,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    factoryManager: SeederFactoryManager,
+  ): Promise<void> {
     const bots = await dataSource
       .createQueryBuilder()
       .insert()
@@ -49,9 +51,13 @@ export default class CreateBots implements Seeder {
       userId: bots.generatedMaps[0].id,
       userRole: UserRole.ADMIN,
       role: AdminType.BOT,
-      permissions : [(await dataSource.query(
-        `SELECT id FROM permission WHERE code = 'supply_game_usd'`
-      ))[0].id],
+      permissions: [
+        (
+          await dataSource.query(
+            `SELECT id FROM permission WHERE code = 'supply_game_usd'`,
+          )
+        )[0].id,
+      ],
     });
 
     // // payout bot

@@ -9,8 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 export class IpWhitelistMiddleware implements NestMiddleware {
   // Define the list of allowed IPs
   private readonly allowedIps: string[] = [
-    '18.219.125.24', // deposit-bot VM server
-    '23.27.215.214', // siew's static ip(vpn)
+    '', // deposit-bot VM server
   ];
 
   use(req: Request, res: Response, next: NextFunction) {

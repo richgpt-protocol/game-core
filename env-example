@@ -93,10 +93,6 @@ ESCROW_ADDRESS_97=0x # BNB testnet
 ESCROW_ADDRESS_5611=0x # opBNB testnet
 
 # telegram
-TG_SESSION_STRING=
-TG_API_ID=
-TG_API_HASH=
-
 TG_ADMIN_NOTIFIER_BOT_TOKEN= # Bot token for tg notifier bot
 ADMIN_TG_CHAT_ID= # Chat id of admin group where notification will be sent
 
@@ -113,7 +109,6 @@ BASE_CHAIN_ID=
 # FUYO Game
 WEBHOOK_SECRET_TOKEN=
 MINI_GAME_NOTIFICATION_ENDPOINT=
-MINI_GAME_USDT_SENDER= #address of USDT sender.
 
 # SLACK
 SLACK_TOKEN=

@@ -1,11 +1,13 @@
 FROM node:18
 
+RUN npm install -g @nestjs/cli ts-node typescript
+
 WORKDIR /app
 COPY package*.json /app/
 RUN npm install
 COPY ./ /app/
 RUN npm run build
 
-EXPOSE 8080
+EXPOSE 3000
 
-CMD ["npm", "run", "start:dev"]
+CMD ["node", "dist/main"]

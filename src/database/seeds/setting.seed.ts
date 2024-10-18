@@ -12,6 +12,7 @@ export default class CreateSettings implements Seeder {
 
   public async run(
     dataSource: DataSource,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     factoryManager: SeederFactoryManager,
   ): Promise<void> {
     await dataSource
@@ -22,11 +23,11 @@ export default class CreateSettings implements Seeder {
         // default settings
         {
           key: SettingEnum.SUPPORT_CONTACT_NUMBER,
-          value: '013-2066680',
+          value: '-',
         },
         {
           key: SettingEnum.SUPPORT_CONTACT_EMAIL,
-          value: 'dev.richgpt@gmail.com',
+          value: 'hello@fuyo.lol',
         },
         {
           key: SettingEnum.EMAIL_ENABLE,
@@ -53,12 +54,6 @@ export default class CreateSettings implements Seeder {
           value: process.env.MESSAGE_SERVICE_SID,
         },
 
-        // lite screening locked period
-        {
-          key: SettingEnum.LITE_SCREENING_LOCKED_PERIOD,
-          value: 90,
-        },
-
         // withdrawal fees
         {
           key: SettingEnum.WITHDRAWAL_FEES_BNB,
@@ -78,58 +73,58 @@ export default class CreateSettings implements Seeder {
         },
         {
           key: SettingEnum.DEPOSIT_NOTIFY_THRESHOLD,
-          value: 100,
+          value: 1000,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_1,
-          value: 3,
+          value: 1,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_2,
-          value: 6,
+          value: 2,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_3,
-          value: 9,
+          value: 3,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_4,
-          value: 12,
+          value: 4,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_5,
-          value: 15,
+          value: 5,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_6,
-          value: 18,
+          value: 6,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_7,
-          value: 21,
+          value: 7,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_8,
-          value: 24,
+          value: 8,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_9,
-          value: 27,
+          value: 9,
         },
         {
           key: SettingEnum.REFERRAL_PRIZE_BONUS_TIER_10,
-          value: 30,
+          value: 10,
         },
         {
           key: SettingEnum.MINI_GAME_USDT_SENDER_ADDRESS,
-          value: '0x3559318f1F2e53696D98F78cEe5223b127143AA1', //Testnet address. Should be replaced
+          value: '0x38f7A3Ab829557b45Fb3A7c323F45ed1eEeaEB92', //Testnet address. Should be replaced
         },
         {
           key: SettingEnum.ENABLE_SIGNUP_BONUS,
           value: JSON.stringify({
             startTime: 1727807400,
             endTime: 1733077800,
-            noOfUsers: 1000,
+            noOfUsers: 500,
             creditAmount: 5,
           }),
         },

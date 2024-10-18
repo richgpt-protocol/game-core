@@ -11,7 +11,11 @@ export default class CreateGames implements Seeder {
    */
   track = false;
 
-  public async run(dataSource: DataSource, factoryManager: SeederFactoryManager): Promise<void> {
+  public async run(
+    dataSource: DataSource,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    factoryManager: SeederFactoryManager,
+  ): Promise<void> {
     const maxBetAmount = Number(process.env.MAX_BET_AMOUNT);
     const minBetAmount = Number(process.env.MIN_BET_AMOUNT);
 
@@ -21,23 +25,30 @@ export default class CreateGames implements Seeder {
     endDate.setUTCHours(startDate.getUTCHours() + 1, 0, 0, 0); // set endDate to nextHour:00:00 from current time
 
     // pre-created 168 game records
-    let provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
-    let core_contract = Core__factory.connect(process.env.CORE_CONTRACT_ADDRESS, provider);
-    let currentEpoch = Number(await core_contract.currentEpoch());
+    const provider = new ethers.JsonRpcProvider(
+      process.env.OPBNB_PROVIDER_RPC_URL,
+    );
+    const core_contract = Core__factory.connect(
+      process.env.CORE_CONTRACT_ADDRESS,
+      provider,
+    );
+    const currentEpoch = Number(await core_contract.currentEpoch());
     for (let epoch = currentEpoch; epoch < currentEpoch + 168; epoch++) {
       await dataSource
         .createQueryBuilder()
         .insert()
         .into('game')
-        .values([{
-          epoch: epoch.toString(),
-          maxBetAmount: maxBetAmount,
-          minBetAmount: minBetAmount,
-          drawTxHash: null,
-          startDate: startDate,
-          endDate: endDate,
-          isClosed: false,
-        }])
+        .values([
+          {
+            epoch: epoch.toString(),
+            maxBetAmount: maxBetAmount,
+            minBetAmount: minBetAmount,
+            drawTxHash: null,
+            startDate: startDate,
+            endDate: endDate,
+            isClosed: false,
+          },
+        ])
         .execute();
 
       startDate = new Date(endDate);
@@ -70,7 +81,7 @@ export default class CreateGames implements Seeder {
         { updatedBy: 0, key: 'leastFirstEndEpoch', value: null },
         // fixed number
         { updatedBy: 0, key: 'fixedNumberPriority', value: null },
-        { updatedBy: 0, key: 'fixedNumberNumberPair', value: '8888' },
+        { updatedBy: 0, key: 'fixedNumberNumberPair', value: null },
         { updatedBy: 0, key: 'fixedNumberIndex', value: 0 },
         { updatedBy: 0, key: 'fixedNumberStartEpoch', value: null },
         { updatedBy: 0, key: 'fixedNumberEndEpoch', value: null },
