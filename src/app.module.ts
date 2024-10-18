@@ -47,7 +47,7 @@ import { AppDataSource } from './data-source';
     WalletModule,
     GameModule,
     CampaignModule,
-    TypeOrmModule.forRootAsync({
+    TypeOrmModule.forRoot({
       ...AppDataSource.options,
     }),
     UserModule,
