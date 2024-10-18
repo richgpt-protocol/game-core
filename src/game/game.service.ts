@@ -302,12 +302,12 @@ export class GameService implements OnModuleInit {
         await queryRunner.manager.save(game);
 
         // find betOrder that numberPair matched and update availableClaim to true
-        for (const result of drawResults) {
+        for (const drawResult of drawResults) {
           const betOrders = await queryRunner.manager
             .createQueryBuilder(BetOrder, 'betOrder')
             .where('betOrder.gameId = :gameId', { gameId })
             .andWhere('betOrder.numberPair = :numberPair', {
-              numberPair: result.numberPair,
+              numberPair: drawResult.numberPair,
             })
             .getMany();
           // there might be more than 1 betOrder that numberPair matched
@@ -317,7 +317,7 @@ export class GameService implements OnModuleInit {
 
             try {
               const { bigForecastWinAmount, smallForecastWinAmount } =
-                this.claimService.calculateWinningAmount(betOrder, result);
+                this.claimService.calculateWinningAmount(betOrder, drawResult);
               const totalAmount =
                 Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
               const jobId = `processWinReferralBonus_${betOrder.id}`;
@@ -466,15 +466,15 @@ export class GameService implements OnModuleInit {
       if (!bonusPerc || bonusPerc === 0) {
         return;
       }
-      const bonusAmount = prizeAmount * (bonusPerc / 100);
+      const bonusAmount = prizeAmount * bonusPerc;
 
-      const lastValidWalletTx = await queryRunner.manager.findOne(WalletTx, {
-        where: {
-          userWalletId: referralUser.wallet.id,
-          status: 'S',
-        },
-        order: { id: 'DESC' },
-      });
+      // const lastValidWalletTx = await queryRunner.manager.findOne(WalletTx, {
+      //   where: {
+      //     userWalletId: referralUser.wallet.id,
+      //     status: 'S',
+      //   },
+      //   order: { id: 'DESC' },
+      // });
 
       const walletTx = new WalletTx();
       walletTx.txType = 'REFERRAL';
