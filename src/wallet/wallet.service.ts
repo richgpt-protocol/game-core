@@ -100,8 +100,8 @@ export class WalletService {
 
     // Calculate the percentage towards the next level
     // refer _calculateLevel() for how to define "next level" based on levelMap
-    const xpSincePreviousLevel = point - previousLevel.xp;
-    const xpNeededFromPreviousLevelToNextLeven = currentLevel.xp - previousLevel.xp;
+    const xpSincePreviousLevel = point - (previousLevel ? previousLevel.xp : 0);
+    const xpNeededFromPreviousLevelToNextLeven = currentLevel.xp - (previousLevel ? previousLevel.xp : 0);
     const percentage = Math.floor((xpSincePreviousLevel / xpNeededFromPreviousLevelToNextLeven) * 100);
 
     return { level: highestLevel, percentage };
