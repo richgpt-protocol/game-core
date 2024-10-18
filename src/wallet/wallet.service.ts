@@ -33,7 +33,8 @@ export class WalletService {
     private configService: ConfigService,
   ) {
     for (let i = 1; i <= 100; i++) {
-      const xp = Math.floor(50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i));
+      // const xp = Math.floor(50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i));
+      const xp = 50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i);
       const prev = this.levelMap.length > 0 ? this.levelMap[i - 2].xp : 0;
       this.levelMap.push({ xp: xp + prev, level: i });
     }
@@ -47,7 +48,7 @@ export class WalletService {
     return walletInfo;
   }
 
-  calculateLevel(point: number): number {
+  private _calculateLevel(point: number): number {
     // minimum level 1
     const level1 = this.levelMap.find((level) => level.level === 1);
     if (point < level1.xp) return 1;
@@ -55,36 +56,53 @@ export class WalletService {
     const levels = this.levelMap
       .sort((a, b) => a.xp - b.xp)
       .filter((level) => level.xp <= point);
-    const highestLevel = levels[levels.length - 1].level;
+    const highestLevel = levels[levels.length - 1].level + 1;
+    // console.log(this.levelMap)
+    // [
+    //   { xp: 1155.1709180756477, level: 1 },
+    //   { xp: 2776.5736762358174, level: 2 },
+    //   { xp: 5476.432483811821, level: 3 },
+    //   ...
+    // ]
+    // All the new user is level 1 at the beginning.
+    // if xp > 1155.17, level 2.
+    // if xp > 2776.57, level 3.
+    // ...and so on
+    // get the highest level based on xp
+    // i.e. XP = 1000, level = 1
+    // i.e. XP = 2000, level = 2
+    // i.e. XP = 3000, level = 3
+    // i.e. XP = 4000, level = 3
+    // i.e. XP = 5000, level = 3
+    // i.e. XP = 6000, level = 4
+    // refer https://daoventuresco.slack.com/archives/C02AUMV9C3S/p1729164331651769?thread_ts=1728281319.679679&cid=C02AUMV9C3S
+    return highestLevel
+  }
 
-    return highestLevel;
+  calculateLevel(point: number): number {
+    return this._calculateLevel(point);
   }
 
   calculateLevelAndPercentage(point: number): {
     level: number;
     percentage: number;
   } {
-    const level1 = this.levelMap.find((level) => level.level === 1);
-    if (point < level1.xp) return { level: 0, percentage: 0 };
-
-    const levels = this.levelMap
-      .sort((a, b) => a.xp - b.xp)
-      .filter((level) => level.xp <= point);
-    const highestLevel = levels[levels.length - 1].level;
+    const highestLevel = this._calculateLevel(point);
     // highestLevel is the current level
 
     // Find the next and previous level
-    const nextLevel = this.levelMap.find(
-      (level) => level.level === highestLevel + 1,
-    );
     const previousLevel = this.levelMap.find(
+      (level) => level.level === highestLevel - 1,
+    );
+    const currentLevel = this.levelMap.find(
       (level) => level.level === highestLevel,
     );
 
     // Calculate the percentage towards the next level
-    const xpForCurrentLevel = point - previousLevel.xp;
-    const xpForNextLevel = nextLevel.xp - previousLevel.xp;
-    const percentage = Math.floor((xpForCurrentLevel / xpForNextLevel) * 100);
+    // refer _calculateLevel() for how to define "next level" based on levelMap
+    const xpSincePreviousLevel = point - previousLevel.xp;
+    const xpNeededFromPreviousLevelToNextLeven = currentLevel.xp - previousLevel.xp;
+    const percentage = Math.floor((xpSincePreviousLevel / xpNeededFromPreviousLevelToNextLeven) * 100);
 
     return { level: highestLevel, percentage };
   }
