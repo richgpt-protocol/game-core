@@ -144,6 +144,8 @@ export class WalletService {
       .orWhere('creditWalletTx.walletId = :walletId', {
         walletId: wallet.id,
       })
+      .orderBy('gameUsdTx.id', 'DESC')
+      .limit(count)
       .getMany();
 
     const allTxs = gameTxnsDb.map((gameUsdTx) => {
