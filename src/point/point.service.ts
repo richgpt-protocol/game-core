@@ -459,11 +459,15 @@ export class PointService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const pointTxs = await this.pointTxRepository.find({
-        where: {
-          isLevelUp: IsNull(),
-        },
-      });
+      // const pointTxs = await this.pointTxRepository.find({
+      //   where: {
+      //     isLevelUp: IsNull(),
+      //   },
+      // });
+      const pointTxs = await queryRunner.manager
+        .createQueryBuilder(PointTx, 'pointTx')
+        .where('pointTx.isLevelUp IS NULL')
+        .getMany();
 
       for (const pointTx of pointTxs) {
         let isLevelUp = false;
@@ -485,8 +489,10 @@ export class PointService {
         }
 
         pointTx.isLevelUp = isLevelUp;
-        await this.pointTxRepository.save(pointTx);
+        // await this.pointTxRepository.save(pointTx);
+        await queryRunner.manager.save(pointTx);
       }
+      await queryRunner.commitTransaction();
     } catch (err) {
       await queryRunner.rollbackTransaction();
 
