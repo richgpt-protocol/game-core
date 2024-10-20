@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Job, Queue, Worker } from 'bullmq';
 import { ConfigService } from 'src/config/config.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import * as fs from 'fs';
 
 interface QueueHandler {
   jobHandler: (job: Job) => Promise<any>;
@@ -86,7 +87,10 @@ export class QueueService {
       connection: {
         host: this.redisHost,
         port: this.redisPort,
-        tls: {},
+        tls: {
+          ca: [fs.readFileSync('./server-ca.pem')],
+          rejectUnauthorized: true,
+        },
       },
     });
     this.queues.set(queueName, queue);

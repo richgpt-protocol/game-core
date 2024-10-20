@@ -9,3 +9,4 @@ services:
       - .env
     volumes:
       - ./.env:/app/.env
+      - ./server-ca.pem:/app/server-ca.pem
