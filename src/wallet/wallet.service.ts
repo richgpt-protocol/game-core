@@ -159,6 +159,16 @@ export class WalletService {
         amount = Number(amount) + Number(gameUsdTx.creditWalletTx.amount);
       }
 
+      let startingBalance = 0;
+      let endingBalance = 0;
+      if (
+        gameUsdTx.walletTxs.length > 0 &&
+        gameUsdTx.walletTxs[0].txType === 'INTERNAL_TRANSFER'
+      ) {
+        startingBalance = gameUsdTx.walletTxs[0].startingBalance;
+        endingBalance = gameUsdTx.walletTxs[0].endingBalance;
+      }
+
       return {
         txType: gameUsdTx.creditWalletTx
           ? gameUsdTx.creditWalletTx.txType
@@ -168,6 +178,8 @@ export class WalletService {
           ? gameUsdTx.walletTxs[0].createdDate
           : gameUsdTx.creditWalletTx.createdDate,
         status: gameUsdTx.status,
+        startingBalance,
+        endingBalance,
       };
     });
 
