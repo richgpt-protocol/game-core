@@ -88,6 +88,7 @@ export class QueueService {
         host: this.redisHost,
         port: this.redisPort,
         password: this.redisPassword,
+        tls: {},
       },
     });
     this.queues.set(queueName, queue);
