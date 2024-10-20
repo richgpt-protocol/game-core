@@ -24,7 +24,6 @@ export class QueueService {
   constructor(private readonly configService: ConfigService) {
     this.redisHost = this.configService.get('REDIS_HOST');
     this.redisPort = +this.configService.get('REDIS_PORT');
-    this.redisPassword = this.configService.get('REDIS_PASSWORD');
   }
 
   async onFailed(job: Job, error: Error) {
@@ -87,7 +86,6 @@ export class QueueService {
       connection: {
         host: this.redisHost,
         port: this.redisPort,
-        password: this.redisPassword,
         tls: {},
       },
     });
