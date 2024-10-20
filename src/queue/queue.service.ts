@@ -83,13 +83,14 @@ export class QueueService {
       return this.queues.get(queueName);
     }
 
+    console.log('cert path', fs.readFileSync('./server-ca.pem').toString());
     const queue = new Queue(queueName, {
       connection: {
         host: this.redisHost,
         port: this.redisPort,
         tls: {
           ca: [fs.readFileSync('./server-ca.pem')],
-          rejectUnauthorized: true,
+          rejectUnauthorized: false,
         },
       },
     });
