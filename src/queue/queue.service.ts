@@ -200,6 +200,10 @@ export class QueueService implements OnModuleInit {
       connection: {
         host: this.redisHost,
         port: this.redisPort,
+        tls: {
+          ca: [fs.readFileSync('./server-ca.pem')],
+          rejectUnauthorized: true,
+        },
       },
     });
 
