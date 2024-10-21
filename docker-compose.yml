@@ -10,3 +10,8 @@ services:
     volumes:
       - ./.env:/app/.env
       - ./server-ca.pem:/app/server-ca.pem
+    networks:
+      - external_network
+networks:
+  external_network:
+    external: true
