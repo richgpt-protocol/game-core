@@ -81,6 +81,8 @@ export class GameGateway {
 
       // submit draw result to Core contract
       const jobId = `submitDrawResult-${lastGame.id}`;
+
+      console.log('emitDrawResult jobId:', jobId);
       await this.queueService.addJob(
         QueueName.GAME,
         jobId,
@@ -91,7 +93,9 @@ export class GameGateway {
         },
         0, // no delay
       );
+      console.log('emitDrawResult jobId:', jobId, 'submitted');
     } catch (err) {
+      console.error(err);
       // inform admin
       await this.adminNotificationService.setAdminNotification(
         `Error occur in game.gateway.emitDrawResult, error: ${err}`,

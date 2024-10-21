@@ -112,6 +112,8 @@ export class AdminNotificationService {
       return result;
     } catch (err) {
       await queryRunner.rollbackTransaction();
+      console.log('setAdminNotification', err);
+
       throw new BadRequestException(err.message);
     } finally {
       await queryRunner.release();
