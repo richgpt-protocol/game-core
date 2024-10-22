@@ -7,7 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Not, QueryRunner, Repository } from 'typeorm';
+import { DataSource, QueryRunner, Repository } from 'typeorm';
 import { ConfigService } from 'src/config/config.service';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
@@ -30,6 +30,8 @@ import { Job } from 'bullmq';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
+import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 
 /**
  * How deposit works
@@ -57,10 +59,10 @@ export class DepositService implements OnModuleInit {
     private readonly pointService: PointService,
     private readonly userService: UserService,
     private eventEmitter: EventEmitter2,
-    private queueservice: QueueService,
+    private queueService: QueueService,
   ) {}
   onModuleInit() {
-    this.queueservice.registerHandler(
+    this.queueService.registerHandler(
       QueueName.DEPOSIT,
       QueueType.DEPOSIT_ESCROW,
       {
@@ -69,7 +71,7 @@ export class DepositService implements OnModuleInit {
       },
     );
 
-    this.queueservice.registerHandler(
+    this.queueService.registerHandler(
       QueueName.DEPOSIT,
       QueueType.DEPOSIT_GAMEUSD_ONCHAIN,
       {
@@ -77,7 +79,7 @@ export class DepositService implements OnModuleInit {
       },
     );
 
-    this.queueservice.registerHandler(
+    this.queueService.registerHandler(
       QueueName.DEPOSIT,
       QueueType.DEPOSIT_GAMEUSD_DB,
       {
@@ -119,11 +121,19 @@ export class DepositService implements OnModuleInit {
           walletAddress: payload.walletAddress,
         },
       });
+      if (!userWallet) {
+        throw new BadRequestException(`UserWallet for walletAddress ${payload.walletAddress} not found`);
+      }
+
       const user = await queryRunner.manager.findOne(User, {
         where: {
           id: userWallet.userId,
         },
       });
+      if (!user) {
+        throw new BadRequestException(`User for walletId ${userWallet.id} not found`);
+      }
+      
       const miniGameUSDTSenderSetting = await queryRunner.manager.findOne(
         Setting,
         {
@@ -132,7 +142,6 @@ export class DepositService implements OnModuleInit {
           },
         },
       );
-
       const miniGameUSDTSender =
         miniGameUSDTSenderSetting?.value.toLowerCase() || '';
 
@@ -144,7 +153,7 @@ export class DepositService implements OnModuleInit {
         await this.adminNotificationService.setAdminNotification(
           `Error processing deposit for wallet: ${payload.walletAddress} \n
           Minimum Deposit Amount not met. \n
-          UserId: ${userWallet.userId}. \n
+          UserId: ${user.id}. \n
           Deposit amount: ${payload.amount} \n
           TxHash: ${payload.txHash}`,
           'MINIMUM_DEPOSIT_AMOUNT',
@@ -170,6 +179,7 @@ export class DepositService implements OnModuleInit {
         payload,
         queryRunner,
         canProceed,
+        userWallet,
       );
 
       await queryRunner.commitTransaction();
@@ -179,7 +189,7 @@ export class DepositService implements OnModuleInit {
       } else {
         // deposit amount more than deposit_notify_threshold, inform admin
         await this.adminNotificationService.setAdminNotification(
-          `Deposit of ${payload.amount} ${payload.tokenAddress} received at ${payload.walletAddress}. Please Approve/Reject in backOffice`,
+          `Deposit of $${payload.amount} ${payload.tokenAddress} received at ${payload.walletAddress}. Please Approve/Reject in backOffice`,
           'DEPOSIT_THRESHOLD_NOTIFICATION',
           'Deposit Threshold Notification',
           false,
@@ -229,22 +239,23 @@ export class DepositService implements OnModuleInit {
     payload: DepositDTO,
     queryRunner: QueryRunner,
     canProceed: boolean = true,
+    userWallet: UserWallet,
   ) {
     try {
-      const userWallet = await queryRunner.manager.findOne(UserWallet, {
-        where: {
-          walletAddress: payload.walletAddress,
-        },
-      });
-      if (!userWallet) return;
+      // const userWallet = await queryRunner.manager.findOne(UserWallet, {
+      //   where: {
+      //     walletAddress: payload.walletAddress,
+      //   },
+      // });
+      // if (!userWallet) return;
 
       let walletTx = new WalletTx();
       walletTx.usdtTx = null;
       walletTx.gameTx = null;
-      walletTx.txType = 'DEPOSIT';
+      walletTx.txType = WalletTxType.DEPOSIT;
       walletTx.txAmount = payload.amount;
       walletTx.txHash = payload.txHash;
-      walletTx.status = canProceed ? 'P' : 'PA';
+      walletTx.status = canProceed ? TxStatus.PENDING : TxStatus.PENDING_ADMIN;
       walletTx.userWalletId = userWallet.id;
       walletTx.userWallet = userWallet;
 
@@ -253,14 +264,17 @@ export class DepositService implements OnModuleInit {
           where: { id: payload.usdtTxId },
           relations: ['walletTx'],
         });
+        if (!usdtTx) {
+          throw new BadRequestException(`usdt_tx for id ${payload.usdtTxId} not found`);
+        }
 
         const gameTx = await queryRunner.manager.findOne(GameTx, {
           where: {
             usdtTx,
           },
         });
-        if (!usdtTx) {
-          throw new BadRequestException('USDT Transaction not found');
+        if (!gameTx) {
+          throw new BadRequestException(`game_tx for usdt_tx.id ${payload.usdtTxId} not found`);
         }
 
         //Already have a walletTx if the txType is CAMPAIGN
@@ -269,7 +283,7 @@ export class DepositService implements OnModuleInit {
         } else {
           walletTx.gameTx = gameTx;
           walletTx.usdtTx = usdtTx;
-          walletTx.txType = 'GAME_TRANSACTION';
+          walletTx.txType = WalletTxType.GAME_TRANSACTION;
 
           await queryRunner.manager.save(walletTx);
           gameTx.walletTx = walletTx;
@@ -289,7 +303,7 @@ export class DepositService implements OnModuleInit {
       depositTx.receiverAddress = payload.walletAddress;
       depositTx.chainId = payload.chainId;
       depositTx.isTransferred = false;
-      depositTx.status = canProceed ? 'P' : 'PA';
+      depositTx.status = canProceed ? TxStatus.PENDING : TxStatus.PENDING_ADMIN;
       depositTx.walletTxId = walletTxResult.id;
       depositTx.walletTx = walletTx;
       await queryRunner.manager.save(depositTx);
@@ -340,7 +354,7 @@ export class DepositService implements OnModuleInit {
       }
 
       depositTx.note = note;
-      const dbStatus = status ? 'P' : 'F';
+      const dbStatus = status ? TxStatus.PENDING : TxStatus.FAILED;
       depositTx.status = dbStatus;
       depositTx.walletTx.status = dbStatus;
 
@@ -367,7 +381,7 @@ export class DepositService implements OnModuleInit {
     try {
       // add job to queue
       const jobId = `escrow-${depositTxId}`;
-      await this.queueservice.addJob(QueueName.DEPOSIT, jobId, {
+      await this.queueService.addJob(QueueName.DEPOSIT, jobId, {
         depositTxId: depositTxId,
         queueType: QueueType.DEPOSIT_ESCROW,
       });
@@ -418,7 +432,7 @@ export class DepositService implements OnModuleInit {
 
       // add job to queue
       const jobId = `escrow-${depositTx.id}`;
-      await this.queueservice.addJob(QueueName.DEPOSIT, jobId, {
+      await this.queueService.addJob(QueueName.DEPOSIT, jobId, {
         depositTxId: depositTx.id,
         queueType: QueueType.DEPOSIT_ESCROW,
       });
@@ -470,7 +484,7 @@ export class DepositService implements OnModuleInit {
         await queryRunner.release();
 
         //add to next queue here
-        await this.queueservice.addJob(
+        await this.queueService.addJob(
           QueueName.DEPOSIT,
           `gameusd-${gameUsdTx.id}`,
           {
@@ -530,14 +544,14 @@ export class DepositService implements OnModuleInit {
       if (receipt && receipt.status == 1) {
         // transfer token transaction success
         depositTx.isTransferred = true;
-        depositTx.status = 'S';
+        depositTx.status = TxStatus.SUCCESS;
         depositTx.txHash = onchainEscrowTxHash;
         await queryRunner.manager.save(depositTx);
 
         const gameUsdTx = new GameUsdTx();
         gameUsdTx.amount = depositTx.walletTx.txAmount;
         gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-        gameUsdTx.status = 'P';
+        gameUsdTx.status = TxStatus.PENDING;
         gameUsdTx.senderAddress = this.configService.get(
           'GAMEUSD_POOL_CONTRACT_ADDRESS',
         );
@@ -546,7 +560,7 @@ export class DepositService implements OnModuleInit {
         gameUsdTx.walletTxs = [depositTx.walletTx];
         await queryRunner.manager.save(gameUsdTx);
 
-        await this.queueservice.addJob(
+        await this.queueService.addJob(
           QueueName.DEPOSIT,
           `gameusd-${gameUsdTx.id}`,
           {
@@ -593,8 +607,8 @@ export class DepositService implements OnModuleInit {
           return;
         }
 
-        depositTx.status = 'F';
-        depositTx.walletTx.status = 'F';
+        depositTx.status = TxStatus.FAILED;
+        depositTx.walletTx.status = TxStatus.FAILED;
         await queryRunner.manager.save(depositTx);
         await queryRunner.manager.save(depositTx.walletTx);
 
@@ -676,7 +690,7 @@ export class DepositService implements OnModuleInit {
         await queryRunner.release();
 
         const jobId = `updateStatus-${gameUsdTx.id}`;
-        await this.queueservice.addJob(QueueName.DEPOSIT, jobId, {
+        await this.queueService.addJob(QueueName.DEPOSIT, jobId, {
           gameUsdTxId: gameUsdTx.id,
           queueType: QueueType.DEPOSIT_GAMEUSD_DB,
         });
@@ -715,7 +729,7 @@ export class DepositService implements OnModuleInit {
             const txReceipt = await onchainGameUsdTx.wait(1);
             if (txReceipt && txReceipt.status == 1) {
               // transfer GameUSD transaction success
-              gameUsdTx.status = 'S';
+              gameUsdTx.status = TxStatus.SUCCESS;
               break;
             } else {
               // transfer GameUSD transaction failed, try again later
@@ -734,13 +748,13 @@ export class DepositService implements OnModuleInit {
 
         if (gameUsdTx.retryCount >= 5) {
           // set gameUsdTx status to failed
-          gameUsdTx.status = 'F';
+          gameUsdTx.status = TxStatus.FAILED;
           await queryRunner.manager.save(gameUsdTx);
           // set walletTx status to failed
           await queryRunner.manager.update(
             WalletTx,
             { id: gameUsdTx.walletTxId },
-            { status: 'F' },
+            { status: TxStatus.FAILED },
           );
 
           await queryRunner.commitTransaction();
@@ -762,7 +776,7 @@ export class DepositService implements OnModuleInit {
           if (!queryRunner.isReleased) await queryRunner.release();
 
           const jobId = `updateStatus-${gameUsdTx.id}`;
-          await this.queueservice.addJob(QueueName.DEPOSIT, jobId, {
+          await this.queueService.addJob(QueueName.DEPOSIT, jobId, {
             gameUsdTxId: gameUsdTx.id,
             queueType: QueueType.DEPOSIT_GAMEUSD_DB,
           });
@@ -774,7 +788,7 @@ export class DepositService implements OnModuleInit {
         // no new record created as well so nothing to rollback
 
         // set status to failed
-        gameUsdTx.status = 'F';
+        gameUsdTx.status = TxStatus.FAILED;
         await queryRunner.manager.save(gameUsdTx);
 
         await queryRunner.commitTransaction();
@@ -845,7 +859,7 @@ export class DepositService implements OnModuleInit {
       });
 
       // update walletTx
-      walletTx.status = 'S';
+      walletTx.status = TxStatus.SUCCESS;
       walletTx.startingBalance = walletTx.userWallet.walletBalance;
       walletTx.endingBalance =
         (Number(walletTx.startingBalance) || 0) + Number(gameUsdTx.amount);
@@ -867,7 +881,7 @@ export class DepositService implements OnModuleInit {
       const pointTxEndingBalance =
         Number(pointTxStartingBalance) + Number(pointTxAmount);
       const pointTx = new PointTx();
-      pointTx.txType = walletTx.txType; //'DEPOSIT';
+      pointTx.txType = walletTx.txType as unknown as PointTxType; //'DEPOSIT';
       pointTx.amount = pointTxAmount;
       pointTx.startingBalance = pointTxStartingBalance;
       pointTx.endingBalance = pointTxEndingBalance;
@@ -921,7 +935,7 @@ export class DepositService implements OnModuleInit {
           .where('gameUsdTx.id = :id', { id: job.data.gameUsdTxId })
           .getOne();
 
-        gameUsdTx.walletTxs[0].status = 'F';
+        gameUsdTx.walletTxs[0].status = TxStatus.FAILED;
         await queryRunner.manager.save(gameUsdTx.walletTxs[0]);
 
         await queryRunner.commitTransaction();
@@ -945,7 +959,7 @@ export class DepositService implements OnModuleInit {
     return await this.dataSource.manager.findOne(WalletTx, {
       where: {
         userWalletId,
-        status: 'S',
+        status: TxStatus.SUCCESS,
       },
       order: {
         createdDate: 'DESC',
@@ -1008,7 +1022,7 @@ export class DepositService implements OnModuleInit {
         Number(depositAmount),
       );
       const pointTx = new PointTx();
-      pointTx.txType = 'REFERRAL';
+      pointTx.txType = PointTxType.REFERRAL;
       pointTx.amount = referrerXp;
       pointTx.startingBalance = userInfo.referralUser.wallet.pointBalance;
       pointTx.endingBalance =
