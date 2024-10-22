@@ -6,17 +6,14 @@ import {
   Logger,
   OnModuleInit,
 } from '@nestjs/common';
-import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository, DataSource, QueryRunner, Not } from 'typeorm';
+import { Repository, DataSource, QueryRunner, Not } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { BetDto, EstimateBetResponseDTO } from 'src/game/dto/Bet.dto';
 import { Game } from './entities/game.entity';
-import { DrawResult } from './entities/draw-result.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
-import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
 import { BetOrder } from './entities/bet-order.entity';
-import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
 import { ConfigService } from 'src/config/config.service';
 import {
   JsonRpcProvider,
@@ -39,17 +36,16 @@ import { PointService } from 'src/point/point.service';
 import { UserService } from 'src/user/user.service';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { MPC } from 'src/shared/mpc';
-import { CreditService } from 'src/wallet/services/credit.service';
 import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
-import { ReferralTxStatus, TxStatus } from 'src/shared/enum/status.enum';
+import { TxStatus } from 'src/shared/enum/status.enum';
 import {
   CreditWalletTxType,
   ReferralTxType,
   WalletTxType,
 } from 'src/shared/enum/txType.enum';
-import { PointTxType } from 'src/shared/enum/point-tx.enum';
+import { PointTxType } from 'src/shared/enum/txType.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 
@@ -1219,7 +1215,7 @@ export class BetService implements OnModuleInit {
         referralType: ReferralTxType.BET,
         walletTx: walletTx,
         userId: userInfo.id,
-        status: ReferralTxStatus.SUCCESS,
+        status: TxStatus.SUCCESS,
         txHash: referralRewardOnchainTx.hash,
         referralUserId: userInfo.referralUserId, //one who receives the referral amount
         gameUsdTx: {
@@ -1328,7 +1324,7 @@ export class BetService implements OnModuleInit {
         referralType: ReferralTxType.BET,
         walletTx,
         userId: userInfo.id,
-        status: ReferralTxStatus.FAILED,
+        status: TxStatus.FAILED,
         referralUserId: userInfo.referralUserId, //one who receives the referral amount
         gameUsdTx: {
           id: gameUsdTxId, // Store the betting gameUsdTx to keep track the commission coming from which bets
@@ -1425,7 +1421,7 @@ export class BetService implements OnModuleInit {
         relations: ['gameUsdTx'],
       });
 
-      referralTx.status = ReferralTxStatus.SUCCESS;
+      referralTx.status = TxStatus.SUCCESS;
       await queryRunner.manager.save(referralTx);
 
       // Update referrer wallet balance
@@ -1524,7 +1520,7 @@ export class BetService implements OnModuleInit {
         where: {
           userWalletId: userWallet.id,
           chainId,
-          status: 'P',
+          status: TxStatus.PENDING,
         },
       });
 
