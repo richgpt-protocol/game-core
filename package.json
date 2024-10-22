@@ -20,7 +20,7 @@
     "db:create": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs db:create -d src/data-source.ts",
     "db:drop": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs db:drop -d src/data-source.ts",
     "seed:run": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs seed:run -d src/data-source.ts",
-    "seed:run-game": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs seed:run -d src/data-source.ts -- -f src/database/game.seed.ts",
+    "seed:run-game": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs seed:run -d src/data-source.ts -- -f src/database/seeds/game.seed.ts",
     "seed:create": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs seed:create",
     "migration:generate": "typeorm migration:generate -d dist/data-source.js",
     "migration:create": "typeorm migration:create -d dist/data-source.js",
