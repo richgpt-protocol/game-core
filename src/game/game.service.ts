@@ -10,7 +10,6 @@ import {
   DataSource,
   In,
   LessThan,
-  MoreThan,
   Repository,
 } from 'typeorm';
 import { Game } from './entities/game.entity';
@@ -35,6 +34,8 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { PointService } from 'src/point/point.service';
 import { ClaimService } from 'src/wallet/services/claim.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
+import { ReferralTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 
 interface SubmitDrawResultDTO {
   drawResults: DrawResult[];
@@ -221,7 +222,7 @@ export class GameService implements OnModuleInit {
             .where('walletTx.id = :id', { id: betOrder.walletTxId })
             .getOne();
           walletTx.txHash = txReceipt.hash;
-          walletTx.status = 'S';
+          walletTx.status = TxStatus.SUCCESS;
           await queryRunner.manager.save(walletTx);
         }
         await queryRunner.commitTransaction();
@@ -477,9 +478,9 @@ export class GameService implements OnModuleInit {
       // });
 
       const walletTx = new WalletTx();
-      walletTx.txType = 'REFERRAL';
+      walletTx.txType = WalletTxType.REFERRAL;
       walletTx.txAmount = bonusAmount;
-      walletTx.status = 'S';
+      walletTx.status = TxStatus.SUCCESS;
       walletTx.startingBalance = referralUser.wallet.walletBalance;
       walletTx.endingBalance =
         Number(walletTx.startingBalance) + Number(bonusAmount);
@@ -519,7 +520,7 @@ export class GameService implements OnModuleInit {
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = bonusAmount;
       gameUsdTx.chainId = +chainId;
-      gameUsdTx.status = 'S';
+      gameUsdTx.status = TxStatus.SUCCESS;
       gameUsdTx.txHash = onchainTx.hash;
       gameUsdTx.senderAddress = process.env.DEPOSIT_BOT_ADDRESS;
       gameUsdTx.receiverAddress = referralUser.wallet.walletAddress;
@@ -528,9 +529,9 @@ export class GameService implements OnModuleInit {
 
       const referralTx = new ReferralTx();
       referralTx.rewardAmount = bonusAmount;
-      referralTx.referralType = 'PRIZE';
+      referralTx.referralType = ReferralTxType.PRIZE;
       referralTx.txHash = onchainTx.hash;
-      referralTx.status = 'S';
+      referralTx.status = TxStatus.SUCCESS;
       referralTx.userId = betOrder.walletTx.userWallet.user.id;
       referralTx.user = betOrder.walletTx.userWallet.user;
       referralTx.referralUserId = referralUser.id;
