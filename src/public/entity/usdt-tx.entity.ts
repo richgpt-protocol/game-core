@@ -1,6 +1,8 @@
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { Column, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { GameTx } from './gameTx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
+import { UsdtTxType } from 'src/shared/enum/txType.enum';
 
 @Entity()
 export class UsdtTx {
@@ -21,7 +23,10 @@ export class UsdtTx {
   @Column({
     comment: 'S - success, P - pending, F - failed',
   })
-  status: string;
+  status: TxStatus.SUCCESS |
+    TxStatus.PENDING |
+    TxStatus.PENDING_DEVELOPER |
+    TxStatus.FAILED;
 
   @Column({
     nullable: true,
@@ -29,7 +34,7 @@ export class UsdtTx {
   txHash: string;
 
   @Column()
-  txType: string;
+  txType: UsdtTxType.GAME_TRANSACTION | UsdtTxType.CAMPAIGN;
 
   @Column()
   senderAddress: string;

@@ -29,18 +29,18 @@ import { Mutex } from 'async-mutex';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import axios from 'axios';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { PointTxType } from 'src/shared/enum/point-tx.enum';
 import { GetOttDto } from './dtos/get-ott.dto';
 import * as crypto from 'crypto';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { UserStatus } from 'src/shared/enum/status.enum';
+import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 
 import { UsdtTx } from './entity/usdt-tx.entity';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { MPC } from 'src/shared/mpc';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
+import { UsdtTxType, WalletTxType, PointTxType } from 'src/shared/enum/txType.enum';
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -238,7 +238,7 @@ export class PublicService {
       tx.creditAmount = payload.gameUsdAmount;
       tx.xp = payload.xp;
       tx.gameSessionToken = payload.gameSessionToken;
-      tx.status = 'P';
+      tx.status = TxStatus.PENDING;
       tx.userWallet = userWallet;
       tx.userWalletId = userWallet.id;
       tx.isNotified =
@@ -312,7 +312,7 @@ export class PublicService {
 
   private async addXP(
     xpAmount: number,
-    txType: string,
+    txType: PointTxType,
     userWallet: UserWallet,
     gameTx: GameTx,
     taskId: number,
@@ -416,9 +416,9 @@ export class PublicService {
       if (!miniGameUsdtSender)
         throw new Error('Mini Game USDT Sender not found');
       const usdtTx = new UsdtTx();
-      usdtTx.txType = 'GAME_TRANSACTION';
+      usdtTx.txType = UsdtTxType.GAME_TRANSACTION;
       usdtTx.amount = amount;
-      usdtTx.status = 'P';
+      usdtTx.status = TxStatus.PENDING;
       usdtTx.txHash = null;
       usdtTx.retryCount = 0;
       usdtTx.receiverAddress = userWallet.walletAddress;
@@ -444,8 +444,8 @@ export class PublicService {
 
       const usdtTx = await queryRunner.manager.findOne(UsdtTx, {
         where: {
-          status: 'P',
-          txType: 'GAME_TRANSACTION',
+          status: TxStatus.PENDING,
+          txType: UsdtTxType.GAME_TRANSACTION,
         },
       });
 
@@ -457,7 +457,7 @@ export class PublicService {
 
       if (usdtTx.retryCount >= 3) {
         await queryRunner.manager.update(UsdtTx, usdtTx.id, {
-          status: 'PD',
+          status: TxStatus.PENDING_DEVELOPER,
         });
 
         await queryRunner.commitTransaction();
@@ -511,7 +511,7 @@ export class PublicService {
       }
 
       usdtTx.txHash = receipt.hash;
-      usdtTx.status = 'S';
+      usdtTx.status = TxStatus.SUCCESS;
       await queryRunner.manager.save(usdtTx);
 
       await queryRunner.commitTransaction();
@@ -561,7 +561,7 @@ export class PublicService {
         (gameTxn.usdtAmount == 0 ||
           (gameTxn.walletTx && gameTxn.walletTx.status === 'S'))
       ) {
-        gameTxn.status = 'S';
+        gameTxn.status = TxStatus.SUCCESS;
         await queryRunner.manager.save(gameTxn);
         await queryRunner.commitTransaction();
       }
@@ -611,8 +611,8 @@ export class PublicService {
               {
                 where: {
                   txHash: gameTxn.walletTx.txHash,
-                  status: 'S',
-                  txType: 'DEPOSIT',
+                  status: TxStatus.SUCCESS,
+                  txType: WalletTxType.DEPOSIT,
                 },
               },
             );

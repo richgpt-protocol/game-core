@@ -4,7 +4,7 @@ import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { User } from 'src/user/entities/user.entity';
-import { DataSource, Repository, IsNull, Like, Brackets } from 'typeorm';
+import { DataSource, Repository, Like, Brackets } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { PointTx } from './entities/point-tx.entity';
@@ -14,7 +14,7 @@ import { Setting } from 'src/setting/entities/setting.entity';
 import { SetReferralPrizeBonusDto } from './points.dto';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointSnapshot } from './entities/PointSnapshot.entity';
-import { TxStatus } from 'src/shared/enum/status.enum';
+import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 
 @Injectable()
 export class PointService {
@@ -579,7 +579,7 @@ export class PointService {
       const userWallets = await queryRunner.manager.find(UserWallet, {
         where: {
           user: {
-            status: 'A',
+            status: UserStatus.ACTIVE,
           },
         },
         order: {
