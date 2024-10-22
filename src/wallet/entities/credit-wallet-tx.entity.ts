@@ -4,7 +4,6 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
-  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -77,9 +76,9 @@ export class CreditWalletTx {
   @ManyToOne(() => Campaign, (campaign) => campaign.creditWalletTx)
   campaign: Campaign;
 
-  @OneToMany(() => GameUsdTx, (gameUsdTx) => gameUsdTx.creditWalletTx)
+  @ManyToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.creditWalletTx)
   // @JoinColumn()
-  gameUsdTx: GameUsdTx[];
+  gameUsdTx: GameUsdTx;
 
   @JoinColumn()
   @OneToOne(() => GameTx, (gameTx) => gameTx.creditWalletTx)

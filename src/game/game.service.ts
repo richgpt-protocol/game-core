@@ -141,9 +141,17 @@ export class GameService implements OnModuleInit {
       // submit masked betOrder on-chain
       const betOrders = await queryRunner.manager
         .createQueryBuilder(BetOrder, 'betOrder')
+        .leftJoinAndSelect('betOrder.gameUsdTx', 'gameUsdTx')
+        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'walletTxUserWallet')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditTxUserWallet')
+        .leftJoinAndSelect('walletTxUserWallet.user', 'walletTxUser')
+        .leftJoinAndSelect('creditTxUserWallet.user', 'creditTxUser')
         .where('betOrder.gameId = :gameId', { gameId: game.id })
         .andWhere('betOrder.isMasked = :isMasked', { isMasked: true })
         .getMany();
+
       if (betOrders.length === 0) return; // no masked betOrder to submit
 
       const helperBot = new ethers.Wallet(
@@ -161,17 +169,24 @@ export class GameService implements OnModuleInit {
       const userBets: { [key: string]: ICore.BetParamsStruct[] } = {};
       for (let i = 0; i < betOrders.length; i++) {
         const betOrder = betOrders[i];
-        const walletTx = await queryRunner.manager
-          .createQueryBuilder(WalletTx, 'walletTx')
-          .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-          .where('walletTx.id = :id', { id: betOrder.walletTxId })
-          .getOne();
-        const userAddress = walletTx.userWallet.walletAddress;
-        if (!userBets[userAddress]) userBets[userAddress] = [];
+        // const walletTx = await queryRunner.manager
+        //   .createQueryBuilder(WalletTx, 'walletTx')
+        //   .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        //   .where('walletTx.id = :id', { id: betOrder.walletTxId })
+        //   .getOne();
+        const wallet = betOrder.walletTx
+          ? betOrder.walletTx.userWallet
+          : betOrder.creditWalletTx.userWallet;
+
+        const uid = betOrder.walletTx
+          ? betOrder.walletTx.userWallet.user.uid
+          : betOrder.creditWalletTx.userWallet.user.uid;
+        const userIdentifier = `${wallet.walletAddress}-${betOrder.gameUsdTx.id}-${uid}`;
+        if (!userBets[userIdentifier]) userBets[userIdentifier] = [];
         // big forecast & small forecast is treat as separate bet in contract
         const bigForecastAmount = Number(betOrder.bigForecastAmount);
         if (bigForecastAmount > 0) {
-          userBets[userAddress].push({
+          userBets[userIdentifier].push({
             epoch: game.epoch,
             number: Number(betOrder.numberPair), // contract treat numberPair as uint256
             amount: ethers.parseEther(bigForecastAmount.toString()),
@@ -180,7 +195,7 @@ export class GameService implements OnModuleInit {
         }
         const smallForecastAmount = Number(betOrder.smallForecastAmount);
         if (smallForecastAmount > 0) {
-          userBets[userAddress].push({
+          userBets[userIdentifier].push({
             epoch: game.epoch,
             number: Number(betOrder.numberPair), // contract treat numberPair as uint256
             amount: ethers.parseEther(smallForecastAmount.toString()),
@@ -189,19 +204,14 @@ export class GameService implements OnModuleInit {
         }
       }
 
-      const walletTx = await queryRunner.manager
-        .createQueryBuilder(WalletTx, 'walletTx')
-        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-        .leftJoinAndSelect('userWallet.user', 'user')
-        .where('walletTx.id = :id', { id: betOrders[0].walletTxId })
-        .getOne();
       const params: IHelper.BetLastMinuteParamsStruct[] = [];
-      for (const userAddress in userBets) {
+      for (const userIdentifier in userBets) {
+        const [userAddress, gameUsdTxId, uid] = userIdentifier.split('-');
         params.push({
-          uid: walletTx.userWallet.user.uid,
-          ticketId: betOrders[0].walletTxId,
+          uid: uid,
+          ticketId: gameUsdTxId,
           user: userAddress,
-          bets: userBets[userAddress],
+          bets: userBets[userIdentifier],
         });
       }
       const estimatedGas =
@@ -211,30 +221,51 @@ export class GameService implements OnModuleInit {
         gasLimit: (estimatedGas * ethers.toBigInt(13)) / ethers.toBigInt(10),
       });
       const txReceipt = await txResponse.wait();
-
+      const referralQueueData = [];
       if (txReceipt.status === 1) {
         // tx success
         // update walletTx status & txHash for each betOrders
         for (const betOrder of betOrders) {
-          const walletTx = await queryRunner.manager
-            .createQueryBuilder(WalletTx, 'walletTx')
-            .where('walletTx.id = :id', { id: betOrder.walletTxId })
-            .getOne();
-          walletTx.txHash = txReceipt.hash;
-          walletTx.status = 'S';
-          await queryRunner.manager.save(walletTx);
+          // const walletTx = await queryRunner.manager
+          //   .createQueryBuilder(WalletTx, 'walletTx')
+          //   .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+          //   .leftJoinAndSelect('walletTx.gameUsdTx', 'gameUsdTx')
+          //   .where('walletTx.id = :id', { id: betOrder.walletTxId })
+          //   .getOne();
+          // walletTx.txHash = txReceipt.hash;
+          // walletTx.status = 'S';
+          const walletTx = betOrder.walletTx;
+          const userWallet = betOrder.walletTx
+            ? betOrder.walletTx.userWallet
+            : betOrder.creditWalletTx.userWallet;
+          betOrder.gameUsdTx.maskingTxHash = txReceipt.hash;
+          referralQueueData.push({
+            userId: userWallet.userId,
+            betAmount: walletTx ? Number(walletTx.txAmount) : 0,
+            gameUsdTxId: betOrder.gameUsdTx.id,
+            queueType: QueueType.BETTING_REFERRAL_DISTRIBUTION,
+          });
+          await queryRunner.manager.save(betOrder.gameUsdTx);
+
+          // await queryRunner.manager.save(walletTx);
         }
         await queryRunner.commitTransaction();
+
+        for (const data of referralQueueData) {
+          const jobId = `handleBetReferral-${data.gameUsdTxId}`;
+          await this.queueService.addJob(QueueName.BET, jobId, data);
+        }
       } else {
         // tx failed
         for (const betOrder of betOrders) {
-          // only update txHash for each betOrders, status remain pending
-          const walletTx = await queryRunner.manager
-            .createQueryBuilder(WalletTx, 'walletTx')
-            .where('walletTx.id = :id', { id: betOrder.walletTxId })
-            .getOne();
-          walletTx.txHash = txReceipt.hash;
-          await queryRunner.manager.save(walletTx);
+          // only update txHash for each betOrders
+          // const walletTx = await queryRunner.manager
+          //   .createQueryBuilder(WalletTx, 'walletTx')
+          //   .where('walletTx.id = :id', { id: betOrder.walletTxId })
+          //   .getOne();
+          // walletTx.txHash = txReceipt.hash;
+          betOrder.gameUsdTx.maskingTxHash = txReceipt.hash;
+          await queryRunner.manager.save(betOrder.gameUsdTx);
         }
         await queryRunner.commitTransaction();
 

@@ -166,13 +166,13 @@ export class CreditService {
       gameUsdTx.receiverAddress = user.wallet.walletAddress;
       gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
       gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-      gameUsdTx.creditWalletTx = creditTx;
+      gameUsdTx.creditWalletTx = [creditTx];
       gameUsdTx.retryCount = 0;
 
       console.log('gameUsdTx', gameUsdTx);
 
       await queryRunner.manager.save(gameUsdTx);
-      creditTx.gameUsdTx = [gameUsdTx];
+      creditTx.gameUsdTx = gameUsdTx;
       await queryRunner.manager.save(creditTx);
 
       if (!runner) await queryRunner.commitTransaction();
@@ -272,11 +272,11 @@ export class CreditService {
       gameUsdTx.receiverAddress = userWallet.walletAddress;
       gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
       gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-      gameUsdTx.creditWalletTx = creditWalletTx;
+      gameUsdTx.creditWalletTx = [creditWalletTx];
       gameUsdTx.retryCount = 0;
 
       await queryRunner.manager.save(gameUsdTx);
-      creditWalletTx.gameUsdTx = [gameUsdTx];
+      creditWalletTx.gameUsdTx = gameUsdTx;
       await queryRunner.manager.save(creditWalletTx);
 
       return creditWalletTx;
@@ -666,9 +666,11 @@ export class CreditService {
           gameUsdTx.status = 'P';
           gameUsdTx.txHash = null;
           gameUsdTx.senderAddress = userWallet.walletAddress;
-          gameUsdTx.receiverAddress = this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS');
+          gameUsdTx.receiverAddress = this.configService.get(
+            'GAMEUSD_POOL_CONTRACT_ADDRESS',
+          );
           gameUsdTx.retryCount = 0;
-          gameUsdTx.creditWalletTx = creditWalletTx;
+          gameUsdTx.creditWalletTx = [creditWalletTx];
           await queryRunner.manager.save(gameUsdTx);
 
           await queryRunner.commitTransaction();
@@ -769,9 +771,13 @@ export class CreditService {
   // }
 
   async processRevokeCredit(
-    job: Job<{
-      gameUsdTx: GameUsdTx
-    }, any, string>,
+    job: Job<
+      {
+        gameUsdTx: GameUsdTx;
+      },
+      any,
+      string
+    >,
   ): Promise<any> {
     const { gameUsdTx } = job.data;
 
@@ -783,21 +789,21 @@ export class CreditService {
     );
     const gameUsdTokenContract = GameUSD__factory.connect(
       this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
-      user
-    )
+      user,
+    );
     const depositContractAddress = this.configService.get(
       'DEPOSIT_CONTRACT_ADDRESS',
     );
     const allowance = await gameUsdTokenContract.allowance(
       gameUsdTx.senderAddress,
-      depositContractAddress
-    )
+      depositContractAddress,
+    );
     if (allowance === ethers.toBigInt(0)) {
       const approveTx = await gameUsdTokenContract.approve(
         depositContractAddress,
-        ethers.MaxUint256
-      )
-      await approveTx.wait()
+        ethers.MaxUint256,
+      );
+      await approveTx.wait();
     }
     // execute revoke credit function
     const depositBot = await this.getSigner(
@@ -838,10 +844,14 @@ export class CreditService {
   }
 
   async revokeCreditFailed(
-    job: Job<{
-      creditWalletTx: CreditWalletTx,
-      gameUsdTx: GameUsdTx
-    }, any, string>,
+    job: Job<
+      {
+        creditWalletTx: CreditWalletTx;
+        gameUsdTx: GameUsdTx;
+      },
+      any,
+      string
+    >,
   ): Promise<any> {
     const { gameUsdTx } = job.data;
 
