@@ -1,6 +1,7 @@
 import { Column, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { WalletTx } from './wallet-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
 
 /**
  * DepositTx is used for record transaction of token received to escrow wallet
@@ -31,7 +32,7 @@ export class DepositTx {
   @Column({
     comment: 'S - success, P - Pending, F - Failed',
   })
-  status: string;
+  status: TxStatus.SUCCESS | TxStatus.PENDING | TxStatus.PENDING_ADMIN | TxStatus.FAILED;
 
   @Column({
     default: 0,

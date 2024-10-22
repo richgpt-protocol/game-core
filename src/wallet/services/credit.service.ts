@@ -35,6 +35,8 @@ import { UserService } from 'src/user/user.service';
 import { User } from 'src/user/entities/user.entity';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
+import { CreditWalletTxType } from 'src/shared/enum/txType.enum';
+import { TxStatus } from 'src/shared/enum/status.enum';
 @Injectable()
 export class CreditService {
   private readonly logger = new Logger(CreditService.name);
@@ -144,8 +146,8 @@ export class CreditService {
 
       const creditTx = new CreditWalletTx();
       creditTx.amount = payload.gameUsdAmount;
-      creditTx.txType = 'CAMPAIGN';
-      creditTx.status = 'P';
+      creditTx.txType = CreditWalletTxType.CAMPAIGN;
+      creditTx.status = TxStatus.PENDING
       creditTx.userWallet = user.wallet;
       creditTx.walletId = user.wallet.id;
       creditTx.expirationDate = expirationDate;
@@ -161,7 +163,7 @@ export class CreditService {
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = payload.gameUsdAmount;
-      gameUsdTx.status = 'P';
+      gameUsdTx.status = TxStatus.PENDING;
       gameUsdTx.txHash = null;
       gameUsdTx.receiverAddress = user.wallet.walletAddress;
       gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
@@ -250,8 +252,8 @@ export class CreditService {
       //update or insert credit wallet tx
       const creditWalletTx = new CreditWalletTx();
       creditWalletTx.amount = payload.amount;
-      creditWalletTx.txType = isGameTx ? 'GAME_TRANSACTION' : 'CREDIT';
-      creditWalletTx.status = 'P';
+      creditWalletTx.txType = isGameTx ? CreditWalletTxType.GAME_TRANSACTION : CreditWalletTxType.CREDIT;
+      creditWalletTx.status = TxStatus.PENDING;
       creditWalletTx.walletId = userWallet.id;
       creditWalletTx.userWallet = userWallet;
       creditWalletTx.expirationDate = expirationDate;
@@ -267,7 +269,7 @@ export class CreditService {
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = payload.amount;
-      gameUsdTx.status = 'P';
+      gameUsdTx.status = TxStatus.PENDING;
       gameUsdTx.txHash = null;
       gameUsdTx.receiverAddress = userWallet.walletAddress;
       gameUsdTx.senderAddress = this.GAMEUSD_TRANFER_INITIATOR;
@@ -293,7 +295,7 @@ export class CreditService {
   async retryCreditTx(creditWalletTxId: number) {
     try {
       const creditWalletTx = await this.creditWalletTxRepository.findOne({
-        where: { id: creditWalletTxId, status: Not('S') },
+        where: { id: creditWalletTxId, status: Not(TxStatus.SUCCESS) },
       });
 
       if (!creditWalletTx) {
@@ -488,15 +490,15 @@ export class CreditService {
       }
 
       gameUsdTx.txHash = receipt.hash;
-      gameUsdTx.status = 'S';
-      creditWalletTx.status = 'S';
+      gameUsdTx.status = TxStatus.SUCCESS;
+      creditWalletTx.status = TxStatus.SUCCESS;
 
       const lastValidCreditWalletTx = await queryRunner.manager.findOne(
         CreditWalletTx,
         {
           where: {
             userWallet: userWallet,
-            status: 'S',
+            status: TxStatus.SUCCESS,
           },
           order: {
             updatedDate: 'DESC',
@@ -551,8 +553,8 @@ export class CreditService {
           .where('creditWalletTx.id = :id', { id: creditWalletTxId })
           .getOne();
 
-        creditWalletTx.status = 'F';
-        creditWalletTx.gameUsdTx[0].status = 'F';
+        creditWalletTx.status = TxStatus.FAILED;
+        creditWalletTx.gameUsdTx[0].status = TxStatus.FAILED;
 
         await queryRunner.manager.save(creditWalletTx);
         await queryRunner.manager.save(creditWalletTx.gameUsdTx[0]);
@@ -632,8 +634,8 @@ export class CreditService {
           console.log('Expiring credit for wallet:', tx.walletId);
           const creditWalletTx = new CreditWalletTx();
           creditWalletTx.amount = diff;
-          creditWalletTx.txType = 'EXPIRY';
-          creditWalletTx.status = 'S';
+          creditWalletTx.txType = CreditWalletTxType.EXPIRY;
+          creditWalletTx.status = TxStatus.SUCCESS;
           creditWalletTx.walletId = tx.walletId;
           creditWalletTx.userWallet = tx.walletId;
           creditWalletTx.startingBalance = tx.creditBalance;
@@ -652,7 +654,7 @@ export class CreditService {
             CreditWalletTx,
             {
               walletId: tx.walletId,
-              status: 'S',
+              status: TxStatus.SUCCESS,
               txType: In(['CREDIT', 'GAME_TRANSACTION']),
             },
             {
@@ -663,7 +665,7 @@ export class CreditService {
           const gameUsdTx = new GameUsdTx();
           gameUsdTx.amount = diff;
           gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-          gameUsdTx.status = 'P';
+          gameUsdTx.status = TxStatus.PENDING;
           gameUsdTx.txHash = null;
           gameUsdTx.senderAddress = userWallet.walletAddress;
           gameUsdTx.receiverAddress = this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS');
@@ -825,7 +827,7 @@ export class CreditService {
     await queryRunner.startTransaction();
     try {
       await queryRunner.manager.update(GameUsdTx, gameUsdTx.id, {
-        status: 'S',
+        status: TxStatus.SUCCESS,
         txHash: txReceipt.hash,
       });
       await queryRunner.commitTransaction();
@@ -850,7 +852,7 @@ export class CreditService {
     await queryRunner.startTransaction();
     try {
       if (job.attemptsMade >= job.opts.attempts) {
-        gameUsdTx.status = 'F';
+        gameUsdTx.status = TxStatus.FAILED;
         await queryRunner.manager.save(gameUsdTx);
         await queryRunner.commitTransaction();
 

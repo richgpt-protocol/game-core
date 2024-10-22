@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { WalletTx } from './wallet-tx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
 
 @Entity()
 export class RedeemTx {
@@ -34,7 +35,7 @@ export class RedeemTx {
     comment: 'S - success, P - Pending, F - Failed',
     nullable: true,
   })
-  payoutStatus: 'S' | 'P' | 'F';
+  payoutStatus: TxStatus.SUCCESS | TxStatus.PENDING | TxStatus.FAILED;
 
   @Column({
     comment: 'address that initiate the payout tx',
