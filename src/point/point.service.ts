@@ -4,7 +4,7 @@ import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { User } from 'src/user/entities/user.entity';
-import { DataSource, Repository, IsNull, Like, Brackets } from 'typeorm';
+import { DataSource, Repository, Like, Brackets } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { PointTx } from './entities/point-tx.entity';
@@ -14,7 +14,7 @@ import { Setting } from 'src/setting/entities/setting.entity';
 import { SetReferralPrizeBonusDto } from './points.dto';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointSnapshot } from './entities/PointSnapshot.entity';
-import { TxStatus } from 'src/shared/enum/status.enum';
+import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 
 @Injectable()
 export class PointService {
@@ -370,43 +370,43 @@ export class PointService {
     await this.settingRepository.upsert(
       [
         {
-          key: 'referralPrizeBonusTier1',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_1',
           value: data.referralPrizeBonusTier1.toString(),
         },
         {
-          key: 'referralPrizeBonusTier2',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_2',
           value: data.referralPrizeBonusTier2.toString(),
         },
         {
-          key: 'referralPrizeBonusTier3',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_3',
           value: data.referralPrizeBonusTier3.toString(),
         },
         {
-          key: 'referralPrizeBonusTier4',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_4',
           value: data.referralPrizeBonusTier4.toString(),
         },
         {
-          key: 'referralPrizeBonusTier5',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_5',
           value: data.referralPrizeBonusTier5.toString(),
         },
         {
-          key: 'referralPrizeBonusTier6',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_6',
           value: data.referralPrizeBonusTier6.toString(),
         },
         {
-          key: 'referralPrizeBonusTier7',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_7',
           value: data.referralPrizeBonusTier7.toString(),
         },
         {
-          key: 'referralPrizeBonusTier8',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_8',
           value: data.referralPrizeBonusTier8.toString(),
         },
         {
-          key: 'referralPrizeBonusTier9',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_9',
           value: data.referralPrizeBonusTier9.toString(),
         },
         {
-          key: 'referralPrizeBonusTier10',
+          key: 'REFERRAL_PRIZE_BONUS_TIER_10',
           value: data.referralPrizeBonusTier10.toString(),
         },
       ],
@@ -423,11 +423,26 @@ export class PointService {
       },
     });
 
-    return Object.assign({}, ...setting.map((s) => ({ [s.key]: +s.value })));
+    const settingObj = Object.assign({}, ...setting.map((s) => ({ [s.key]: +s.value })));
+    return {
+      referralPrizeBonusTier1: settingObj['REFERRAL_PRIZE_BONUS_TIER_1'],
+      referralPrizeBonusTier2: settingObj['REFERRAL_PRIZE_BONUS_TIER_2'],
+      referralPrizeBonusTier3: settingObj['REFERRAL_PRIZE_BONUS_TIER_3'],
+      referralPrizeBonusTier4: settingObj['REFERRAL_PRIZE_BONUS_TIER_4'],
+      referralPrizeBonusTier5: settingObj['REFERRAL_PRIZE_BONUS_TIER_5'],
+      referralPrizeBonusTier6: settingObj['REFERRAL_PRIZE_BONUS_TIER_6'],
+      referralPrizeBonusTier7: settingObj['REFERRAL_PRIZE_BONUS_TIER_7'],
+      referralPrizeBonusTier8: settingObj['REFERRAL_PRIZE_BONUS_TIER_8'],
+      referralPrizeBonusTier9: settingObj['REFERRAL_PRIZE_BONUS_TIER_9'],
+      referralPrizeBonusTier10: settingObj['REFERRAL_PRIZE_BONUS_TIER_10'],
+    }
   }
 
   async getReferralPrizeBonusTier(level: number): Promise<number> {
-    const tier = Math.ceil(level / 10); //each tier has 10 levels
+    // each tier has 10 levels started from level 10
+    // i.e. level 10-19 is tier 1, level 20-29 is tier 2, etc.
+    // under level 10 no referral prize bonus
+    const tier = Math.floor(level / 10);
     const setting = await this.settingRepository.findOne({
       where: {
         key: `REFERRAL_PRIZE_BONUS_TIER_${tier}`,
@@ -444,11 +459,15 @@ export class PointService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const pointTxs = await this.pointTxRepository.find({
-        where: {
-          isLevelUp: IsNull(),
-        },
-      });
+      // const pointTxs = await this.pointTxRepository.find({
+      //   where: {
+      //     isLevelUp: IsNull(),
+      //   },
+      // });
+      const pointTxs = await queryRunner.manager
+        .createQueryBuilder(PointTx, 'pointTx')
+        .where('pointTx.isLevelUp IS NULL')
+        .getMany();
 
       for (const pointTx of pointTxs) {
         let isLevelUp = false;
@@ -470,8 +489,10 @@ export class PointService {
         }
 
         pointTx.isLevelUp = isLevelUp;
-        await this.pointTxRepository.save(pointTx);
+        // await this.pointTxRepository.save(pointTx);
+        await queryRunner.manager.save(pointTx);
       }
+      await queryRunner.commitTransaction();
     } catch (err) {
       await queryRunner.rollbackTransaction();
 
@@ -558,7 +579,7 @@ export class PointService {
       const userWallets = await queryRunner.manager.find(UserWallet, {
         where: {
           user: {
-            status: 'A',
+            status: UserStatus.ACTIVE,
           },
         },
         order: {

@@ -5,6 +5,8 @@ export enum WalletTxType {
   REDEEM = 'REDEEM',
   REFERRAL = 'REFERRAL',
   INTERNAL_TRANSFER = 'INTERNAL_TRANSFER',
+  CAMPAIGN = 'CAMPAIGN',
+  GAME_TRANSACTION = 'GAME_TRANSACTION',
 }
 
 export enum ReferralTxType {
@@ -17,4 +19,23 @@ export enum ReferralTxType {
 export enum CreditWalletTxType {
   CREDIT = 'CREDIT',
   PLAY = 'PLAY',
+  CAMPAIGN = 'CAMPAIGN',
+  GAME_TRANSACTION = 'GAME_TRANSACTION',
+  EXPIRY = 'EXPIRY',
+}
+
+export enum PointTxType {
+  GAME_TRANSACTION = 'GAME_TRANSACTION',
+  CLAIM = 'CLAIM',
+  CAMPAIGN = 'CAMPAIGN',
+  DEPOSIT = 'DEPOSIT',
+  BET = 'BET',
+  CHAT = 'CHAT',
+  REFERRAL = 'REFERRAL',
+  QUEST = 'QUEST',
+}
+
+export enum UsdtTxType {
+  GAME_TRANSACTION = 'GAME_TRANSACTION',
+  CAMPAIGN = 'CAMPAIGN',
 }

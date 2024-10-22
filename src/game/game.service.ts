@@ -5,14 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  Between,
-  DataSource,
-  In,
-  LessThan,
-  MoreThan,
-  Repository,
-} from 'typeorm';
+import { Between, DataSource, In, LessThan, Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -35,6 +28,8 @@ import { WalletService } from 'src/wallet/wallet.service';
 import { PointService } from 'src/point/point.service';
 import { ClaimService } from 'src/wallet/services/claim.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
+import { ReferralTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 
 interface SubmitDrawResultDTO {
   drawResults: DrawResult[];
@@ -333,12 +328,12 @@ export class GameService implements OnModuleInit {
         await queryRunner.manager.save(game);
 
         // find betOrder that numberPair matched and update availableClaim to true
-        for (const result of drawResults) {
+        for (const drawResult of drawResults) {
           const betOrders = await queryRunner.manager
             .createQueryBuilder(BetOrder, 'betOrder')
             .where('betOrder.gameId = :gameId', { gameId })
             .andWhere('betOrder.numberPair = :numberPair', {
-              numberPair: result.numberPair,
+              numberPair: drawResult.numberPair,
             })
             .getMany();
           // there might be more than 1 betOrder that numberPair matched
@@ -348,7 +343,7 @@ export class GameService implements OnModuleInit {
 
             try {
               const { bigForecastWinAmount, smallForecastWinAmount } =
-                this.claimService.calculateWinningAmount(betOrder, result);
+                this.claimService.calculateWinningAmount(betOrder, drawResult);
               const totalAmount =
                 Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
               const jobId = `processWinReferralBonus_${betOrder.id}`;
@@ -497,20 +492,20 @@ export class GameService implements OnModuleInit {
       if (!bonusPerc || bonusPerc === 0) {
         return;
       }
-      const bonusAmount = prizeAmount * (bonusPerc / 100);
+      const bonusAmount = prizeAmount * bonusPerc;
 
-      const lastValidWalletTx = await queryRunner.manager.findOne(WalletTx, {
-        where: {
-          userWalletId: referralUser.wallet.id,
-          status: 'S',
-        },
-        order: { id: 'DESC' },
-      });
+      // const lastValidWalletTx = await queryRunner.manager.findOne(WalletTx, {
+      //   where: {
+      //     userWalletId: referralUser.wallet.id,
+      //     status: 'S',
+      //   },
+      //   order: { id: 'DESC' },
+      // });
 
       const walletTx = new WalletTx();
-      walletTx.txType = 'REFERRAL';
+      walletTx.txType = WalletTxType.REFERRAL;
       walletTx.txAmount = bonusAmount;
-      walletTx.status = 'S';
+      walletTx.status = TxStatus.SUCCESS;
       walletTx.startingBalance = referralUser.wallet.walletBalance;
       walletTx.endingBalance =
         Number(walletTx.startingBalance) + Number(bonusAmount);
@@ -550,7 +545,7 @@ export class GameService implements OnModuleInit {
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = bonusAmount;
       gameUsdTx.chainId = +chainId;
-      gameUsdTx.status = 'S';
+      gameUsdTx.status = TxStatus.SUCCESS;
       gameUsdTx.txHash = onchainTx.hash;
       gameUsdTx.senderAddress = process.env.DEPOSIT_BOT_ADDRESS;
       gameUsdTx.receiverAddress = referralUser.wallet.walletAddress;
@@ -559,9 +554,9 @@ export class GameService implements OnModuleInit {
 
       const referralTx = new ReferralTx();
       referralTx.rewardAmount = bonusAmount;
-      referralTx.referralType = 'PRIZE';
+      referralTx.referralType = ReferralTxType.PRIZE;
       referralTx.txHash = onchainTx.hash;
-      referralTx.status = 'S';
+      referralTx.status = TxStatus.SUCCESS;
       referralTx.userId = betOrder.walletTx.userWallet.user.id;
       referralTx.user = betOrder.walletTx.userWallet.user;
       referralTx.referralUserId = referralUser.id;

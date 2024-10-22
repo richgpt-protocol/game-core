@@ -12,6 +12,7 @@ import { MPC } from '../mpc';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Mutex } from 'async-mutex';
 import { ConfigService } from 'src/config/config.service';
+import { TxStatus } from '../enum/status.enum';
 
 @Injectable()
 export class GasService {
@@ -53,7 +54,7 @@ export class GasService {
         await this.reloadTxRepository.save(
           this.reloadTxRepository.create({
             amount: Number(amount),
-            status: 'P',
+            status: TxStatus.PENDING,
             chainId,
             currency: 'BNB',
             amountInUSD: await this.getAmountInUSD(amount),
@@ -99,7 +100,7 @@ export class GasService {
     
     try {
       const reloadTx = await queryRunner.manager.findOne(ReloadTx, {
-        where: { status: 'P' },
+        where: { status: TxStatus.PENDING },
         relations: { userWallet: true },
         order: { id: 'ASC' },
       });
@@ -129,17 +130,17 @@ export class GasService {
           reloadTx.txHash = txReceipt.hash;
           
           if (txReceipt.status === 1) {
-            reloadTx.status = 'S';
+            reloadTx.status = TxStatus.SUCCESS;
             break;
 
           } else {
-            reloadTx.status = 'F';
+            reloadTx.status = TxStatus.FAILED;
             reloadTx.retryCount++;
           }
 
         } catch (error) {
           console.log('handlePendingReloadTx() error, error:', error);
-          reloadTx.status = 'F';
+          reloadTx.status = TxStatus.FAILED;
           reloadTx.retryCount++;
         }
       }
@@ -180,11 +181,9 @@ export class GasService {
 
   private _isAdmin(userAddress: string): boolean {
     const adminAddress = [
-      process.env.WALLET_CREATION_BOT_ADDRESS,
       process.env.DEPOSIT_BOT_ADDRESS,
       process.env.PAYOUT_BOT_ADDRESS,
       process.env.RESULT_BOT_ADDRESS,
-      process.env.POINT_REWARD_BOT_ADDRESS,
       process.env.HELPER_BOT_ADDRESS,
     ]
     return adminAddress.includes(userAddress);

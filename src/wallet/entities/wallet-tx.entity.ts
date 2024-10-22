@@ -20,6 +20,8 @@ import { PointTx } from 'src/point/entities/point-tx.entity';
 import { InternalTransfer } from './internal-transfer.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
 import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
+import { WalletTxType } from 'src/shared/enum/txType.enum';
 
 @Entity()
 export class WalletTx {
@@ -29,7 +31,14 @@ export class WalletTx {
   @Column({
     comment: 'DEPOSIT, PLAY, CLAIM, REDEEM, REFERRAL, INTERNAL_TRANSFER',
   })
-  txType: string;
+  txType: WalletTxType.DEPOSIT |
+    WalletTxType.PLAY |
+    WalletTxType.CLAIM |
+    WalletTxType.REDEEM |
+    WalletTxType.REFERRAL |
+    WalletTxType.INTERNAL_TRANSFER |
+    WalletTxType.CAMPAIGN |
+    WalletTxType.GAME_TRANSACTION;
 
   @Column({
     type: 'decimal',
@@ -51,7 +60,11 @@ export class WalletTx {
     // Pending for Admin: pending for admin approval, valid for redeem-tx only
     // Pending for Developer: pending for developer to check
   })
-  status: 'S' | 'P' | 'PA' | 'PD' | 'F';
+  status: TxStatus.SUCCESS |
+    TxStatus.PENDING |
+    TxStatus.PENDING_ADMIN |
+    TxStatus.PENDING_DEVELOPER |
+    TxStatus.FAILED;
 
   @Column({
     type: 'decimal',

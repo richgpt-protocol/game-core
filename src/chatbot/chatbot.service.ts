@@ -13,6 +13,7 @@ import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { UserService } from 'src/user/user.service';
 import { ChatCompletionMessageParam } from 'openai/resources';
+import { PointTxType } from 'src/shared/enum/txType.enum';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -297,7 +298,7 @@ Today date: ${new Date().toDateString()}.`;
       })
       
       const pointTx = this.pointTxRepository.create({
-        txType: 'CHAT',
+        txType: PointTxType.CHAT,
         amount: 1,
         walletId: userWallet.id,
       });

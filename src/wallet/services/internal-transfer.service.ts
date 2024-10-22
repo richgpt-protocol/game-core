@@ -19,6 +19,9 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { MPC } from 'src/shared/mpc';
 import { User } from 'src/user/entities/user.entity';
 import * as bcrypt from 'bcrypt';
+import { WalletTxType } from 'src/shared/enum/txType.enum';
+import { TxStatus } from 'src/shared/enum/status.enum';
+
 @Injectable()
 export class InternalTransferService {
   private readonly logger = new Logger(InternalTransferService.name);
@@ -79,11 +82,11 @@ export class InternalTransferService {
         .innerJoin('wallet.user', 'user');
 
       if (payload.sendMode == SendMode.phone) {
-        query.andWhere('user.phoneNumber = :phoneNumber', {
+        query.where('user.phoneNumber = :phoneNumber', {
           phoneNumber: payload.receiver,
         });
       } else {
-        query.andWhere('user.uid = :uid', { uid: payload.receiver });
+        query.where('user.uid = :uid', { uid: payload.receiver });
       }
 
       const receiverWallet = await query.getOne();
@@ -115,17 +118,17 @@ export class InternalTransferService {
       }
 
       const senderWalletTx = new WalletTx();
-      senderWalletTx.txType = 'INTERNAL_TRANSFER';
+      senderWalletTx.txType = WalletTxType.INTERNAL_TRANSFER;
       senderWalletTx.txAmount = payload.amount;
-      senderWalletTx.status = 'P';
+      senderWalletTx.status = TxStatus.PENDING;
       senderWalletTx.userWalletId = senderWallet.id;
       senderWalletTx.userWallet = senderWallet;
       await queryRunner.manager.save(senderWalletTx);
 
       const receiverWalletTx = new WalletTx();
-      receiverWalletTx.txType = 'INTERNAL_TRANSFER';
+      receiverWalletTx.txType = WalletTxType.INTERNAL_TRANSFER;
       receiverWalletTx.txAmount = payload.amount;
-      receiverWalletTx.status = 'P';
+      receiverWalletTx.status = TxStatus.PENDING;
       receiverWalletTx.userWalletId = receiverWallet.id;
       receiverWalletTx.userWallet = receiverWallet;
       await queryRunner.manager.save(receiverWalletTx);
@@ -133,7 +136,7 @@ export class InternalTransferService {
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = payload.amount;
       gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-      gameUsdTx.status = 'P';
+      gameUsdTx.status = TxStatus.PENDING;
       gameUsdTx.senderAddress = senderWallet.walletAddress;
       gameUsdTx.receiverAddress = receiverWallet.walletAddress;
       gameUsdTx.retryCount = 0;
@@ -201,9 +204,9 @@ export class InternalTransferService {
       await this.gameUsdTxRepository.save(gameUsdTx);
 
       return;
+    } else {
+      await this.processTransfer(payload);
     }
-
-    await this.processTransfer(payload);
   }
 
   isRetryCronRunning = false;
@@ -222,14 +225,26 @@ export class InternalTransferService {
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
         .where('gameUsdTx.status = :status', { status: 'P' })
         .andWhere('gameUsdTx.retryCount > 0')
-        .andWhere('walletTx.txType = :txType', { txType: 'INTERNAL_TRANSFER' })
+        .andWhere('walletTx.txType = :txType', { txType: WalletTxType.INTERNAL_TRANSFER })
         .getMany();
 
       for (const gameUsdTx of pendingGameUsdTxns) {
         try {
           if (gameUsdTx.retryCount >= 5) {
-            gameUsdTx.status = 'F';
+            gameUsdTx.status = TxStatus.FAILED
             await this.gameUsdTxRepository.save(gameUsdTx);
+
+            const senderWalletTx = gameUsdTx.walletTxs.find(
+              (tx) => tx.userWallet.walletAddress == gameUsdTx.senderAddress,
+            )
+            senderWalletTx.status = TxStatus.FAILED
+            await this.walletTxRepository.save(senderWalletTx);
+
+            const receiverWalletTx = gameUsdTx.walletTxs.find(
+              (tx) => tx.userWallet.walletAddress == gameUsdTx.receiverAddress,
+            )
+            receiverWalletTx.status = TxStatus.FAILED
+            await this.walletTxRepository.save(receiverWalletTx);
 
             this.adminNotificationService.setAdminNotification(
               `Error in retry cron for internal transfer when processing gameUsdTx : ${gameUsdTx.id}`,
@@ -266,7 +281,7 @@ export class InternalTransferService {
       this.isRetryCronRunning = false;
     }
 
-    this.isRetryCronRunning = false;
+    // this.isRetryCronRunning = false;
   }
 
   private async processTransfer(payload: {
@@ -276,26 +291,26 @@ export class InternalTransferService {
   }) {
     const { senderWalletTx, receiverWalletTx, gameUsdTx } = payload;
 
-    const hasNativeBalance = await this.checkNativeBalance(
-      senderWalletTx.userWallet,
-      gameUsdTx.chainId,
-    );
+    // const hasNativeBalance = await this.checkNativeBalance(
+    //   senderWalletTx.userWallet,
+    //   gameUsdTx.chainId,
+    // );
 
-    if (!hasNativeBalance) {
-      return;
-    }
+    // if (!hasNativeBalance) {
+    //   return;
+    // }
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      const senderLastValidWalletTx = await this.getLastValidWalletTx(
-        senderWalletTx.userWalletId,
-      );
-      const receiverLastValidWalletTx = await this.getLastValidWalletTx(
-        receiverWalletTx.userWalletId,
-      );
+      // const senderLastValidWalletTx = await this.getLastValidWalletTx(
+      //   senderWalletTx.userWalletId,
+      // );
+      // const receiverLastValidWalletTx = await this.getLastValidWalletTx(
+      //   receiverWalletTx.userWalletId,
+      // );
 
       const senderUserWallet = senderWalletTx.userWallet;
       const receiverUserWallet = receiverWalletTx.userWallet;
@@ -311,21 +326,21 @@ export class InternalTransferService {
         provider,
       );
 
-      const gameUSDContract = GameUSD__factory.connect(
+      const gameUSDTokenContract = GameUSD__factory.connect(
         this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
         userSigner,
       );
 
-      const decimals = await gameUSDContract.decimals();
+      const decimals = await gameUSDTokenContract.decimals();
 
       const amountParsed = parseUnits(gameUsdTx.amount.toString(), decimals);
-      const estimatedGas = await gameUSDContract.transfer.estimateGas(
+      const estimatedGas = await gameUSDTokenContract.transfer.estimateGas(
         receiverUserWallet.walletAddress,
         amountParsed,
       );
 
       try {
-        const tx = await gameUSDContract.transfer(
+        const tx = await gameUSDTokenContract.transfer(
           receiverUserWallet.walletAddress,
           amountParsed,
           {
@@ -335,9 +350,9 @@ export class InternalTransferService {
         const receipt = await tx.wait();
 
         if (receipt && receipt.status == 1) {
-          senderWalletTx.status = 'S';
-          receiverWalletTx.status = 'S';
-          gameUsdTx.status = 'S';
+          senderWalletTx.status = TxStatus.SUCCESS;
+          receiverWalletTx.status = TxStatus.SUCCESS;
+          gameUsdTx.status = TxStatus.SUCCESS;
           gameUsdTx.txHash = tx.hash;
 
           senderWalletTx.txHash = tx.hash;
@@ -384,21 +399,22 @@ export class InternalTransferService {
             this.configService.get('BASE_CHAIN_ID'),
           );
         } else {
-          await this.adminNotificationService.setAdminNotification(
-            `Error processing transfer for gameUsdTx : ${payload.gameUsdTx.id}.`,
-            'TRANSFER_TRANSACTION_FAILED',
-            'Transfer Failed',
-            false,
-          );
+          // await this.adminNotificationService.setAdminNotification(
+          //   `Error processing transfer for gameUsdTx : ${payload.gameUsdTx.id}.`,
+          //   'TRANSFER_TRANSACTION_FAILED',
+          //   'Transfer Failed',
+          //   false,
+          // );
 
           throw new Error('Transaction failed');
         }
       } catch (error) {
-        this.logger.error(error);
+        this.logger.error('InternalTransferService.processTransfer() error: ' + error);
 
-        gameUsdTx.status = 'F';
-        senderWalletTx.status = 'F';
-        receiverWalletTx.status = 'F';
+        // gameUsdTx.status = 'F';
+        // senderWalletTx.status = 'F';
+        // receiverWalletTx.status = 'F';
+        gameUsdTx.retryCount += 1;
       }
 
       await queryRunner.manager.save(senderWalletTx);
@@ -409,8 +425,15 @@ export class InternalTransferService {
 
       await queryRunner.commitTransaction();
     } catch (error) {
-      console.log(error);
+      this.logger.log('InternalTransferService.processTransfer() error: ' + error);
       await queryRunner.rollbackTransaction();
+
+      await this.adminNotificationService.setAdminNotification(
+        `Transaction Rollback in InternalTransferService.processTransfer()`,
+        'TRANSACTION_ROLLBACK',
+        'Transaction Rollback in InternalTransferService',
+        true,
+      );
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
@@ -422,7 +445,9 @@ export class InternalTransferService {
   ): Promise<boolean> {
     try {
       const provider = new JsonRpcProvider(
-        this.configService.get('OPBNB_PROVIDER_RPC_URL'),
+        this.configService.get(
+          'PROVIDER_RPC_URL_' + chainId.toString(),
+        )
       );
 
       const nativeBalance = await provider.getBalance(userWallet.walletAddress);
@@ -432,25 +457,25 @@ export class InternalTransferService {
       );
 
       if (nativeBalance < parseUnits(minimumNativeBalance, 18)) {
-        const pendingReloadTx = await this.reloadTxRepository.findOne({
-          where: {
-            userWalletId: userWallet.id,
-            chainId,
-            status: 'P',
-          },
-        });
+        // const pendingReloadTx = await this.reloadTxRepository.findOne({
+        //   where: {
+        //     userWalletId: userWallet.id,
+        //     chainId,
+        //     status: 'P',
+        //   },
+        // });
 
-        if (!pendingReloadTx) {
-          console.log(
-            'Deposit: Emitting gas.service.reload event for userWallet:',
-            userWallet.walletAddress,
-          );
-          this.eventEmitter.emit(
-            'gas.service.reload',
-            userWallet.walletAddress,
-            chainId,
-          );
-        }
+        // if (!pendingReloadTx) {
+        //   console.log(
+        //     'Deposit: Emitting gas.service.reload event for userWallet:',
+        //     userWallet.walletAddress,
+        //   );
+        //   this.eventEmitter.emit(
+        //     'gas.service.reload',
+        //     userWallet.walletAddress,
+        //     chainId,
+        //   );
+        // }
 
         return false;
       } else {
@@ -462,17 +487,17 @@ export class InternalTransferService {
     }
   }
 
-  private async getLastValidWalletTx(userWalletId: number) {
-    return this.walletTxRepository.findOne({
-      where: {
-        userWalletId: userWalletId,
-        status: 'S',
-      },
-      order: {
-        id: 'DESC',
-      },
-    });
-  }
+  // private async getLastValidWalletTx(userWalletId: number) {
+  //   return this.walletTxRepository.findOne({
+  //     where: {
+  //       userWalletId: userWalletId,
+  //       status: 'S',
+  //     },
+  //     order: {
+  //       id: 'DESC',
+  //     },
+  //   });
+  // }
 
   private async getTotalPoints(userWallet: UserWallet): Promise<number> {
     const points = await this.pointTxRepository.findOne({
@@ -495,18 +520,18 @@ export class InternalTransferService {
     }
   }
 
-  private async getPendingAmount(senderWallet: UserWallet): Promise<number> {
-    const pendingTransfers = await this.walletTxRepository.find({
-      where: {
-        userWallet: senderWallet,
-        status: 'P',
-      },
-    });
+  // private async getPendingAmount(senderWallet: UserWallet): Promise<number> {
+  //   const pendingTransfers = await this.walletTxRepository.find({
+  //     where: {
+  //       userWallet: senderWallet,
+  //       status: 'P',
+  //     },
+  //   });
 
-    if (pendingTransfers.length === 0) {
-      return 0;
-    }
+  //   if (pendingTransfers.length === 0) {
+  //     return 0;
+  //   }
 
-    return pendingTransfers.reduce((acc, tx) => acc + tx.txAmount, 0);
-  }
+  //   return pendingTransfers.reduce((acc, tx) => acc + tx.txAmount, 0);
+  // }
 }
