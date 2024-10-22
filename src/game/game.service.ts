@@ -274,11 +274,6 @@ export class GameService implements OnModuleInit {
         setDrawResultBot,
       );
       const numberPairs = drawResults.map((result) => result.numberPair);
-      console.log('numberPairs', numberPairs);
-      console.log(
-        'MAX_BET_AMOUNT',
-        ethers.parseEther(this.configService.get('MAX_BET_AMOUNT').toString()),
-      );
       const estimatedGas = await coreContract.setDrawResults.estimateGas(
         numberPairs,
         ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
