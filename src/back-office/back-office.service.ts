@@ -615,14 +615,14 @@ export class BackOfficeService {
       .createQueryBuilder('betOrder')
       .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-      .leftJoinAndSelect('betOrder.claimDetail', 'claimDetail')
+      // .leftJoinAndSelect('betOrder.claimDetail', 'claimDetail')
       .where('betOrder.createdDate BETWEEN :startDate AND :endDate', {
         // need to pass as string instead of Date object because of the timezone issue
         startDate,
         endDate,
       })
       .andWhere('walletTx.status = :status', { status: 'S' })
-      .getManyAndCount();
+      .getMany();
 
     const commissions = await this.walletTxRepository
       .createQueryBuilder('walletTx')
@@ -655,7 +655,8 @@ export class BackOfficeService {
     }
 
     const userByDate = {};
-    betOrders[0].map((betOrder) => {
+    // betOrders.map(async (betOrder) => {
+    for (const betOrder of betOrders) {
       const date = betOrder.createdDate.toDateString();
       if (!userByDate[date]) {
         userByDate[date] = new Set();
@@ -673,17 +674,30 @@ export class BackOfficeService {
         : 1;
       userByDate[date].add(betOrder.walletTx.userWallet.userId);
 
-      if (betOrder.claimDetail) {
-        resultByDate[date].totalPayoutRewards =
-          Number(resultByDate[date].totalPayoutRewards) +
-          (Number(betOrder.claimDetail.claimAmount) || 0) +
-          (Number(betOrder.claimDetail.bonusAmount) || 0);
+      if (betOrder.availableClaim) {
+      //   resultByDate[date].totalPayoutRewards =
+      //     Number(resultByDate[date].totalPayoutRewards) +
+      //     (Number(betOrder.claimDetail.claimAmount) || 0) +
+      //     (Number(betOrder.claimDetail.bonusAmount) || 0);
 
-        resultByDate[date].totalPayout =
-          Number(resultByDate[date].totalPayout) +
-            Number(betOrder.claimDetail.claimAmount) || 0;
+      //   resultByDate[date].totalPayout =
+      //     Number(resultByDate[date].totalPayout) +
+      //       Number(betOrder.claimDetail.claimAmount) || 0;
+        const draw_result = await this.drawResultRepository.findOne({
+          where: {
+            gameId: betOrder.gameId,
+            numberPair: betOrder.numberPair,
+          },
+        });
+        const {
+          bigForecastWinAmount,
+          smallForecastWinAmount
+        } = this.claimService.calculateWinningAmount(betOrder, draw_result);
+        resultByDate[date].totalPayoutRewards += bigForecastWinAmount + smallForecastWinAmount;
+        resultByDate[date].totalPayout += bigForecastWinAmount + smallForecastWinAmount;
       }
-    });
+    // });
+    };
 
     return {
       data: resultByDate,
