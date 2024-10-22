@@ -143,7 +143,7 @@ export class BetService implements OnModuleInit {
     try {
       const gameUsdTxs = await this.gameUsdTxRepository
         .createQueryBuilder('gameUsdTx')
-        .leftJoinAndSelect('gameUsdTx.betOrders', 'betOrder')
+        .innerJoinAndSelect('gameUsdTx.betOrders', 'betOrder')
         .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'walletUserWallet')
         .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
@@ -162,7 +162,7 @@ export class BetService implements OnModuleInit {
         let uid;
         if (bet.walletTxs.length > 0) {
           uid = bet.walletTxs[0].userWallet.user.uid;
-        } else if (bet.creditWalletTx) {
+        } else if (bet.creditWalletTx.length > 0) {
           uid = bet.creditWalletTx[0].userWallet.user.uid;
         }
 
@@ -314,7 +314,7 @@ export class BetService implements OnModuleInit {
         await queryRunner.manager.save(gameUsdResult);
       }
 
-      console.log('bet - creditWalletTxns', creditWalletTxns);
+      // console.log('bet - creditWalletTxns', creditWalletTxns);
       betOrders = betOrders.map((bet) => {
         if (totalWalletBalanceUsed > 0) {
           bet.walletTx = walletTx;
