@@ -1,15 +1,17 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Not, QueryRunner, Repository } from 'typeorm';
+import { DataSource, QueryRunner, Repository } from 'typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
 import { WalletTx } from './entities/wallet-tx.entity';
-import * as dotenv from 'dotenv';
 import { User } from 'src/user/entities/user.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
 import { ConfigService } from 'src/config/config.service';
 import { GameUsdTx } from './entities/game-usd-tx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
+import { UsdtTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import * as dotenv from 'dotenv';
 dotenv.config();
 
 type TransactionHistory = {
@@ -194,8 +196,8 @@ export class WalletService {
     const betWalletTxs = await this.walletTxRepository.find({
       where: {
         userWalletId: userWallet.id,
-        txType: 'PLAY',
-        status: 'S',
+        txType: WalletTxType.PLAY,
+        status: TxStatus.SUCCESS,
       },
       order: { id: 'DESC' },
       relations: ['betOrders', 'betOrders.game', 'betOrders.game.drawResult'],
@@ -251,19 +253,19 @@ export class WalletService {
 
       const usdtTx = new UsdtTx();
       usdtTx.amount = amount;
-      usdtTx.status = 'P';
+      usdtTx.status = TxStatus.PENDING;
       usdtTx.txHash = null;
       usdtTx.retryCount = 0;
       usdtTx.receiverAddress = user.wallet.walletAddress;
       usdtTx.senderAddress = miniGameUsdtSender.value;
       usdtTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-      usdtTx.txType = 'CAMPAIGN';
+      usdtTx.txType = UsdtTxType.CAMPAIGN;
       await queryRunner.manager.save(usdtTx);
 
       const walletTx = new WalletTx();
       walletTx.txAmount = amount;
-      walletTx.txType = 'CAMPAIGN';
-      walletTx.status = 'P';
+      walletTx.txType = WalletTxType.CAMPAIGN
+      walletTx.status = TxStatus.PENDING;
       walletTx.userWalletId = user.wallet.id;
       walletTx.usdtTx = usdtTx;
 

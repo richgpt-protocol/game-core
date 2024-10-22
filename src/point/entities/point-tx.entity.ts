@@ -1,5 +1,6 @@
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
+import { PointTxType } from 'src/shared/enum/txType.enum';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
@@ -22,7 +23,14 @@ export class PointTx {
   @Column({
     comment: 'CLAIM, CAMPAIGN, DEPOSIT, BET, CHAT, REFERRAL',
   })
-  txType: string;
+  txType: PointTxType.BET |
+    PointTxType.CAMPAIGN |
+    PointTxType.CLAIM |
+    PointTxType.DEPOSIT |
+    PointTxType.REFERRAL |
+    PointTxType.CHAT |
+    PointTxType.GAME_TRANSACTION |
+    PointTxType.QUEST;
 
   @Column({
     type: 'decimal',

@@ -484,6 +484,7 @@ export class WalletController {
     }
   }
 
+  // This endpoint can only be accessed by whitelisted ip in IpWhitelistMiddleware class
   @Post('deposit')
   @ApiHeaders([
     {

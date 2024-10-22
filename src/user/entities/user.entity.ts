@@ -14,6 +14,7 @@ import {
 } from 'typeorm';
 
 import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
+import { UserStatus } from 'src/shared/enum/status.enum';
 
 @Entity()
 export class User {
@@ -60,7 +61,12 @@ export class User {
   // terminated -
   // unverified - sign up but not yet verified via otp
   // pending - pending for admin/developer to review
-  status: string;
+  status: UserStatus.ACTIVE |
+    UserStatus.INACTIVE |
+    UserStatus.SUSPENDED |
+    UserStatus.TERMINATED |
+    UserStatus.UNVERIFIED |
+    UserStatus.PENDING;
 
   @Column({
     select: false,

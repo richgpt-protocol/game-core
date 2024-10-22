@@ -17,7 +17,7 @@ import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { RandomUtil } from 'src/shared/utils/random.util';
-import { UserStatus } from 'src/shared/enum/status.enum';
+import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { Provider } from 'src/shared/enum/provider.enum';
 import { UtilConstant } from 'src/shared/constants/util.constant';
 import { buildFilterCriterias } from 'src/shared/utils/pagination.util';
@@ -44,6 +44,7 @@ import { CreditService } from 'src/wallet/services/credit.service';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { keywords } from 'src/shared/constants/referralCodeKeyword.constant';
+import { ReferralTxType } from 'src/shared/enum/txType.enum';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -497,10 +498,10 @@ export class UserService {
         if (newUser.referralUserId) {
           const referralTx = new ReferralTx();
           referralTx.rewardAmount = 0;
-          referralTx.referralType = 'SET_REFERRER';
+          referralTx.referralType = ReferralTxType.SET_REFERRAL;
           referralTx.bonusAmount = 0;
           referralTx.bonusCurrency = 'USDT';
-          referralTx.status = 'S';
+          referralTx.status = TxStatus.SUCCESS;
           referralTx.txHash = null;
           referralTx.userId = newUser.id;
           referralTx.referralUserId = newUser.referralUserId;
@@ -800,10 +801,10 @@ export class UserService {
         if (user.referralUserId) {
           const referralTx = new ReferralTx();
           referralTx.rewardAmount = 0;
-          referralTx.referralType = 'SET_REFERRER';
+          referralTx.referralType = ReferralTxType.SET_REFERRAL;
           referralTx.bonusAmount = 0;
           referralTx.bonusCurrency = 'USDT';
-          referralTx.status = 'S';
+          referralTx.status = TxStatus.SUCCESS;
           referralTx.txHash = null;
           referralTx.userId = user.id;
           referralTx.referralUserId = user.referralUserId;
@@ -909,7 +910,7 @@ export class UserService {
         const registrations = await queryRunner.manager.count(User, {
           where: {
             createdDate: Between(startDate, endDate),
-            status: 'A',
+            status: UserStatus.ACTIVE,
           },
         });
 
@@ -1070,15 +1071,15 @@ export class UserService {
       where: [
         {
           referralUserId: userId,
-          referralType: 'DEPOSIT',
+          referralType: ReferralTxType.DEPOSIT,
         },
         {
           referralUserId: userId,
-          referralType: 'BET',
+          referralType: ReferralTxType.BET,
         },
         {
           referralUserId: userId,
-          referralType: 'PRIZE',
+          referralType: ReferralTxType.PRIZE,
         },
       ],
       relations: { user: true },
