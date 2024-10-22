@@ -181,19 +181,19 @@ export class WithdrawService implements OnModuleInit {
         {
           where: [
             {
-              txType: 'REDEEM',
+              txType: WalletTxType.REDEEM,
               userWalletId: userWallet.id,
-              status: 'P',
+              status: TxStatus.PENDING
             },
             {
-              txType: 'REDEEM',
+              txType: WalletTxType.REDEEM,
               userWalletId: userWallet.id,
-              status: 'PD',
+              status: TxStatus.PENDING_DEVELOPER,
             },
             {
-              txType: 'REDEEM',
+              txType: WalletTxType.REDEEM,
               userWalletId: userWallet.id,
-              status: 'PA',
+              status: TxStatus.PENDING_ADMIN,
             },
           ],
         },
@@ -230,7 +230,7 @@ export class WithdrawService implements OnModuleInit {
       await queryRunner.manager.save(redeemTx);
 
       const walletTx = this.walletTxRepository.create({
-        txType: 'REDEEM',
+        txType: WalletTxType.REDEEM,
         txAmount: payload.amount,
         txHash: null,
         status: TxStatus.PENDING,
@@ -303,7 +303,7 @@ export class WithdrawService implements OnModuleInit {
         );
 
       } else {
-        walletTx.status = 'PA'; // pending for admin review
+        walletTx.status = TxStatus.PENDING_ADMIN; // pending for admin review
         await queryRunner.manager.save(walletTx);
         await queryRunner.commitTransaction();
 
@@ -402,7 +402,7 @@ export class WithdrawService implements OnModuleInit {
       } else { // payout rejected
         redeemTx.payoutNote = payload.payoutNote;
         redeemTx.payoutCheckedAt = new Date();
-        redeemTx.payoutStatus = 'F';
+        redeemTx.payoutStatus = TxStatus.FAILED;
         await queryRunner.manager.save(redeemTx);
         walletTx.status = TxStatus.FAILED;
         await queryRunner.manager.save(walletTx);
@@ -470,7 +470,7 @@ export class WithdrawService implements OnModuleInit {
           true,
         );
 
-        walletTx.status = 'PD';
+        walletTx.status = TxStatus.PENDING_DEVELOPER
         await queryRunner.manager.save(walletTx);
         await queryRunner.commitTransaction();
 
@@ -498,9 +498,9 @@ export class WithdrawService implements OnModuleInit {
 
       gameUsdTx.txHash = receipt.hash;
       gameUsdTx.status = TxStatus.SUCCESS;
-      redeemTx.payoutStatus = 'P';
+      redeemTx.payoutStatus = TxStatus.PENDING;
       redeemTx.payoutCanProceed = true;
-      redeemTx.walletTx.status = 'P';
+      redeemTx.walletTx.status = TxStatus.PENDING;
 
       await queryRunner.manager.save(redeemTx);
       await queryRunner.manager.save(gameUsdTx);
@@ -552,7 +552,7 @@ export class WithdrawService implements OnModuleInit {
 
       if (!receipt || receipt.status != 1) {
         redeemTx.isPayoutTransferred = false;
-        redeemTx.walletTx.status = 'PD';
+        redeemTx.walletTx.status = TxStatus.PENDING_DEVELOPER
 
         await queryRunner.commitTransaction();
 
@@ -576,8 +576,8 @@ export class WithdrawService implements OnModuleInit {
         // });
 
         redeemTx.isPayoutTransferred = true;
-        redeemTx.payoutStatus = 'S';
-        redeemTx.walletTx.status = 'S';
+        redeemTx.payoutStatus = TxStatus.SUCCESS;
+        redeemTx.walletTx.status = TxStatus.SUCCESS
         redeemTx.walletTx.startingBalance =
           redeemTx.walletTx.userWallet.walletBalance;
         redeemTx.walletTx.endingBalance =
@@ -624,8 +624,8 @@ export class WithdrawService implements OnModuleInit {
         const walletTx = await queryRunner.manager.findOne(WalletTx, {
           where: { id: redeemTx.walletTx.id },
         });
-        walletTx.status = 'PD';
-        redeemTx.payoutStatus = 'F';
+        walletTx.status = TxStatus.PENDING_DEVELOPER;
+        redeemTx.payoutStatus = TxStatus.FAILED;
         await queryRunner.manager.save(walletTx);
         await queryRunner.manager.save(redeemTx);
         await queryRunner.commitTransaction();
@@ -804,7 +804,7 @@ export class WithdrawService implements OnModuleInit {
         where: {
           payoutSignature: Not(IsNull()),
           payoutTxHash: IsNull(),
-          payoutStatus: 'P',
+          payoutStatus: TxStatus.PENDING,
           isPayoutTransferred: false,
           reviewedBy: Not(IsNull()),
         },
