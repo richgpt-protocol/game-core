@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Job, Queue, Worker } from 'bullmq';
 import { ConfigService } from 'src/config/config.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
@@ -10,7 +10,7 @@ interface QueueHandler {
 }
 
 @Injectable()
-export class QueueService implements OnModuleInit {
+export class QueueService {
   private readonly logger = new Logger(QueueService.name);
 
   private handlers: Map<string, Map<string, QueueHandler>> = new Map();
@@ -25,21 +25,6 @@ export class QueueService implements OnModuleInit {
   constructor(private readonly configService: ConfigService) {
     this.redisHost = this.configService.get('REDIS_HOST');
     this.redisPort = +this.configService.get('REDIS_PORT');
-  }
-
-  onModuleInit() {
-    console.log('cert path', fs.readFileSync('./server-ca.pem').toString());
-
-    new Queue('Testing', {
-      connection: {
-        host: this.redisHost,
-        port: this.redisPort,
-        tls: {
-          ca: [fs.readFileSync('./server-ca.pem')],
-          rejectUnauthorized: true,
-        },
-      },
-    });
   }
 
   async onFailed(job: Job, error: Error) {
