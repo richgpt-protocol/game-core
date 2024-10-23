@@ -25,11 +25,17 @@ export class CreditWalletTx {
   @Column({
     comment: 'CREDIT, PLAY',
   })
-  txType: CreditWalletTxType.CREDIT |
-    CreditWalletTxType.PLAY |
-    CreditWalletTxType.CAMPAIGN |
-    CreditWalletTxType.GAME_TRANSACTION |
-    CreditWalletTxType.EXPIRY;
+  txType:
+    | CreditWalletTxType.CREDIT
+    | CreditWalletTxType.PLAY
+    | CreditWalletTxType.CAMPAIGN
+    | CreditWalletTxType.GAME_TRANSACTION
+    | CreditWalletTxType.EXPIRY;
+
+  @Column({
+    nullable: true,
+  })
+  description: string;
 
   @Column({
     type: 'decimal',

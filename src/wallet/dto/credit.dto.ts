@@ -10,6 +10,10 @@ export class AddCreditDto {
 
   @IsOptional()
   campaignId?: number;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
 }
 
 export class AddCreditBackofficeDto {
