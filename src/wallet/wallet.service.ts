@@ -78,7 +78,7 @@ export class WalletService {
     // i.e. XP = 5000, level = 3
     // i.e. XP = 6000, level = 4
     // refer https://daoventuresco.slack.com/archives/C02AUMV9C3S/p1729164331651769?thread_ts=1728281319.679679&cid=C02AUMV9C3S
-    return highestLevel
+    return highestLevel;
   }
 
   calculateLevel(point: number): number {
@@ -103,8 +103,11 @@ export class WalletService {
     // Calculate the percentage towards the next level
     // refer _calculateLevel() for how to define "next level" based on levelMap
     const xpSincePreviousLevel = point - (previousLevel ? previousLevel.xp : 0);
-    const xpNeededFromPreviousLevelToNextLeven = currentLevel.xp - (previousLevel ? previousLevel.xp : 0);
-    const percentage = Math.floor((xpSincePreviousLevel / xpNeededFromPreviousLevelToNextLeven) * 100);
+    const xpNeededFromPreviousLevelToNextLeven =
+      currentLevel.xp - (previousLevel ? previousLevel.xp : 0);
+    const percentage = Math.floor(
+      (xpSincePreviousLevel / xpNeededFromPreviousLevelToNextLeven) * 100,
+    );
 
     return { level: highestLevel, percentage };
   }
@@ -157,8 +160,8 @@ export class WalletService {
         amount = gameUsdTx.walletTxs[0].txAmount;
       }
 
-      if (gameUsdTx.creditWalletTx) {
-        amount = Number(amount) + Number(gameUsdTx.creditWalletTx.amount);
+      if (gameUsdTx.creditWalletTx[0]) {
+        amount = Number(amount) + Number(gameUsdTx.creditWalletTx[0].amount);
       }
 
       let startingBalance = 0;
@@ -172,13 +175,13 @@ export class WalletService {
       }
 
       return {
-        txType: gameUsdTx.creditWalletTx
-          ? gameUsdTx.creditWalletTx.txType
+        txType: gameUsdTx.creditWalletTx[0]
+          ? gameUsdTx.creditWalletTx[0].txType
           : gameUsdTx.walletTxs[0].txType,
         txAmount: amount,
         createdDate: gameUsdTx.walletTxs[0]
           ? gameUsdTx.walletTxs[0].createdDate
-          : gameUsdTx.creditWalletTx.createdDate,
+          : gameUsdTx.creditWalletTx[0].createdDate,
         status: gameUsdTx.status,
         startingBalance,
         endingBalance,
@@ -264,7 +267,7 @@ export class WalletService {
 
       const walletTx = new WalletTx();
       walletTx.txAmount = amount;
-      walletTx.txType = WalletTxType.CAMPAIGN
+      walletTx.txType = WalletTxType.CAMPAIGN;
       walletTx.status = TxStatus.PENDING;
       walletTx.userWalletId = user.wallet.id;
       walletTx.usdtTx = usdtTx;
