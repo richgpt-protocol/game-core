@@ -1,7 +1,7 @@
 services:
   main:
     container_name: main
-    image: us-central1-docker.pkg.dev/${GCP_PROJECT_ID}/core-backend/live:latest
+    image: us-central1-docker.pkg.dev/${GCP_PROJECT_ID}/core-backend/alpha:latest
     restart: always
     ports:
       - "3000:3000"
