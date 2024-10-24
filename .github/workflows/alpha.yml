@@ -3,7 +3,7 @@ name: Build and Push to GAR
 on:
   push:
     branches:
-      - "live"
+      - "alpha"
 
 jobs:
   build:
