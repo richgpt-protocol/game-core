@@ -309,7 +309,8 @@ export class DepositService implements OnModuleInit {
       await queryRunner.manager.save(depositTx);
 
       // reload user wallet if needed
-      if (payload.chainId !== Number(process.env.BASE_CHAIN_ID)) {
+      const baseChainId = Number(this.configService.get('BASE_CHAIN_ID'));
+      if (payload.chainId !== baseChainId) {
         // reload user wallet on deposit chain if needed
         this.eventEmitter.emit(
           'gas.service.reload',
@@ -320,7 +321,7 @@ export class DepositService implements OnModuleInit {
       this.eventEmitter.emit(
         'gas.service.reload',
         payload.walletAddress,
-        Number(process.env.BASE_CHAIN_ID),
+        baseChainId,
       );
 
       return depositTx;
@@ -713,6 +714,13 @@ export class DepositService implements OnModuleInit {
               gameUsdTx.receiverAddress,
               parseEther(gameUsdTx.amount.toString()),
               depositAdminWallet,
+            );
+
+            // reload receiverAddress if needed
+            this.eventEmitter.emit(
+              'gas.service.reload',
+              gameUsdTx.receiverAddress,
+              gameUsdTx.chainId,
             );
 
             // reload deposit admin wallet if needed
