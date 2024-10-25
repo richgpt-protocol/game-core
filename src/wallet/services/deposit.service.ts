@@ -535,12 +535,12 @@ export class DepositService implements OnModuleInit {
       const receipt = await onchainEscrowTx.wait(1);
       const onchainEscrowTxHash = onchainEscrowTx.hash;
 
-      // reload user wallet that execute token transfer if needed
-      this.eventEmitter.emit(
-        'gas.service.reload',
-        userWallet.walletAddress,
-        depositTx.chainId,
-      );
+      // // reload user wallet that execute token transfer if needed
+      // this.eventEmitter.emit(
+      //   'gas.service.reload',
+      //   userWallet.walletAddress,
+      //   depositTx.chainId,
+      // );
 
       if (receipt && receipt.status == 1) {
         // transfer token transaction success
@@ -716,12 +716,12 @@ export class DepositService implements OnModuleInit {
               depositAdminWallet,
             );
 
-            // reload receiverAddress if needed
-            this.eventEmitter.emit(
-              'gas.service.reload',
-              gameUsdTx.receiverAddress,
-              gameUsdTx.chainId,
-            );
+            // // reload receiverAddress if needed
+            // this.eventEmitter.emit(
+            //   'gas.service.reload',
+            //   gameUsdTx.receiverAddress,
+            //   gameUsdTx.chainId,
+            // );
 
             // reload deposit admin wallet if needed
             this.eventEmitter.emit(
