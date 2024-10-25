@@ -4,7 +4,7 @@ import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { User } from 'src/user/entities/user.entity';
-import { DataSource, Repository, Like, Brackets } from 'typeorm';
+import { DataSource, Repository, Like, Brackets, Between } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { PointTx } from './entities/point-tx.entity';
@@ -423,7 +423,10 @@ export class PointService {
       },
     });
 
-    const settingObj = Object.assign({}, ...setting.map((s) => ({ [s.key]: +s.value })));
+    const settingObj = Object.assign(
+      {},
+      ...setting.map((s) => ({ [s.key]: +s.value })),
+    );
     return {
       referralPrizeBonusTier1: settingObj['REFERRAL_PRIZE_BONUS_TIER_1'],
       referralPrizeBonusTier2: settingObj['REFERRAL_PRIZE_BONUS_TIER_2'],
@@ -435,7 +438,7 @@ export class PointService {
       referralPrizeBonusTier8: settingObj['REFERRAL_PRIZE_BONUS_TIER_8'],
       referralPrizeBonusTier9: settingObj['REFERRAL_PRIZE_BONUS_TIER_9'],
       referralPrizeBonusTier10: settingObj['REFERRAL_PRIZE_BONUS_TIER_10'],
-    }
+    };
   }
 
   async getReferralPrizeBonusTier(level: number): Promise<number> {
@@ -568,14 +571,29 @@ export class PointService {
     return result;
   }
 
-  @Cron(CronExpression.EVERY_WEEK)
+  @Cron(CronExpression.EVERY_HOUR)
   async updateLeaderBoard() {
     const today = new Date();
+    const oneWeek = 7 * 24 * 60 * 60 * 1000;
+
     const queryRunner = this.dataSource.createQueryRunner();
 
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+      const lastSnapshot = await queryRunner.manager.findOne(PointSnapshot, {
+        where: {},
+        order: {
+          snapshotDate: 'DESC',
+        },
+      });
+
+      if (
+        lastSnapshot &&
+        today.getTime() - lastSnapshot.snapshotDate.getTime() < oneWeek
+      ) {
+        return;
+      }
       const userWallets = await queryRunner.manager.find(UserWallet, {
         where: {
           user: {
@@ -587,12 +605,12 @@ export class PointService {
         },
         relations: ['user'],
       });
-
+      const snapshotDate = new Date();
       const leaderboard = userWallets.map((userWallet) => {
         const leaderBoard = new PointSnapshot();
         leaderBoard.walletId = userWallet.id;
         leaderBoard.xp = userWallet.pointBalance;
-        leaderBoard.snapshotDate = today;
+        leaderBoard.snapshotDate = snapshotDate;
         leaderBoard.user = userWallet.user;
         return leaderBoard;
       });
