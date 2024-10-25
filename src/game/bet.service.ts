@@ -1249,6 +1249,13 @@ export class BetService implements OnModuleInit {
 
       await queryRunner.manager.save(referrerWallet);
       await queryRunner.commitTransaction();
+
+      // reload referral wallet if needed
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        referrerWallet.walletAddress,
+        this.configService.get('BASE_CHAIN_ID'),
+      );
     } catch (error) {
       this.logger.error('Error in handleReferralFlow', error);
       await queryRunner.rollbackTransaction();
