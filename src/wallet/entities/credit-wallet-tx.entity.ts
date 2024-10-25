@@ -24,11 +24,12 @@ export class CreditWalletTx {
   @Column({
     comment: 'CREDIT, PLAY',
   })
-  txType: CreditWalletTxType.CREDIT |
-    CreditWalletTxType.PLAY |
-    CreditWalletTxType.CAMPAIGN |
-    CreditWalletTxType.GAME_TRANSACTION |
-    CreditWalletTxType.EXPIRY;
+  txType:
+    | CreditWalletTxType.CREDIT
+    | CreditWalletTxType.PLAY
+    | CreditWalletTxType.CAMPAIGN
+    | CreditWalletTxType.GAME_TRANSACTION
+    | CreditWalletTxType.EXPIRY;
 
   @Column({
     type: 'decimal',
@@ -63,6 +64,11 @@ export class CreditWalletTx {
     nullable: true,
   })
   expirationDate: Date;
+
+  @Column({
+    nullable: true,
+  })
+  note: string;
 
   @CreateDateColumn()
   createdDate: Date;
