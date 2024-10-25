@@ -3,12 +3,11 @@ import {
   CreateDateColumn,
   Entity,
   ManyToOne,
-  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { UserWallet } from './user-wallet.entity';
-import { WalletTx } from './wallet-tx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
 
 // This entity is used for storing the supply of native tokens
 // for gas fees tx for all the wallets
@@ -28,7 +27,7 @@ export class ReloadTx {
   @Column({
     comment: 'S - success, P - Pending, F - Failed',
   })
-  status: string;
+  status: TxStatus.SUCCESS | TxStatus.PENDING | TxStatus.FAILED;
 
   @Column()
   chainId: number;

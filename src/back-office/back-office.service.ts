@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
@@ -226,12 +230,54 @@ export class BackOfficeService {
         };
       });
 
-      console.log(transactions);
+      // console.log(transactions);
 
       return {
         data: transactions,
         currentPage: page,
         totalPages: Math.ceil(data[1] / limit),
+      };
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Internal Server Error');
+    }
+  }
+
+  async getPendingDeposits(page: number = 1, limit: number = 10): Promise<any> {
+    try {
+      const pendingDeposits = await this.walletTxRepository
+        .createQueryBuilder('walletTx')
+        .select([
+          'walletTx.id',
+          'walletTx.txType',
+          'walletTx.txAmount',
+          'walletTx.status',
+          'walletTx.depositTx',
+          'walletTx.createdDate',
+          'walletTx.userWalletId',
+          'userWallet.walletAddress',
+          'userWallet.userId',
+        ])
+        .leftJoin('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('walletTx.depositTx', 'depositTx')
+        .where('walletTx.txType = :type', { type: 'DEPOSIT' })
+        .andWhere('walletTx.status = :status', { status: 'PA' })
+        .orderBy('walletTx.createdDate', 'DESC')
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getManyAndCount();
+
+      const deposits = pendingDeposits[0].map((deposit) => {
+        return {
+          ...deposit,
+          createdDate: deposit.createdDate.toLocaleDateString(),
+        };
+      });
+
+      return {
+        data: deposits,
+        currentPage: page,
+        totalPages: Math.ceil(pendingDeposits[1] / limit),
       };
     } catch (error) {
       console.log(error);
@@ -569,14 +615,14 @@ export class BackOfficeService {
       .createQueryBuilder('betOrder')
       .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-      .leftJoinAndSelect('betOrder.claimDetail', 'claimDetail')
+      // .leftJoinAndSelect('betOrder.claimDetail', 'claimDetail')
       .where('betOrder.createdDate BETWEEN :startDate AND :endDate', {
         // need to pass as string instead of Date object because of the timezone issue
         startDate,
         endDate,
       })
       .andWhere('walletTx.status = :status', { status: 'S' })
-      .getManyAndCount();
+      .getMany();
 
     const commissions = await this.walletTxRepository
       .createQueryBuilder('walletTx')
@@ -609,7 +655,8 @@ export class BackOfficeService {
     }
 
     const userByDate = {};
-    betOrders[0].map((betOrder) => {
+    // betOrders.map(async (betOrder) => {
+    for (const betOrder of betOrders) {
       const date = betOrder.createdDate.toDateString();
       if (!userByDate[date]) {
         userByDate[date] = new Set();
@@ -627,17 +674,30 @@ export class BackOfficeService {
         : 1;
       userByDate[date].add(betOrder.walletTx.userWallet.userId);
 
-      if (betOrder.claimDetail) {
-        resultByDate[date].totalPayoutRewards =
-          Number(resultByDate[date].totalPayoutRewards) +
-          (Number(betOrder.claimDetail.claimAmount) || 0) +
-          (Number(betOrder.claimDetail.bonusAmount) || 0);
+      if (betOrder.availableClaim) {
+      //   resultByDate[date].totalPayoutRewards =
+      //     Number(resultByDate[date].totalPayoutRewards) +
+      //     (Number(betOrder.claimDetail.claimAmount) || 0) +
+      //     (Number(betOrder.claimDetail.bonusAmount) || 0);
 
-        resultByDate[date].totalPayout =
-          Number(resultByDate[date].totalPayout) +
-            Number(betOrder.claimDetail.claimAmount) || 0;
+      //   resultByDate[date].totalPayout =
+      //     Number(resultByDate[date].totalPayout) +
+      //       Number(betOrder.claimDetail.claimAmount) || 0;
+        const draw_result = await this.drawResultRepository.findOne({
+          where: {
+            gameId: betOrder.gameId,
+            numberPair: betOrder.numberPair,
+          },
+        });
+        const {
+          bigForecastWinAmount,
+          smallForecastWinAmount
+        } = this.claimService.calculateWinningAmount(betOrder, draw_result);
+        resultByDate[date].totalPayoutRewards += bigForecastWinAmount + smallForecastWinAmount;
+        resultByDate[date].totalPayout += bigForecastWinAmount + smallForecastWinAmount;
       }
-    });
+    // });
+    };
 
     return {
       data: resultByDate,
@@ -645,6 +705,10 @@ export class BackOfficeService {
   }
 
   async salesReportByEpoch(epoch: number) {
+    const game = await this.gameRepository.findOne({
+      where: { isClosed: false },
+    });
+
     const betOrders = await this.betOrderRepository
       .createQueryBuilder('betOrder')
       .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
@@ -656,6 +720,7 @@ export class BackOfficeService {
     if (betOrders.length === 0) {
       // no bet in this epoch
       return {
+        currentEpoch: game.epoch,
         data: null,
       };
     }
@@ -669,11 +734,12 @@ export class BackOfficeService {
     if (drawResults.length === 0) {
       // draw result for this epoch haven't come out yet
       return {
+        currentEpoch: game.epoch,
         data: null,
       };
     }
 
-    let result = {
+    const result = {
       totalBetUser: 0,
       totalBetCount: 0,
       totalBetAmount: 0,
@@ -688,18 +754,26 @@ export class BackOfficeService {
         special: { count: 0, amount: 0 },
         consolation: { count: 0, amount: 0 },
       },
+      queryEpoch: epoch,
     };
 
-    let totalBetUser = new Set();
+    const totalBetUser = new Set();
     for (const betOrder of betOrders) {
       totalBetUser.add(betOrder.walletTx.userWalletId);
       result.totalBetCount += 1;
-      const betAmount = Number(betOrder.bigForecastAmount) + Number(betOrder.smallForecastAmount);
+      const betAmount =
+        Number(betOrder.bigForecastAmount) +
+        Number(betOrder.smallForecastAmount);
       result.totalBetAmount += betAmount;
-      result.totalCreditUsed += betOrder.creditWalletTx ? Number(betOrder.creditWalletTx.amount) : 0;
+      result.totalCreditUsed += betOrder.creditWalletTx
+        ? Number(betOrder.creditWalletTx.amount)
+        : 0;
       result.totalWinCount += betOrder.availableClaim ? 1 : 0;
       if (betOrder.availableClaim) {
-        const { winAmount, prizeCategory } = this.getWinAmountAndPrizeCategory(betOrder, drawResults);
+        const { winAmount, prizeCategory } = this.getWinAmountAndPrizeCategory(
+          betOrder,
+          drawResults,
+        );
         result.totalWinAmount += winAmount;
         result.totalProfit += betAmount - winAmount;
         if (prizeCategory === '1') {
@@ -726,20 +800,28 @@ export class BackOfficeService {
     result.totalBetUser = totalBetUser.size;
 
     return {
+      currentEpoch: game.epoch,
       data: result,
     };
   }
 
-  private getWinAmountAndPrizeCategory(betOrder: BetOrder, drawResults: DrawResult[]): { winAmount: number, prizeCategory: string } {
+  private getWinAmountAndPrizeCategory(
+    betOrder: BetOrder,
+    drawResults: DrawResult[],
+  ): { winAmount: number; prizeCategory: string } {
     const drawResult = drawResults.find(
       (drawResult) => drawResult.numberPair === betOrder.numberPair,
     );
     // drawResult must not null because betOrder.availableClaim is true in parent function
-    const winAmount = this.claimService.calculateWinningAmount(betOrder, drawResult);
+    const winAmount = this.claimService.calculateWinningAmount(
+      betOrder,
+      drawResult,
+    );
     return {
-      winAmount: winAmount.bigForecastWinAmount + winAmount.smallForecastWinAmount,
+      winAmount:
+        winAmount.bigForecastWinAmount + winAmount.smallForecastWinAmount,
       prizeCategory: drawResult.prizeCategory,
-    }
+    };
   }
 
   async getCurrentPrizeAlgo() {

@@ -29,12 +29,12 @@ import { CalculateLevelDto } from './dto/calculateLevel.dto';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { TransferGameUSDDto } from './dto/InternalTransferDto';
 import { InternalTransferService } from './services/internal-transfer.service';
-import { DepositDTO } from './dto/deposit.dto';
+import { DepositDTO, ReviewDepositDto } from './dto/deposit.dto';
 import { DepositService } from './services/deposit.service';
 import { ConfigService } from 'src/config/config.service';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { CreditService } from './services/credit.service';
-import { AddCreditBackofficeDto, AddCreditDto } from './dto/credit.dto';
+import { AddCreditBackofficeDto } from './dto/credit.dto';
 import { DataSource } from 'typeorm';
 
 @ApiTags('Wallet')
@@ -484,6 +484,7 @@ export class WalletController {
     }
   }
 
+  // This endpoint can only be accessed by whitelisted ip in IpWhitelistMiddleware class
   @Post('deposit')
   @ApiHeaders([
     {
@@ -507,6 +508,21 @@ export class WalletController {
       data: {},
       message: 'Deposit',
     };
+  }
+
+  @Post('review-deposit')
+  @SecureEJS(PermissionEnum.PAYOUT, UserRole.ADMIN)
+  async reviewDeposit(@Body() payload: ReviewDepositDto) {
+    try {
+      await this.depositService.processDepositAdmin(payload);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Action success',
+        data: {},
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
   }
 
   @Get('all-wallet-addresses')

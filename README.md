@@ -61,3 +61,14 @@ please mind that the folder that created by cerbot (using domain name) might pos
 ## Generate type for smart contract
 
 > ./node_modules/.bin/typechain --target=ethers-v6 "src/contract/abis/*.json" --out-dir src/contract
+
+## Database setup
+```bash
+## Run on local device and commit the migration files
+$ npm run migration:generate -- ./src/migrations/[MigrationName]
+## Need to build first only run this command. After build via github workflows, then only run the files on server
+$ npm run migration:run
+## If necessary, can revert the migration
+$ npm run migration:revert
+
+```

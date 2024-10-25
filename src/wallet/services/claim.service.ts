@@ -16,6 +16,8 @@ import { AdminNotificationService } from 'src/shared/services/admin-notification
 import { GameUsdTx } from '../entities/game-usd-tx.entity';
 import { UserService } from 'src/user/user.service';
 import { MPC } from 'src/shared/mpc';
+import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import { TxStatus } from 'src/shared/enum/status.enum';
 
 type ClaimResponse = {
   error: string;
@@ -75,9 +77,9 @@ export class ClaimService {
     // check if there is any pending claim
     const lastClaimWalletTx = await this.walletTxRepository.findOne({
       where: {
-        txType: 'CLAIM',
+        txType: WalletTxType.CLAIM,
         userWalletId: wallet.id,
-        status: Not('S'),
+        status: Not(TxStatus.SUCCESS),
       },
     });
     if (lastClaimWalletTx) {
@@ -97,10 +99,10 @@ export class ClaimService {
       relations: { pointTx: true },
     });
     const walletTx = this.walletTxRepository.create({
-      txType: 'CLAIM',
+      txType: WalletTxType.CLAIM,
       txAmount: 0,
       txHash: null,
-      status: 'P',
+      status: TxStatus.PENDING,
       startingBalance: null,
       endingBalance: null,
       userWalletId: userWallet.id,
@@ -113,7 +115,7 @@ export class ClaimService {
     const gameUsdTx = this.gameUsdTxRepository.create({
       amount: 0,
       chainId: Number(process.env.BASE_CHAIN_ID),
-      status: 'P',
+      status: TxStatus.PENDING,
       txHash: null,
       senderAddress: userWallet.walletAddress,
       receiverAddress: userWallet.walletAddress,
@@ -273,7 +275,7 @@ export class ClaimService {
 
       // fetch endingBalance of last pointTx and create new pointTx
       const pointTx = this.pointTxRepository.create({
-        txType: 'CLAIM',
+        txType: PointTxType.CLAIM,
         amount: totalPointAmount,
         startingBalance: userWallet.pointBalance,
         endingBalance: userWallet.pointBalance + totalPointAmount,
@@ -344,7 +346,7 @@ export class ClaimService {
       await queryRunner.rollbackTransaction();
 
       // update walletTx
-      walletTx.status = 'PD';
+      walletTx.status = TxStatus.PENDING_DEVELOPER;
       await this.walletTxRepository.save(walletTx);
 
       // inform admin for rollback transaction
@@ -389,7 +391,7 @@ export class ClaimService {
           id: payload.gameUsdTxId,
         });
         gameUsdTx.amount = walletTx.txAmount;
-        gameUsdTx.status = 'S';
+        gameUsdTx.status = TxStatus.SUCCESS;
         gameUsdTx.txHash = txReceipt.hash;
         await queryRunner.manager.save(gameUsdTx);
 
@@ -400,7 +402,7 @@ export class ClaimService {
         walletTx.startingBalance = userWallet.walletBalance;
         walletTx.endingBalance =
           Number(walletTx.startingBalance) + Number(walletTx.txAmount);
-        walletTx.status = 'S';
+        walletTx.status = TxStatus.SUCCESS;
         await queryRunner.manager.save(walletTx);
 
         userWallet.walletBalance =
@@ -429,7 +431,7 @@ export class ClaimService {
       await queryRunner.rollbackTransaction();
 
       // update walletTx
-      walletTx.status = 'PD';
+      walletTx.status = TxStatus.PENDING_DEVELOPER;
       await queryRunner.manager.save(walletTx);
 
       // inform admin for rollback transaction
@@ -504,8 +506,8 @@ export class ClaimService {
     const walletTxs = await this.walletTxRepository.find({
       where: {
         userWalletId: userWallet.id,
-        txType: 'PLAY',
-        status: 'S',
+        txType: WalletTxType.PLAY,
+        status: TxStatus.SUCCESS,
       },
     });
 

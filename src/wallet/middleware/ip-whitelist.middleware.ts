@@ -8,12 +8,12 @@ import { Request, Response, NextFunction } from 'express';
 @Injectable()
 export class IpWhitelistMiddleware implements NestMiddleware {
   // Define the list of allowed IPs
-  private readonly allowedIps: string[] = [
-    '10.128.0.9', // deposit-bot VM server
-  ];
+  private readonly allowedIps: string[] = process.env.DEPOSIT_BOT_IP_ADDRESS
+    ? process.env.DEPOSIT_BOT_IP_ADDRESS.split(',')
+    : [];
 
   use(req: Request, res: Response, next: NextFunction) {
-    let clientIp = req.headers['x-forwarded-for'] as string || req.ip;
+    let clientIp = (req.headers['x-forwarded-for'] as string) || req.ip;
 
     // Handle multiple IPs in X-Forwarded-For (real client IP is the first one)
     if (clientIp.includes(',')) {

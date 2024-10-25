@@ -13,6 +13,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UsdtTx } from './usdt-tx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
 
 @Entity()
 export class GameTx {
@@ -49,7 +50,10 @@ export class GameTx {
   @Column({
     comment: 'S - Success, P - Pending, PD - Pending for Developer, F - Failed',
   })
-  status: 'S' | 'P' | 'PD' | 'F';
+  status: TxStatus.SUCCESS |
+    TxStatus.PENDING |
+    TxStatus.PENDING_DEVELOPER |
+    TxStatus.FAILED;
 
   @Column({
     default: 0,

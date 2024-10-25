@@ -12,6 +12,8 @@ import { MPC } from '../mpc';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Mutex } from 'async-mutex';
 import { ConfigService } from 'src/config/config.service';
+import { TxStatus } from '../enum/status.enum';
+import { MultiCall__factory } from 'src/contract';
 
 @Injectable()
 export class GasService {
@@ -53,7 +55,7 @@ export class GasService {
         await this.reloadTxRepository.save(
           this.reloadTxRepository.create({
             amount: Number(amount),
-            status: 'P',
+            status: TxStatus.PENDING,
             chainId,
             currency: 'BNB',
             amountInUSD: await this.getAmountInUSD(amount),
@@ -68,9 +70,9 @@ export class GasService {
         // no reloadTx for admin reload because
         // no userWallet for admin (userWalletId is compulsory)
         // just simply reload admin wallet
-        const provider_rpc_url = chainId === Number(process.env.BASE_CHAIN_ID)
-          ? process.env.OPBNB_PROVIDER_RPC_URL
-          : process.env.BNB_PROVIDER_RPC_URL;
+        const provider_rpc_url = this.configService.get(
+          `PROVIDER_RPC_URL_${chainId.toString()}`,
+        );
         const provider = new ethers.JsonRpcProvider(provider_rpc_url);
         
         // no error handling for admin wallet reload
@@ -89,8 +91,10 @@ export class GasService {
     }
   }
 
-  @Cron(CronExpression.EVERY_SECOND)
-  async handlePendingReloadTx(): Promise<void> {
+  async handlePendingReloadTx(chainId: number): Promise<void> {
+    const multiCallContractAddress = this.configService.get(`MULTICALL_CONTRACT_ADDRESS_${chainId.toString()}`)
+    if (!multiCallContractAddress) return;
+
     const release = await this.cronMutex.acquire();
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -98,68 +102,73 @@ export class GasService {
     await queryRunner.startTransaction();
     
     try {
-      const reloadTx = await queryRunner.manager.findOne(ReloadTx, {
-        where: { status: 'P' },
+      const reloadTxs = await queryRunner.manager.find(ReloadTx, {
+        where: {
+          status: TxStatus.PENDING,
+          chainId: chainId,
+        },
         relations: { userWallet: true },
         order: { id: 'ASC' },
       });
-      if (!reloadTx) {
-        // finally block will execute queryRunner.release() & cronMutex.release()
-        return;
+      if (reloadTxs.length === 0) return;
+
+      const provider_rpc_url = this.configService.get(
+        `PROVIDER_RPC_URL_${chainId.toString()}`,
+      );
+      const provider = new ethers.JsonRpcProvider(provider_rpc_url);
+      const supplyAccount = new ethers.Wallet(
+        await MPC.retrievePrivateKey(this.configService.get('SUPPLY_ACCOUNT_ADDRESS')),
+        provider
+      );
+      const multiCallContract = MultiCall__factory.connect(
+        multiCallContractAddress,
+        supplyAccount
+      );
+      const target: Array<string> = [];
+      const data: Array<string> = [];
+      const values: Array<bigint> = [];
+      for (const reloadTx of reloadTxs) {
+        target.push(reloadTx.userWallet.walletAddress);
+        data.push('0x');
+        values.push(ethers.parseEther('0.001'));
       }
-  
-      while (reloadTx.retryCount < 5) {
-        try {
-          const provider_rpc_url = this.configService.get(
-            `PROVIDER_RPC_URL_${reloadTx.chainId.toString()}`,
-          );
-          const provider = new ethers.JsonRpcProvider(provider_rpc_url);
-          
-          // if failed to fetch private key will goes to catch block and try again
-          const supplyAccount = new ethers.Wallet(
-            await MPC.retrievePrivateKey(process.env.SUPPLY_ACCOUNT_ADDRESS),
-            provider
-          );
-
-          const txResponse = await supplyAccount.sendTransaction({
-            to: reloadTx.userWallet.walletAddress,
-            value: ethers.parseEther(reloadTx.amount.toString())
-          });
-          const txReceipt = await txResponse.wait();
-          reloadTx.txHash = txReceipt.hash;
-          
-          if (txReceipt.status === 1) {
-            reloadTx.status = 'S';
-            break;
-
-          } else {
-            reloadTx.status = 'F';
-            reloadTx.retryCount++;
-          }
-
-        } catch (error) {
-          console.log('handlePendingReloadTx() error, error:', error);
-          reloadTx.status = 'F';
-          reloadTx.retryCount++;
+      // sum up values
+      const txResponse = await multiCallContract.multicall(
+        target,
+        data,
+        values,
+        {
+          value: values.reduce((acc, cur) => acc + cur, 0n)
         }
-      }
+      );
+      const txReceipt = await txResponse.wait();
 
-      await queryRunner.manager.save(reloadTx);
-      await queryRunner.commitTransaction();
+      for (const reloadTx of reloadTxs) {
+        reloadTx.txHash = txReceipt.hash;
+        if (txReceipt.status === 1) {
+          reloadTx.status = TxStatus.SUCCESS;
+        } else {
+          reloadTx.retryCount++;
 
-      if (reloadTx.status === 'F') {
-        // retryCount >= 5 and status still 'F'
-        // native token transfer failed, inform admin
-        await this.adminNotificationService.setAdminNotification(
-          `On-chain transaction failed in GasService.handlePendingReloadTx, txHash: ${reloadTx.txHash}`,
-          'onChainTxError',
-          'On-chain Transaction Failed in GasService.handlePendingReloadTx',
-          true,
-        );
+          if (reloadTx.retryCount >= 5) {
+            reloadTx.status = TxStatus.FAILED;
+            // native token transfer failed, inform admin
+            await this.adminNotificationService.setAdminNotification(
+              `On-chain transaction failed in GasService.handlePendingReloadTx${chainId.toString()}, txHash: ${reloadTx.txHash}`,
+              'onChainTxError',
+              `On-chain Transaction Failed in GasService.handlePendingReloadTx${chainId.toString()}`,
+              true,
+              true,
+            );
+          }
+        }
+
+        await queryRunner.manager.save(reloadTx);
+        await queryRunner.commitTransaction();
       }
 
     } catch (error) {
-      this.logger.error('handlePendingReloadTx() error within queryRunner, error:', error);
+      this.logger.error(`handlePendingReloadTx${chainId.toString()}() error within queryRunner, error: ${error}`);
       // no queryRunner.rollbackTransaction() because it contain on-chain transaction
       // no new record created so it's safe not to rollback
 
@@ -167,7 +176,7 @@ export class GasService {
       await this.adminNotificationService.setAdminNotification(
         error,
         'CRITICAL_FAILURE',
-        'Critical failure in handlePendingReloadTx()',
+        `Critical failure in handlePendingReloadTx${chainId.toString()}()`,
         true,
         true,
       );
@@ -176,6 +185,26 @@ export class GasService {
       await queryRunner.release();
       release(); // release cronMutex
     }
+  }
+
+  @Cron(CronExpression.EVERY_SECOND)
+  async handlePendingReloadTx56(): Promise<void> {
+    await this.handlePendingReloadTx(56);
+  }
+
+  @Cron(CronExpression.EVERY_SECOND)
+  async handlePendingReloadTx97(): Promise<void> {
+    await this.handlePendingReloadTx(97);
+  }
+
+  @Cron(CronExpression.EVERY_SECOND)
+  async handlePendingReloadTx204(): Promise<void> {
+    await this.handlePendingReloadTx(204);
+  }
+
+  @Cron(CronExpression.EVERY_SECOND)
+  async handlePendingReloadTx5611(): Promise<void> {
+    await this.handlePendingReloadTx(5611);
   }
 
   private _isAdmin(userAddress: string): boolean {
