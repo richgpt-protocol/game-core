@@ -754,6 +754,7 @@ export class BackOfficeService {
         special: { count: 0, amount: 0 },
         consolation: { count: 0, amount: 0 },
       },
+      queryEpoch: epoch,
     };
 
     const totalBetUser = new Set();
