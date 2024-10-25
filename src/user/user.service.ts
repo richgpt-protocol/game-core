@@ -900,7 +900,7 @@ export class UserService {
       if (signupBonusSetting) {
         this.eventEmitter.emit(
           'gas.service.reload',
-          await walletAddress,
+          walletAddress,
           this.configService.get('BASE_CHAIN_ID'),
         );
         const settingvalue = JSON.parse(signupBonusSetting.value);
