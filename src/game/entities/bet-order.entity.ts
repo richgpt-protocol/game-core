@@ -75,7 +75,9 @@ export class BetOrder {
   @ManyToOne(() => Game, (game) => game.betOrders)
   game: Game;
 
-  @Column()
+  @Column({
+    nullable: true,
+  })
   walletTxId: number;
 
   @ManyToOne(() => WalletTx, (walletTx) => walletTx.betOrders)

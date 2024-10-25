@@ -1,7 +1,6 @@
 import {
   Column,
   Entity,
-  ManyToOne,
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
@@ -39,6 +38,11 @@ export class GameUsdTx {
   })
   txHash: string;
 
+  @Column({
+    nullable: true,
+  })
+  maskingTxHash: string;
+
   @Column()
   senderAddress: string;
 
@@ -59,8 +63,8 @@ export class GameUsdTx {
   @OneToMany(() => WalletTx, (walletTx) => walletTx.gameUsdTx)
   walletTxs: WalletTx[];
 
-  @ManyToOne(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.gameUsdTx)
-  creditWalletTx: CreditWalletTx;
+  @OneToMany(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.gameUsdTx)
+  creditWalletTx: CreditWalletTx[];
 
   @OneToMany(() => BetOrder, (betOrder) => betOrder.gameUsdTx)
   betOrders: BetOrder[];

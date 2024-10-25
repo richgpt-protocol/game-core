@@ -39,12 +39,13 @@ import { MPC } from 'src/shared/mpc';
 import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
-import { TxStatus } from 'src/shared/enum/status.enum';
+import { ReferralTxStatus, TxStatus } from 'src/shared/enum/status.enum';
 import {
   CreditWalletTxType,
   ReferralTxType,
   WalletTxType,
 } from 'src/shared/enum/txType.enum';
+import { randomUUID } from 'crypto';
 import { PointTxType } from 'src/shared/enum/txType.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
@@ -93,7 +94,7 @@ export class BetService implements OnModuleInit {
     );
   }
 
-  maskingIntervalInSeconds = 120; //seconds before endTime of currentEpoch after which masking will start
+  maskingIntervalInSeconds = 120 * 1000; //120 seconds before endTime of currentEpoch after which masking will start
 
   private referralCommissionByRank = (rank: number) => {
     switch (rank) {
@@ -140,7 +141,7 @@ export class BetService implements OnModuleInit {
     try {
       const gameUsdTxs = await this.gameUsdTxRepository
         .createQueryBuilder('gameUsdTx')
-        .leftJoinAndSelect('gameUsdTx.betOrders', 'betOrder')
+        .innerJoinAndSelect('gameUsdTx.betOrders', 'betOrder')
         .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'walletUserWallet')
         .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
@@ -160,8 +161,8 @@ export class BetService implements OnModuleInit {
         let uid;
         if (bet.walletTxs.length > 0) {
           uid = bet.walletTxs[0].userWallet.user.uid;
-        } else if (bet.creditWalletTx) {
-          uid = bet.creditWalletTx.userWallet.user.uid;
+        } else if (bet.creditWalletTx.length > 0) {
+          uid = bet.creditWalletTx[0].userWallet.user.uid;
         }
 
         const maskedUID = uid.slice(0, 3) + '****' + uid.slice(uid.length - 3);
@@ -224,6 +225,18 @@ export class BetService implements OnModuleInit {
     }
   }
 
+  /**
+   * 1. Validates the walletBalance, creditBalance, betAmount, epoch etc and creates the db entries.
+   * 2. If one of the bet order falls within the masking interval, then the txHash isMasking is set to true.
+   * 3. The betOrders are added to the submitBet() queue.
+   * 4. The submitBet() method runs inside the queue. If the betOrders contains no masked bets, onchain transaction is send and the txHash is updated.
+   * 5. If the betOrders contains only masked bets, then the txHash is set to a random UUID and the status is set to SUCCESS immediately (without sending onchainTx).
+   * 6. If the betOrders contains both masked and unmasked bets, then the onchain transaction is sent for the unmasked bets and the onchain txHash is set.
+   * 7. The masked bets are processed in the next queue job in handleTxSuccess() method.
+   * 8. The handleTxSuccess() method updates the walletBalance, creditBalance etc and marks the status as SUCCESS. If the gameUSDTx contains masked bets, then the referral rewards are not processed at this time.
+   * 9. If there are no masked bets, The referral rewards are processed in the next queue job in handleReferralFlow() method.
+   * 10. Incase there are masked bets, It will be processed by setBetClose() cron in gameservice. Once the onchain tx is successful(betLastMinutes()), the masked bets are processed in handleReferralFlow() job.
+   */
   async bet(userId: number, payload: BetDto[]): Promise<any> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -292,12 +305,15 @@ export class BetService implements OnModuleInit {
 
       if (creditWalletTxns.length > 0) {
         creditWalletTxns = creditWalletTxns.map((tx) => {
-          tx.gameUsdTx = [gameUsdResult];
+          tx.gameUsdTx = gameUsdResult;
           return tx;
         });
         await queryRunner.manager.save(creditWalletTxns);
+        gameUsdResult.creditWalletTx = creditWalletTxns;
+        await queryRunner.manager.save(gameUsdResult);
       }
 
+      // console.log('bet - creditWalletTxns', creditWalletTxns);
       betOrders = betOrders.map((bet) => {
         if (totalWalletBalanceUsed > 0) {
           bet.walletTx = walletTx;
@@ -432,15 +448,6 @@ export class BetService implements OnModuleInit {
 
     for (const bet of payload) {
       for (let i = 0; i < bet.numberOfDraws; i++) {
-        if (
-          (new Date().getUTCDate() - allGamesArr[i].endDate.getTime()) / 1000 >
-          this.maskingIntervalInSeconds
-        ) {
-          throw new BadRequestException(
-            'Bet for this epoch is closed (Masking)',
-          );
-        }
-
         if (+allGamesArr[i].epoch < +currentEpoch) {
           throw new BadRequestException('Epoch is in the past');
         }
@@ -574,6 +581,8 @@ export class BetService implements OnModuleInit {
     let creditRemaining = Number(userInfo.wallet.creditBalance);
     const creditWalletTxns: Array<CreditWalletTx> = [];
 
+    const currentTime = new Date().getTime();
+
     payload.map((bet) => {
       const numberPairs = new Set();
       numberPairs.add(bet.numberPair);
@@ -591,6 +600,9 @@ export class BetService implements OnModuleInit {
           betOrder.bigForecastAmount = bet.bigForecastAmount;
           betOrder.smallForecastAmount = bet.smallForecastAmount;
           betOrder.game = allGames[i];
+          betOrder.isMasked =
+            allGames[i].endDate.getTime() - currentTime <
+            this.maskingIntervalInSeconds;
 
           const {
             creditRemaining: creditAmountRemaining,
@@ -823,11 +835,14 @@ export class BetService implements OnModuleInit {
         .where('gameUsdTx.id = :id', { id: gameUsdTxId })
         .getOne();
 
-      const betOrders = await queryRunner.manager
+      const betOrdersDb = await queryRunner.manager
         .createQueryBuilder(BetOrder, 'betOrder')
         .leftJoinAndSelect('betOrder.game', 'game')
         .where('betOrder.gameUsdTxId = :id', { id: gameUsdTx.id })
         .getMany();
+
+      const containsMasked = betOrdersDb.some((bet) => bet.isMasked);
+      const betOrders = betOrdersDb.filter((bet) => !bet.isMasked);
 
       const userWallet = await queryRunner.manager
         .createQueryBuilder(UserWallet, 'userWallet')
@@ -837,7 +852,35 @@ export class BetService implements OnModuleInit {
         })
         .getOne();
 
-      // Check if txHash is already present and no need to submit again
+      //if txHash is not set (first time submission) and contains *ONLY* masked bets, then set txHash and commit transaction
+      if (!gameUsdTx.txHash && containsMasked && betOrders.length === 0) {
+        gameUsdTx.txHash = randomUUID();
+        gameUsdTx.status = TxStatus.SUCCESS;
+        await queryRunner.manager.save(gameUsdTx);
+        await queryRunner.commitTransaction();
+
+        const jobId = `updateBetStatus-${gameUsdTx.id}`;
+        await this.queueService.addDynamicQueueJob(
+          `${QueueName.BET}_${userWallet.walletAddress}`,
+          jobId,
+          {
+            jobHandler: this.handleTxSuccess.bind(this),
+            failureHandler: this.onOnchainTxFailed.bind(this),
+          },
+          {
+            gameUsdTxId: gameUsdTx.id,
+            isMasked: containsMasked,
+            queueType: QueueType.SUBMIT_SUCCESS_PROCESS,
+          },
+          0, // no delay
+        );
+
+        // console.log('Masked bets only, setting txHash and returning');
+
+        return true;
+      }
+
+      // Check if txHash is already present and no need to submit onchain again
       if (gameUsdTx.txHash) {
         const jobId = `updateBetStatus-${gameUsdTx.id}`;
         await this.queueService.addDynamicQueueJob(
@@ -849,11 +892,20 @@ export class BetService implements OnModuleInit {
           },
           {
             gameUsdTxId: gameUsdTx.id,
+            isMasked: containsMasked,
             queueType: QueueType.SUBMIT_SUCCESS_PROCESS,
           },
           0, // no delay
         );
 
+        // console.log('txHash already present, returning');
+
+        return true;
+      }
+
+      if (betOrders.length === 0) {
+        //This happens when all bets are masked
+        // console.log('All bets are masked, returning');
         return true;
       }
 
@@ -867,6 +919,7 @@ export class BetService implements OnModuleInit {
         provider,
       );
 
+      // console.log('submitting bet', betOrders);
       const onchainTx = await this._bet(
         Number(userWallet.user.uid),
         gameUsdTxId,
@@ -899,6 +952,7 @@ export class BetService implements OnModuleInit {
         },
         {
           gameUsdTxId: gameUsdTx.id,
+          isMasked: containsMasked,
           queueType: QueueType.SUBMIT_SUCCESS_PROCESS,
         },
         0, // no delay
@@ -968,7 +1022,7 @@ export class BetService implements OnModuleInit {
     }
   }
 
-  async handleTxSuccess(job: Job<{ gameUsdTxId: number }>) {
+  async handleTxSuccess(job: Job<{ gameUsdTxId: number; isMasked: boolean }>) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
@@ -1016,11 +1070,13 @@ export class BetService implements OnModuleInit {
       }
 
       if (creditWalletTxns.length > 0) {
+        userWallet = !userWallet ? creditWalletTxns[0].userWallet : userWallet;
         let previousEndingCreditBalance =
           creditWalletTxns[0].userWallet.creditBalance || 0;
 
         for (let i = 0; i < creditWalletTxns.length; i++) {
           const creditWalletTx = creditWalletTxns[i];
+          // console.log('processing creditWalletTx', creditWalletTx.id);
           creditWalletTx.startingBalance = previousEndingCreditBalance;
 
           const endBalance = previousEndingCreditBalance
@@ -1067,13 +1123,16 @@ export class BetService implements OnModuleInit {
 
       await queryRunner.commitTransaction();
 
-      const jobId = `handleBetReferral-${gameUsdTx.id}`;
-      await this.queueService.addJob(QueueName.BET, jobId, {
-        userId: user.id,
-        betAmount: walletTx ? Number(walletTx.txAmount) : 0,
-        gameUsdTxId: gameUsdTx.id,
-        queueType: QueueType.BETTING_REFERRAL_DISTRIBUTION,
-      });
+      //Process referral immediately if the bet is not masked.
+      if (!job.data.isMasked) {
+        const jobId = `handleBetReferral-${gameUsdTx.id}`;
+        await this.queueService.addJob(QueueName.BET, jobId, {
+          userId: user.id,
+          betAmount: walletTx ? Number(walletTx.txAmount) : 0,
+          gameUsdTxId: gameUsdTx.id,
+          queueType: QueueType.BETTING_REFERRAL_DISTRIBUTION,
+        });
+      }
 
       // TODO: Shouldn't use gameUsdTx (comes from queryRunner)
       await this.userService.setUserNotification(userWallet.userId, {
@@ -1210,19 +1269,22 @@ export class BetService implements OnModuleInit {
         },
       });
 
-      await queryRunner.manager.insert(ReferralTx, {
-        rewardAmount: commissionAmount,
-        referralType: ReferralTxType.BET,
-        walletTx: walletTx,
-        userId: userInfo.id,
-        status: TxStatus.SUCCESS,
-        txHash: referralRewardOnchainTx.hash,
-        referralUserId: userInfo.referralUserId, //one who receives the referral amount
-        gameUsdTx: {
-          id: gameUsdTxId, // Store the betting gameUsdTx to keep track the commission coming from which bets
+      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
+        where: {
+          id: gameUsdTxId,
         },
       });
+      const referralTx = new ReferralTx();
+      referralTx.rewardAmount = commissionAmount;
+      referralTx.referralType = ReferralTxType.BET;
+      referralTx.walletTx = walletTx;
+      referralTx.userId = userInfo.id;
+      referralTx.status = TxStatus.SUCCESS;
+      referralTx.txHash = referralRewardOnchainTx.hash;
+      referralTx.referralUserId = userInfo.referralUserId; //one who receives the referral amount
+      referralTx.gameUsdTx = gameUsdTx; // Store the betting gameUsdTx to keep track the commission coming from which bets
 
+      await queryRunner.manager.save(referralTx);
       //Update Referrer
       const referrerWallet = await queryRunner.manager.findOne(UserWallet, {
         where: {
@@ -1232,12 +1294,6 @@ export class BetService implements OnModuleInit {
       });
 
       referrerWallet.walletBalance = walletTx.endingBalance;
-
-      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
-        where: {
-          id: gameUsdTxId,
-        },
-      });
 
       await this.updateReferrerXpPoints(
         queryRunner,
