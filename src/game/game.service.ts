@@ -95,7 +95,7 @@ export class GameService implements OnModuleInit {
     );
   }
 
-  @Cron('0 0 */1 * * *') // every hour
+  // @Cron('0 0 */1 * * *') // every hour
   async setBetClose(): Promise<void> {
     this.logger.log('setBetClose()');
     const queryRunner = this.dataSource.createQueryRunner();
