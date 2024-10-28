@@ -296,6 +296,7 @@ export class CreditService {
 
   async retryCreditTx(creditWalletTxId: number) {
     try {
+      console.log('creditWalletTxId', creditWalletTxId);
       const creditWalletTx = await this.creditWalletTxRepository.findOne({
         where: { id: creditWalletTxId, status: Not(TxStatus.SUCCESS) },
       });
