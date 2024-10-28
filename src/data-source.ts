@@ -19,6 +19,9 @@ const options: DataSourceOptions & SeederOptions = {
   migrations: [join(__dirname, 'migrations', '*.{ts,js}')],
   seedTracking: false,
   factories: ['src/database/factories/**/*{.ts,.js}'],
+  extra: {
+    queryTimeout: 5000,
+  },
 };
 
 export const AppDataSource = new DataSource(options);

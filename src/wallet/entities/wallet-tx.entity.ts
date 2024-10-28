@@ -31,14 +31,15 @@ export class WalletTx {
   @Column({
     comment: 'DEPOSIT, PLAY, CLAIM, REDEEM, REFERRAL, INTERNAL_TRANSFER',
   })
-  txType: WalletTxType.DEPOSIT |
-    WalletTxType.PLAY |
-    WalletTxType.CLAIM |
-    WalletTxType.REDEEM |
-    WalletTxType.REFERRAL |
-    WalletTxType.INTERNAL_TRANSFER |
-    WalletTxType.CAMPAIGN |
-    WalletTxType.GAME_TRANSACTION;
+  txType:
+    | WalletTxType.DEPOSIT
+    | WalletTxType.PLAY
+    | WalletTxType.CLAIM
+    | WalletTxType.REDEEM
+    | WalletTxType.REFERRAL
+    | WalletTxType.INTERNAL_TRANSFER
+    | WalletTxType.CAMPAIGN
+    | WalletTxType.GAME_TRANSACTION;
 
   @Column({
     type: 'decimal',
@@ -60,11 +61,12 @@ export class WalletTx {
     // Pending for Admin: pending for admin approval, valid for redeem-tx only
     // Pending for Developer: pending for developer to check
   })
-  status: TxStatus.SUCCESS |
-    TxStatus.PENDING |
-    TxStatus.PENDING_ADMIN |
-    TxStatus.PENDING_DEVELOPER |
-    TxStatus.FAILED;
+  status:
+    | TxStatus.SUCCESS
+    | TxStatus.PENDING
+    | TxStatus.PENDING_ADMIN
+    | TxStatus.PENDING_DEVELOPER
+    | TxStatus.FAILED;
 
   @Column({
     type: 'decimal',
@@ -90,6 +92,11 @@ export class WalletTx {
 
   @Column()
   userWalletId: number;
+
+  @Column({
+    nullable: true,
+  })
+  note: string;
 
   @ManyToOne(() => UserWallet, (userWallet) => userWallet.walletTx)
   userWallet: UserWallet;

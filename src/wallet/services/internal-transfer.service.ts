@@ -99,7 +99,7 @@ export class InternalTransferService {
       const pendingAmountResult = await queryRunner.manager.query(
         `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
           WHERE
-            userWalletId = ${userId} AND
+            userWalletId = ${senderWallet.id} AND
             txType IN ('REDEEM', 'PLAY', 'INTERNAL_TRANSFER') AND
             status IN ('P', 'PD', 'PA')`,
       );
@@ -225,25 +225,27 @@ export class InternalTransferService {
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
         .where('gameUsdTx.status = :status', { status: 'P' })
         .andWhere('gameUsdTx.retryCount > 0')
-        .andWhere('walletTx.txType = :txType', { txType: WalletTxType.INTERNAL_TRANSFER })
+        .andWhere('walletTx.txType = :txType', {
+          txType: WalletTxType.INTERNAL_TRANSFER,
+        })
         .getMany();
 
       for (const gameUsdTx of pendingGameUsdTxns) {
         try {
           if (gameUsdTx.retryCount >= 5) {
-            gameUsdTx.status = TxStatus.FAILED
+            gameUsdTx.status = TxStatus.FAILED;
             await this.gameUsdTxRepository.save(gameUsdTx);
 
             const senderWalletTx = gameUsdTx.walletTxs.find(
               (tx) => tx.userWallet.walletAddress == gameUsdTx.senderAddress,
-            )
-            senderWalletTx.status = TxStatus.FAILED
+            );
+            senderWalletTx.status = TxStatus.FAILED;
             await this.walletTxRepository.save(senderWalletTx);
 
             const receiverWalletTx = gameUsdTx.walletTxs.find(
               (tx) => tx.userWallet.walletAddress == gameUsdTx.receiverAddress,
-            )
-            receiverWalletTx.status = TxStatus.FAILED
+            );
+            receiverWalletTx.status = TxStatus.FAILED;
             await this.walletTxRepository.save(receiverWalletTx);
 
             this.adminNotificationService.setAdminNotification(
@@ -409,7 +411,9 @@ export class InternalTransferService {
           throw new Error('Transaction failed');
         }
       } catch (error) {
-        this.logger.error('InternalTransferService.processTransfer() error: ' + error);
+        this.logger.error(
+          'InternalTransferService.processTransfer() error: ' + error,
+        );
 
         // gameUsdTx.status = 'F';
         // senderWalletTx.status = 'F';
@@ -425,7 +429,9 @@ export class InternalTransferService {
 
       await queryRunner.commitTransaction();
     } catch (error) {
-      this.logger.log('InternalTransferService.processTransfer() error: ' + error);
+      this.logger.log(
+        'InternalTransferService.processTransfer() error: ' + error,
+      );
       await queryRunner.rollbackTransaction();
 
       await this.adminNotificationService.setAdminNotification(
@@ -445,9 +451,7 @@ export class InternalTransferService {
   ): Promise<boolean> {
     try {
       const provider = new JsonRpcProvider(
-        this.configService.get(
-          'PROVIDER_RPC_URL_' + chainId.toString(),
-        )
+        this.configService.get('PROVIDER_RPC_URL_' + chainId.toString()),
       );
 
       const nativeBalance = await provider.getBalance(userWallet.walletAddress);

@@ -164,9 +164,9 @@ export class GasService {
         }
 
         await queryRunner.manager.save(reloadTx);
-        await queryRunner.commitTransaction();
       }
 
+      await queryRunner.commitTransaction();
     } catch (error) {
       this.logger.error(`handlePendingReloadTx${chainId.toString()}() error within queryRunner, error: ${error}`);
       // no queryRunner.rollbackTransaction() because it contain on-chain transaction

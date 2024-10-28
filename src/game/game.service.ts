@@ -705,7 +705,13 @@ export class GameService implements OnModuleInit {
     const betOrdersWithAvailableClaim = await this.betOrderRepository
       .createQueryBuilder('betOrder')
       .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('betOrder.gameUsdTx', 'gameUsdTx')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'walletTxUserWallet')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('creditWalletTx.userWallet', 'creditTxUserWallet')
+      .leftJoinAndSelect('walletTxUserWallet.user', 'walletTxUser')
+      .leftJoinAndSelect('creditTxUserWallet.user', 'creditTxUser')
       .where('betOrder.availableClaim = :availableClaim', {
         availableClaim: true,
       })
@@ -718,7 +724,9 @@ export class GameService implements OnModuleInit {
 
     const allObj: { [key: string]: number } = {};
     for (const betOrder of betOrdersWithAvailableClaim) {
-      const walletAddress = betOrder.walletTx.userWallet.walletAddress;
+      const walletAddress = betOrder.walletTx
+        ? betOrder.walletTx.userWallet.walletAddress
+        : betOrder.creditWalletTx.userWallet.walletAddress;
       if (!allObj.hasOwnProperty(walletAddress)) allObj[walletAddress] = 0;
       const drawResult = await this.drawResultRepository
         .createQueryBuilder('drawResult')
@@ -758,7 +766,9 @@ export class GameService implements OnModuleInit {
         betOrder.createdDate.getTime() >
         currentDate.getTime() - 24 * 60 * 60 * 1000
       ) {
-        const walletAddress = betOrder.walletTx.userWallet.walletAddress;
+        const walletAddress = betOrder.walletTx
+          ? betOrder.walletTx.userWallet.walletAddress
+          : betOrder.creditWalletTx.userWallet.walletAddress;
         if (!dailyObj.hasOwnProperty(walletAddress))
           dailyObj[walletAddress] = 0;
         const drawResult = await this.drawResultRepository
@@ -798,7 +808,9 @@ export class GameService implements OnModuleInit {
         betOrder.createdDate.getTime() >
         currentDate.getTime() - 7 * 24 * 60 * 60 * 1000
       ) {
-        const walletAddress = betOrder.walletTx.userWallet.walletAddress;
+        const walletAddress = betOrder.walletTx
+          ? betOrder.walletTx.userWallet.walletAddress
+          : betOrder.creditWalletTx.userWallet.walletAddress;
         if (!weeklyObj.hasOwnProperty(walletAddress))
           weeklyObj[walletAddress] = 0;
         const drawResult = await this.drawResultRepository
@@ -838,7 +850,9 @@ export class GameService implements OnModuleInit {
         betOrder.createdDate.getTime() >
         currentDate.getTime() - 30 * 24 * 60 * 60 * 1000
       ) {
-        const walletAddress = betOrder.walletTx.userWallet.walletAddress;
+        const walletAddress = betOrder.walletTx
+          ? betOrder.walletTx.userWallet.walletAddress
+          : betOrder.creditWalletTx.userWallet.walletAddress;
         if (!monthlyObj.hasOwnProperty(walletAddress))
           monthlyObj[walletAddress] = 0;
         const drawResult = await this.drawResultRepository

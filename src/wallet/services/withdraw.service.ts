@@ -151,7 +151,7 @@ export class WithdrawService implements OnModuleInit {
       const pendingAmountResult = await queryRunner.manager.query(
         `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx 
           WHERE
-            userWalletId = ${userId} AND 
+            userWalletId = ${user.wallet.id} AND 
             txType IN ('REDEEM', 'PLAY', 'INTERNAL_TRANSFER') AND
             status IN ('P', 'PD', 'PA')`,
       );
@@ -183,7 +183,7 @@ export class WithdrawService implements OnModuleInit {
             {
               txType: WalletTxType.REDEEM,
               userWalletId: userWallet.id,
-              status: TxStatus.PENDING
+              status: TxStatus.PENDING,
             },
             {
               txType: WalletTxType.REDEEM,
@@ -251,7 +251,9 @@ export class WithdrawService implements OnModuleInit {
         status: TxStatus.PENDING,
         txHash: null,
         senderAddress: userWallet.walletAddress,
-        receiverAddress: this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
+        receiverAddress: this.configService.get(
+          'GAMEUSD_POOL_CONTRACT_ADDRESS',
+        ),
         retryCount: 0,
         walletTxId: walletTx.id,
       });
@@ -301,7 +303,6 @@ export class WithdrawService implements OnModuleInit {
           false,
           true,
         );
-
       } else {
         walletTx.status = TxStatus.PENDING_ADMIN; // pending for admin review
         await queryRunner.manager.save(walletTx);
@@ -382,7 +383,9 @@ export class WithdrawService implements OnModuleInit {
       redeemTx.reviewedBy = adminId;
       redeemTx.payoutCanProceed = payload.payoutCanProceed;
       await queryRunner.manager.save(redeemTx);
-      walletTx.status = payload.payoutCanProceed ? TxStatus.PENDING : TxStatus.FAILED;
+      walletTx.status = payload.payoutCanProceed
+        ? TxStatus.PENDING
+        : TxStatus.FAILED;
       await queryRunner.manager.save(walletTx);
 
       if (payload.payoutCanProceed) {
@@ -399,7 +402,8 @@ export class WithdrawService implements OnModuleInit {
           chainId: redeemTx.chainId,
           queueType: QueueType.PROCESS_WITHDRAW,
         });
-      } else { // payout rejected
+      } else {
+        // payout rejected
         redeemTx.payoutNote = payload.payoutNote;
         redeemTx.payoutCheckedAt = new Date();
         redeemTx.payoutStatus = TxStatus.FAILED;
@@ -470,7 +474,7 @@ export class WithdrawService implements OnModuleInit {
           true,
         );
 
-        walletTx.status = TxStatus.PENDING_DEVELOPER
+        walletTx.status = TxStatus.PENDING_DEVELOPER;
         await queryRunner.manager.save(walletTx);
         await queryRunner.commitTransaction();
 
@@ -552,7 +556,7 @@ export class WithdrawService implements OnModuleInit {
 
       if (!receipt || receipt.status != 1) {
         redeemTx.isPayoutTransferred = false;
-        redeemTx.walletTx.status = TxStatus.PENDING_DEVELOPER
+        redeemTx.walletTx.status = TxStatus.PENDING_DEVELOPER;
 
         await queryRunner.commitTransaction();
 
@@ -577,7 +581,7 @@ export class WithdrawService implements OnModuleInit {
 
         redeemTx.isPayoutTransferred = true;
         redeemTx.payoutStatus = TxStatus.SUCCESS;
-        redeemTx.walletTx.status = TxStatus.SUCCESS
+        redeemTx.walletTx.status = TxStatus.SUCCESS;
         redeemTx.walletTx.startingBalance =
           redeemTx.walletTx.userWallet.walletBalance;
         redeemTx.walletTx.endingBalance =
@@ -648,7 +652,9 @@ export class WithdrawService implements OnModuleInit {
     // const providerUrl = process.env.OPBNB_PROVIDER_RPC_URL;
     // const provider = new ethers.JsonRpcProvider(providerUrl);
     const provider = new ethers.JsonRpcProvider(
-      this.configService.get('PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID')),
+      this.configService.get(
+        'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
+      ),
     );
     const signer = new ethers.Wallet(
       await MPC.retrievePrivateKey(from),
@@ -691,13 +697,19 @@ export class WithdrawService implements OnModuleInit {
     // const providerUrl = process.env.OPBNB_PROVIDER_RPC_URL;
     // const provider = new ethers.JsonRpcProvider(providerUrl);
     const provider = new ethers.JsonRpcProvider(
-      this.configService.get('PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID')),
+      this.configService.get(
+        'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
+      ),
     );
     const depositBot = new ethers.Wallet(
-      await MPC.retrievePrivateKey(this.configService.get('DEPOSIT_BOT_ADDRESS')),
+      await MPC.retrievePrivateKey(
+        this.configService.get('DEPOSIT_BOT_ADDRESS'),
+      ),
       provider,
     );
-    const depositContractAddress = this.configService.get('DEPOSIT_CONTRACT_ADDRESS');
+    const depositContractAddress = this.configService.get(
+      'DEPOSIT_CONTRACT_ADDRESS',
+    );
     const depositContract = Deposit__factory.connect(
       depositContractAddress,
       depositBot,
@@ -759,10 +771,14 @@ export class WithdrawService implements OnModuleInit {
     signature: BytesLike,
   ): Promise<ethers.TransactionReceipt> {
     try {
-      const providerUrl = this.configService.get('PROVIDER_RPC_URL_' + chainId.toString());
+      const providerUrl = this.configService.get(
+        'PROVIDER_RPC_URL_' + chainId.toString(),
+      );
       const provider = new ethers.JsonRpcProvider(providerUrl);
       const payoutBot = new ethers.Wallet(
-        await MPC.retrievePrivateKey(this.configService.get('PAYOUT_BOT_ADDRESS')),
+        await MPC.retrievePrivateKey(
+          this.configService.get('PAYOUT_BOT_ADDRESS'),
+        ),
         provider,
       );
 
