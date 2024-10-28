@@ -567,7 +567,7 @@ export class CreditService {
   }
 
   expireCronMutex = new Mutex();
-  // @Cron(CronExpression.EVERY_10_SECONDS)
+  @Cron(CronExpression.EVERY_10_SECONDS)
   async expireCreditsCron() {
     const release = await this.expireCronMutex.acquire();
     try {

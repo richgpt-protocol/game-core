@@ -808,7 +808,7 @@ export class WithdrawService implements OnModuleInit {
     }
   }
 
-  // @Cron(CronExpression.EVERY_5_MINUTES, { utcOffset: 0 })
+  @Cron(CronExpression.EVERY_5_MINUTES, { utcOffset: 0 })
   async payoutCron() {
     const release = await this.payoutCronMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();

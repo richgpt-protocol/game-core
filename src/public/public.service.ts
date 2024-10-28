@@ -434,7 +434,7 @@ export class PublicService {
     }
   }
 
-  // @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_SECOND)
   async handleAddUSDT() {
     const release = await this.AddGameUSDMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
@@ -532,7 +532,7 @@ export class PublicService {
   }
 
   //Updates the status of gameTx to success if all the transactions are successful
-  // @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_SECOND)
   async statusUpdater() {
     const release = await this.StatusUpdaterMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
@@ -579,7 +579,7 @@ export class PublicService {
     }
   }
 
-  // @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_SECOND)
   async notifyMiniGame() {
     const release = await this.NotifierMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
