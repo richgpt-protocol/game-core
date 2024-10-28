@@ -21,6 +21,9 @@ const options: DataSourceOptions & SeederOptions = {
   // seeds: ['src/database/seeds/test.seed.ts'],
   seedTracking: false,
   factories: ['src/database/factories/**/*{.ts,.js}'],
+  extra: {
+    queryTimeout: 5000,
+  },
 };
 
 export const dataSource = new DataSource(options);

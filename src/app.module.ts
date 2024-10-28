@@ -59,6 +59,9 @@ import { QueueModule } from './queue/queue.module';
         database: configService.get('DB_DATABASE'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: configService.isDev ? true : false,
+        extra: {
+          queryTimeout: 5000,
+        },
       }),
       inject: [ConfigService],
     }),
