@@ -232,7 +232,7 @@ export class CreditService {
       }
 
       if (payload.campaignId) {
-        const campaign = await this.dataSource.manager.findOne(Campaign, {
+        const campaign = await queryRunner.manager.findOne(Campaign, {
           where: { id: payload.campaignId },
         });
         if (!campaign) {

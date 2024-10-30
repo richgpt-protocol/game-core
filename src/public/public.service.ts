@@ -327,15 +327,6 @@ export class PublicService {
     queryRunner: QueryRunner,
   ) {
     try {
-      await queryRunner.manager.findOne(PointTx, {
-        where: {
-          walletId: userWallet.id,
-        },
-        order: {
-          updatedDate: 'DESC',
-        },
-      });
-
       const pointTx = new PointTx();
       pointTx.amount = xpAmount;
       pointTx.walletId = userWallet.id;
