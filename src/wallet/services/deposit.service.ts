@@ -122,7 +122,9 @@ export class DepositService implements OnModuleInit {
         },
       });
       if (!userWallet) {
-        throw new BadRequestException(`UserWallet for walletAddress ${payload.walletAddress} not found`);
+        throw new BadRequestException(
+          `UserWallet for walletAddress ${payload.walletAddress} not found`,
+        );
       }
 
       const user = await queryRunner.manager.findOne(User, {
@@ -131,9 +133,11 @@ export class DepositService implements OnModuleInit {
         },
       });
       if (!user) {
-        throw new BadRequestException(`User for walletId ${userWallet.id} not found`);
+        throw new BadRequestException(
+          `User for walletId ${userWallet.id} not found`,
+        );
       }
-      
+
       const miniGameUSDTSenderSetting = await queryRunner.manager.findOne(
         Setting,
         {
@@ -265,7 +269,9 @@ export class DepositService implements OnModuleInit {
           relations: ['walletTx'],
         });
         if (!usdtTx) {
-          throw new BadRequestException(`usdt_tx for id ${payload.usdtTxId} not found`);
+          throw new BadRequestException(
+            `usdt_tx for id ${payload.usdtTxId} not found`,
+          );
         }
 
         const gameTx = await queryRunner.manager.findOne(GameTx, {
@@ -274,7 +280,9 @@ export class DepositService implements OnModuleInit {
           },
         });
         if (!gameTx) {
-          throw new BadRequestException(`game_tx for usdt_tx.id ${payload.usdtTxId} not found`);
+          throw new BadRequestException(
+            `game_tx for usdt_tx.id ${payload.usdtTxId} not found`,
+          );
         }
 
         //Already have a walletTx if the txType is CAMPAIGN
@@ -823,6 +831,8 @@ export class DepositService implements OnModuleInit {
         true,
         true,
       );
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
@@ -959,6 +969,9 @@ export class DepositService implements OnModuleInit {
         );
       } catch (error) {
         this.logger.error('Error in onGameUsdTxFailed', error);
+      } finally {
+        // in case it reaches catch block before releasing the queryRunner
+        if (!queryRunner.isReleased) await queryRunner.release();
       }
     }
   }

@@ -40,7 +40,11 @@ import { CreditService } from 'src/wallet/services/credit.service';
 import { MPC } from 'src/shared/mpc';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
-import { UsdtTxType, WalletTxType, PointTxType } from 'src/shared/enum/txType.enum';
+import {
+  UsdtTxType,
+  WalletTxType,
+  PointTxType,
+} from 'src/shared/enum/txType.enum';
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -189,6 +193,8 @@ export class PublicService {
       const errorMessage =
         error instanceof BadRequestException ? error.message : 'Error occurred';
       throw new BadRequestException(errorMessage);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
@@ -292,6 +298,8 @@ export class PublicService {
       const errorMessage =
         error instanceof BadRequestException ? error.message : 'Error occurred';
       throw new BadRequestException(errorMessage);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
@@ -319,15 +327,6 @@ export class PublicService {
     queryRunner: QueryRunner,
   ) {
     try {
-      const lastValidPointTx = await this.dataSource.manager.findOne(PointTx, {
-        where: {
-          walletId: userWallet.id,
-        },
-        order: {
-          updatedDate: 'DESC',
-        },
-      });
-
       const pointTx = new PointTx();
       pointTx.amount = xpAmount;
       pointTx.walletId = userWallet.id;
