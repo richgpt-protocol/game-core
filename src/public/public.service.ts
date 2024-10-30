@@ -40,7 +40,11 @@ import { CreditService } from 'src/wallet/services/credit.service';
 import { MPC } from 'src/shared/mpc';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
-import { UsdtTxType, WalletTxType, PointTxType } from 'src/shared/enum/txType.enum';
+import {
+  UsdtTxType,
+  WalletTxType,
+  PointTxType,
+} from 'src/shared/enum/txType.enum';
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -146,20 +150,20 @@ export class PublicService {
   }
 
   async updateTaskXP(payload: UpdateTaskXpDto) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const userWallet = await this.walletService.getWalletInfo(user.id);
+    if (!userWallet) {
+      throw new BadRequestException('User wallet not found');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
 
     try {
-      const user = await this.userService.findByCriteria('uid', payload.uid);
-      if (!user) {
-        throw new BadRequestException('User not found');
-      }
-
-      const userWallet = await this.walletService.getWalletInfo(user.id);
-      if (!userWallet) {
-        throw new BadRequestException('User wallet not found');
-      }
-
       await queryRunner.startTransaction();
 
       if (payload.xp > 0) {
@@ -189,6 +193,8 @@ export class PublicService {
       const errorMessage =
         error instanceof BadRequestException ? error.message : 'Error occurred';
       throw new BadRequestException(errorMessage);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
@@ -218,19 +224,19 @@ export class PublicService {
   }
 
   async updateUserGame(payload: UpdateUserGameDto) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const userWallet = await this.walletService.getWalletInfo(user.id);
+    if (!userWallet) {
+      throw new BadRequestException('User wallet not found');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
     try {
-      const user = await this.userService.findByCriteria('uid', payload.uid);
-      if (!user) {
-        throw new BadRequestException('User not found');
-      }
-
-      const userWallet = await this.walletService.getWalletInfo(user.id);
-      if (!userWallet) {
-        throw new BadRequestException('User wallet not found');
-      }
-
+      await queryRunner.connect();
       await queryRunner.startTransaction();
 
       const tx = new GameTx();
@@ -292,6 +298,8 @@ export class PublicService {
       const errorMessage =
         error instanceof BadRequestException ? error.message : 'Error occurred';
       throw new BadRequestException(errorMessage);
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
@@ -319,7 +327,7 @@ export class PublicService {
     queryRunner: QueryRunner,
   ) {
     try {
-      const lastValidPointTx = await this.dataSource.manager.findOne(PointTx, {
+      await queryRunner.manager.findOne(PointTx, {
         where: {
           walletId: userWallet.id,
         },
