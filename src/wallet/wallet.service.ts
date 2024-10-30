@@ -12,6 +12,7 @@ import { GameUsdTx } from './entities/game-usd-tx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { UsdtTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 import * as dotenv from 'dotenv';
+import { BetOrder } from 'src/game/entities/bet-order.entity';
 dotenv.config();
 
 type TransactionHistory = {
@@ -201,22 +202,34 @@ export class WalletService {
     return allTxs;
   }
 
-  async getTicket(userId: number) {
-    const userWallet = await this.userWalletRepository.findOne({
-      where: { userId },
-    });
+  async getBetOrders(userId: number) {
+    const betOrders = await this.datasource.manager
+      .createQueryBuilder(BetOrder, 'betOrder')
+      .leftJoinAndSelect('betOrder.gameUsdTx', 'gameUsdTx')
+      .leftJoinAndSelect('betOrder.game', 'game')
+      .leftJoinAndSelect('game.drawResult', 'drawResult')
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'walletTxUserWallet')
+      .leftJoinAndSelect('creditWalletTx.userWallet', 'creditTxUserWallet')
+      .leftJoinAndSelect('walletTxUserWallet.user', 'walletTxUser')
+      .leftJoinAndSelect('creditTxUserWallet.user', 'creditTxUser')
+      .where('walletTxUserWallet.userId = :userId', { userId })
+      .orWhere('creditTxUser.id = :userId', { userId })
+      .andWhere('gameUsdTx.status = :status', { status: 'S' })
+      .orderBy('betOrder.id', 'DESC')
+      .getMany();
 
-    const betWalletTxs = await this.walletTxRepository.find({
-      where: {
-        userWalletId: userWallet.id,
-        txType: WalletTxType.PLAY,
-        status: TxStatus.SUCCESS,
-      },
-      order: { id: 'DESC' },
-      relations: ['betOrders', 'betOrders.game', 'betOrders.game.drawResult'],
-    });
+    const groupedBetOrders = betOrders.reduce((acc, betOrder) => {
+      const gameUsdTxId = betOrder.gameUsdTx.id;
+      if (!acc[gameUsdTxId]) {
+        acc[gameUsdTxId] = [];
+      }
+      acc[gameUsdTxId].push(betOrder);
+      return acc;
+    }, {});
 
-    return betWalletTxs;
+    return groupedBetOrders;
   }
 
   async getPointHistory(userId: number, count: number) {
