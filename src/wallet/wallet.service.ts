@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryRunner, Repository } from 'typeorm';
+import { Brackets, DataSource, QueryRunner, Repository } from 'typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
 import { WalletTx } from './entities/wallet-tx.entity';
 import { User } from 'src/user/entities/user.entity';
@@ -138,17 +138,20 @@ export class WalletService {
       .createQueryBuilder('gameUsdTx')
       .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
       .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
-      .where('gameUsdTx.status = :status', { status: 'S' })
+      .where('gameUsdTx.status = :status', { status: TxStatus.SUCCESS })
       .andWhere(
-        'walletTxs.userWalletId = :userWalletId AND walletTxs.txType != :txType',
-        {
-          userWalletId: wallet.id,
-          txType: 'GAME_TRANSACTION',
-        },
+        new Brackets((qb) => {
+          qb.where(
+            'walletTxs.userWalletId = :userWalletId AND walletTxs.txType != :txType',
+            {
+              userWalletId: wallet.id,
+              txType: 'GAME_TRANSACTION',
+            },
+          ).orWhere('creditWalletTx.walletId = :walletId', {
+            walletId: wallet.id,
+          });
+        }),
       )
-      .orWhere('creditWalletTx.walletId = :walletId', {
-        walletId: wallet.id,
-      })
       .orderBy('gameUsdTx.id', 'DESC')
       .limit(count)
       .getMany();
@@ -156,12 +159,19 @@ export class WalletService {
     const allTxs = gameTxnsDb.map((gameUsdTx) => {
       let amount = 0;
 
-      if (gameUsdTx.walletTxs[0]) {
-        amount = gameUsdTx.walletTxs[0].txAmount;
+      if (gameUsdTx.walletTxs.length > 0) {
+        // amount = gameUsdTx.walletTxs[0].txAmount;
+        amount = gameUsdTx.walletTxs.reduce(
+          (acc, curr) => acc + Number(curr.txAmount),
+          0,
+        );
       }
 
-      if (gameUsdTx.creditWalletTx[0]) {
-        amount = Number(amount) + Number(gameUsdTx.creditWalletTx[0].amount);
+      if (gameUsdTx.creditWalletTx.length > 0) {
+        const creditAmount = gameUsdTx.creditWalletTx.reduce((acc, curr) => {
+          return acc + Number(curr.amount);
+        }, 0);
+        amount = Number(amount) + Number(creditAmount);
       }
 
       let startingBalance = 0;

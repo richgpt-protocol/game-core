@@ -32,7 +32,11 @@ export class DepositTx {
   @Column({
     comment: 'S - success, P - Pending, F - Failed',
   })
-  status: TxStatus.SUCCESS | TxStatus.PENDING | TxStatus.PENDING_ADMIN | TxStatus.FAILED;
+  status:
+    | TxStatus.SUCCESS
+    | TxStatus.PENDING
+    | TxStatus.PENDING_ADMIN
+    | TxStatus.FAILED;
 
   @Column({
     default: 0,
@@ -43,12 +47,6 @@ export class DepositTx {
     nullable: true,
   })
   txHash: string;
-
-  @Column({
-    nullable: true,
-    comment: 'Note from admin when deposit is approved/rejected by admin',
-  })
-  note: string;
 
   @Column()
   walletTxId: number;

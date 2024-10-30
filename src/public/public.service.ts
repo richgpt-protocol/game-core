@@ -150,20 +150,20 @@ export class PublicService {
   }
 
   async updateTaskXP(payload: UpdateTaskXpDto) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const userWallet = await this.walletService.getWalletInfo(user.id);
+    if (!userWallet) {
+      throw new BadRequestException('User wallet not found');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
 
     try {
-      const user = await this.userService.findByCriteria('uid', payload.uid);
-      if (!user) {
-        throw new BadRequestException('User not found');
-      }
-
-      const userWallet = await this.walletService.getWalletInfo(user.id);
-      if (!userWallet) {
-        throw new BadRequestException('User wallet not found');
-      }
-
       await queryRunner.startTransaction();
 
       if (payload.xp > 0) {
@@ -224,19 +224,19 @@ export class PublicService {
   }
 
   async updateUserGame(payload: UpdateUserGameDto) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const userWallet = await this.walletService.getWalletInfo(user.id);
+    if (!userWallet) {
+      throw new BadRequestException('User wallet not found');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
     try {
-      const user = await this.userService.findByCriteria('uid', payload.uid);
-      if (!user) {
-        throw new BadRequestException('User not found');
-      }
-
-      const userWallet = await this.walletService.getWalletInfo(user.id);
-      if (!userWallet) {
-        throw new BadRequestException('User wallet not found');
-      }
-
+      await queryRunner.connect();
       await queryRunner.startTransaction();
 
       const tx = new GameTx();

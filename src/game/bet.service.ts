@@ -255,7 +255,7 @@ export class BetService implements OnModuleInit {
       const pendingAmountResult = await queryRunner.manager.query(
         `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
           WHERE
-            userWalletId = ${userId} AND
+            userWalletId = ${userInfo.wallet.id} AND
             txType IN ('REDEEM', 'PLAY', 'INTERNAL_TRANSFER') AND
             status IN ('P', 'PD', 'PA')`,
       );
@@ -296,10 +296,10 @@ export class BetService implements OnModuleInit {
         walletTx.txAmount = totalWalletBalanceUsed;
         walletTx.gameUsdTx = gameUsdResult;
 
-        const updatedWalletTx = await queryRunner.manager.save(walletTx);
+        await queryRunner.manager.save(walletTx);
 
         await queryRunner.manager.update(GameUsdTx, gameUsdResult.id, {
-          walletTxId: updatedWalletTx.id,
+          walletTxId: walletTx.id,
         });
       }
 
