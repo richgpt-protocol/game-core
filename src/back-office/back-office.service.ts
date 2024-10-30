@@ -644,12 +644,13 @@ export class BackOfficeService {
         userCount: 0,
         totalPayout: 0,
         totalPayoutRewards: 0,
-        commissionAmount: Number(
-          commissions.find(
-            (_commision) =>
-              _commision.createdDate.toDateString() === start.toDateString(),
-          )?.txAmount || 0,
-        ),
+        // commissionAmount: Number(
+        //   commissions.find(
+        //     (_commision) =>
+        //       _commision.createdDate.toDateString() === start.toDateString(),
+        //   )?.txAmount || 0,
+        // ),
+        commissionAmount: commissions.reduce((acc, commission) => acc + (+commission.txAmount), 0),
       };
       start.setDate(start.getDate() + 1);
     }

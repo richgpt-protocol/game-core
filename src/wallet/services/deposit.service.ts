@@ -569,6 +569,8 @@ export class DepositService implements OnModuleInit {
         gameUsdTx.walletTxs = [depositTx.walletTx];
         await queryRunner.manager.save(gameUsdTx);
 
+        await queryRunner.commitTransaction();
+
         await this.queueService.addJob(
           QueueName.DEPOSIT,
           `gameusd-${gameUsdTx.id}`,
@@ -584,8 +586,6 @@ export class DepositService implements OnModuleInit {
           `Escrow transaction failed with hash: ${onchainEscrowTxHash}`,
         );
       }
-
-      await queryRunner.commitTransaction();
     } catch (error) {
       this.logger.error('handleEscrowTx() error:', error);
       throw new Error(`Error processing deposit ${error}`);
