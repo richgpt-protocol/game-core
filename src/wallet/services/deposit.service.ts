@@ -831,6 +831,8 @@ export class DepositService implements OnModuleInit {
         true,
         true,
       );
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 
@@ -967,6 +969,9 @@ export class DepositService implements OnModuleInit {
         );
       } catch (error) {
         this.logger.error('Error in onGameUsdTxFailed', error);
+      } finally {
+        // in case it reaches catch block before releasing the queryRunner
+        if (!queryRunner.isReleased) await queryRunner.release();
       }
     }
   }
