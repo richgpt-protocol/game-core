@@ -456,13 +456,15 @@ export class ClaimService {
     }
   }
 
-  async getPendingClaimByWalletTxId(walletTxId: number): Promise<{
+  async getPendingClaimByGameUsdTxId(gameUsdTxId: number): Promise<{
     totalWinningAmount: number;
     drawResults: DrawResult[];
   }> {
     const betOrders = await this.betOrderRepository.find({
       where: {
-        walletTxId,
+        gameUsdTx: {
+          id: gameUsdTxId,
+        },
         availableClaim: true,
         isClaimed: false,
       },
