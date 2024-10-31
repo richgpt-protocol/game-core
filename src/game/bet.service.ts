@@ -364,21 +364,28 @@ export class BetService implements OnModuleInit {
 
   async restartBet(gameTxId: number, userId: number): Promise<boolean> {
     try {
-      const gameuUsdTx = await this.gameUsdTxRepository.findOne({
-        where: {
-          id: gameTxId,
-          status: Not(TxStatus.SUCCESS),
-        },
-        relations: ['walletTxs', 'walletTxs.betOrders'],
-      });
+      // const gameUsdTx = await this.gameUsdTxRepository.findOne({
+      //   where: {
+      //     id: gameTxId,
+      //     status: Not(TxStatus.SUCCESS),
+      //   },
+      //   relations: ['walletTxs', 'walletTxs.betOrders'],
+      // });
+      const gameUsdTx = await this.gameUsdTxRepository
+        .createQueryBuilder('gameUsdTx')
+        .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
+        .leftJoinAndSelect('walletTxs.betOrders', 'betOrders')
+        .where('gameUsdTx.id = :id', { id: gameTxId })
+        .andWhere('gameUsdTx.status != :status', { status: TxStatus.SUCCESS })
+        .getOne();
 
-      if (!gameuUsdTx) {
+      if (!gameUsdTx) {
         throw new BadRequestException('Invalid gameTxId');
       }
 
       const userInfo = await this.userService.getUserInfo(userId);
 
-      const jobId = `placeBet-${gameuUsdTx.id}`;
+      const jobId = `placeBet-${gameUsdTx.id}`;
       await this.queueService.addDynamicQueueJob(
         `${QueueName.BET}_${userInfo.wallet.walletAddress}`,
         jobId,
@@ -388,7 +395,7 @@ export class BetService implements OnModuleInit {
         },
         {
           userWalletId: userInfo.wallet.id,
-          gameUsdTxId: gameuUsdTx.id,
+          gameUsdTxId: gameUsdTx.id,
           queueType: QueueType.SUBMIT_BET,
         },
         0, // no delay
@@ -424,14 +431,19 @@ export class BetService implements OnModuleInit {
     const currentEpoch = await this._getCurrentEpoch();
     const numberPairs = payload.map((bet) => bet.numberPair);
 
-    const allGamesArr = await this.gameRepository.find({
-      where: {
-        isClosed: false,
-      },
-      order: {
-        epoch: 'ASC',
-      },
-    });
+    // const allGamesArr = await this.gameRepository.find({
+    //   where: {
+    //     isClosed: false,
+    //   },
+    //   order: {
+    //     epoch: 'ASC',
+    //   },
+    // });
+    const allGamesArr = await this.gameRepository
+      .createQueryBuilder('game')
+      .where('game.isClosed = :isClosed', { isClosed: false })
+      .orderBy('game.epoch', 'ASC')
+      .getMany();
 
     if (allGamesArr.length < this.MAX_NUMBER_OF_DRAWS) {
       throw new InternalServerErrorException('Invalid game data');
@@ -566,14 +578,19 @@ export class BetService implements OnModuleInit {
     creditWalletTxns: CreditWalletTx[];
     totalAmount: number;
   }> {
-    const allGames = await this.gameRepository.find({
-      where: {
-        isClosed: false,
-      },
-      order: {
-        epoch: 'ASC',
-      },
-    });
+    // const allGames = await this.gameRepository.find({
+    //   where: {
+    //     isClosed: false,
+    //   },
+    //   order: {
+    //     epoch: 'ASC',
+    //   },
+    // });
+    const allGames = await this.gameRepository
+      .createQueryBuilder('game')
+      .where('game.isClosed = :isClosed', { isClosed: false })
+      .orderBy('game.epoch', 'ASC')
+      .getMany();
 
     const betOrders: Array<BetOrder> = [];
     let totalWalletBalanceUsed = 0;
@@ -643,15 +660,20 @@ export class BetService implements OnModuleInit {
     };
   }
 
-  private async _getCurrentEpoch() {
-    const earliestNonClosedGame = await this.gameRepository.findOne({
-      where: {
-        isClosed: false,
-      },
-      order: {
-        startDate: 'ASC',
-      },
-    });
+  private async _getCurrentEpoch(): Promise<string> {
+    // const earliestNonClosedGame = await this.gameRepository.findOne({
+    //   where: {
+    //     isClosed: false,
+    //   },
+    //   order: {
+    //     startDate: 'ASC',
+    //   },
+    // });
+    const earliestNonClosedGame = await this.gameRepository
+      .createQueryBuilder('game')
+      .where('game.isClosed = :isClosed', { isClosed: false })
+      .orderBy('game.startDate', 'ASC')
+      .getOne();
 
     return earliestNonClosedGame.epoch;
   }
@@ -1579,13 +1601,21 @@ export class BetService implements OnModuleInit {
     );
 
     if (nativeBalance < parseUnits(minimumNativeBalance, 18)) {
-      const pendingReloadTx = await this.reloadTxRepository.findOne({
-        where: {
+      // const pendingReloadTx = await this.reloadTxRepository.findOne({
+      //   where: {
+      //     userWalletId: userWallet.id,
+      //     chainId,
+      //     status: TxStatus.PENDING,
+      //   },
+      // });
+      const pendingReloadTx = await this.reloadTxRepository
+        .createQueryBuilder('reloadTx')
+        .where('reloadTx.userWalletId = :userWalletId', {
           userWalletId: userWallet.id,
-          chainId,
-          status: TxStatus.PENDING,
-        },
-      });
+        })
+        .andWhere('reloadTx.chainId = :chainId', { chainId })
+        .andWhere('reloadTx.status = :status', { status: TxStatus.PENDING })
+        .getOne();
 
       if (!pendingReloadTx) {
         console.log(
