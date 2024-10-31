@@ -211,12 +211,12 @@ export class CreditService {
         creditWalletTxId: creditWalletTxId,
         queueType: QueueType.SUBMIT_CREDIT,
       },
-      3000,
+      // 3000,
     );
     return true;
   }
 
-  /// IMPORTANT: this.addToQueue(creditWalletTx.id); SHOULD BE CALLED COMMITING THE TRANSACTION
+  /// IMPORTANT: this.addToQueue(creditWalletTx.id); SHOULD BE CALLED AFTER COMMITING THE TRANSACTION
   private async _addCredit(
     payload: AddCreditDto,
     queryRunner: QueryRunner,
@@ -311,7 +311,7 @@ export class CreditService {
           creditWalletTxId: creditWalletTx.id,
           queueType: QueueType.SUBMIT_CREDIT,
         },
-        3000,
+        // 3000,
       );
 
       return { message: 'Retry job added' };
@@ -675,7 +675,7 @@ export class CreditService {
               gameUsdTx: gameUsdTx,
               queueType: QueueType.REVOKE_CREDIT,
             },
-            3000,
+            // 3000,
           );
         }
       }
