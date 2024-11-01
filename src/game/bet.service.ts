@@ -67,8 +67,8 @@ export class BetService implements OnModuleInit {
   private readonly MAX_NUMBER_OF_DRAWS = 168;
 
   constructor(
-    @InjectRepository(Game)
-    private gameRepository: Repository<Game>,
+    // @InjectRepository(Game)
+    // private gameRepository: Repository<Game>,
     @InjectRepository(BetOrder)
     private betRepository: Repository<BetOrder>,
     @InjectRepository(GameUsdTx)
@@ -250,7 +250,7 @@ export class BetService implements OnModuleInit {
         .getOne();
 
       payload = this._formatBets(payload);
-      await this.validateBets(payload);
+      await this.validateBets(payload, queryRunner);
 
       const pendingAmountResult = await queryRunner.manager.query(
         `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
@@ -268,7 +268,7 @@ export class BetService implements OnModuleInit {
 
       // eslint-disable-next-line prefer-const
       let { betOrders, totalWalletBalanceUsed, creditWalletTxns, totalAmount } =
-        await this.createBetOrders(actualWalletBalance, userInfo, payload);
+        await this.createBetOrders(actualWalletBalance, userInfo, payload, queryRunner);
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = totalAmount;
@@ -427,8 +427,8 @@ export class BetService implements OnModuleInit {
       };
     });
   }
-  private async validateBets(payload: BetDto[]) {
-    const currentEpoch = await this._getCurrentEpoch();
+  private async validateBets(payload: BetDto[], queryRunner: QueryRunner) {
+    const currentEpoch = await this._getCurrentEpoch(queryRunner);
     const numberPairs = payload.map((bet) => bet.numberPair);
 
     // const allGamesArr = await this.gameRepository.find({
@@ -439,8 +439,8 @@ export class BetService implements OnModuleInit {
     //     epoch: 'ASC',
     //   },
     // });
-    const allGamesArr = await this.gameRepository
-      .createQueryBuilder('game')
+    const allGamesArr = await queryRunner.manager
+      .createQueryBuilder(Game, 'game')
       .where('game.isClosed = :isClosed', { isClosed: false })
       .orderBy('game.epoch', 'ASC')
       .getMany();
@@ -572,6 +572,7 @@ export class BetService implements OnModuleInit {
     userInfo: User,
     payload: BetDto[],
     // walletTx: WalletTx,
+    queryRunner: QueryRunner,
   ): Promise<{
     betOrders: BetOrder[];
     totalWalletBalanceUsed: number;
@@ -586,8 +587,8 @@ export class BetService implements OnModuleInit {
     //     epoch: 'ASC',
     //   },
     // });
-    const allGames = await this.gameRepository
-      .createQueryBuilder('game')
+    const allGames = await queryRunner.manager
+      .createQueryBuilder(Game, 'game')
       .where('game.isClosed = :isClosed', { isClosed: false })
       .orderBy('game.epoch', 'ASC')
       .getMany();
@@ -660,7 +661,7 @@ export class BetService implements OnModuleInit {
     };
   }
 
-  private async _getCurrentEpoch(): Promise<string> {
+  private async _getCurrentEpoch(queryRunner: QueryRunner): Promise<string> {
     // const earliestNonClosedGame = await this.gameRepository.findOne({
     //   where: {
     //     isClosed: false,
@@ -669,8 +670,8 @@ export class BetService implements OnModuleInit {
     //     startDate: 'ASC',
     //   },
     // });
-    const earliestNonClosedGame = await this.gameRepository
-      .createQueryBuilder('game')
+    const earliestNonClosedGame = await queryRunner.manager
+      .createQueryBuilder(Game, 'game')
       .where('game.isClosed = :isClosed', { isClosed: false })
       .orderBy('game.startDate', 'ASC')
       .getOne();
