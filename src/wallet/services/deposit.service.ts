@@ -23,7 +23,7 @@ import { UserService } from 'src/user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MPC } from 'src/shared/mpc';
 import { Setting } from 'src/setting/entities/setting.entity';
-import { Deposit__factory } from 'src/contract';
+import { Deposit__factory, ERC20, ERC20__factory } from 'src/contract';
 import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { Job } from 'bullmq';
@@ -37,7 +37,7 @@ import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
  * How deposit works
  * 1. deposit-bot access via api/v1/wallet/deposit
  * 2. processDeposit() create pending walletTx, depositTx and Adds it to queue of type `DEPOSIT_ESCROW`.
- * 3. handleEscrowTx() is executed by the queue, transfers the  deposited token to escrow wallet
+ * 3. handleEscrowTx() is executed by the queue, transfers the  deposited token(i.e. USDT) to escrow wallet
  *    once success, set depositTx status to success and create pending gameUsdTx, otherwise retry again by the queue.
  * 4. handleGameUsdTx() transfer GameUSD to user wallet.
  *    once success, set gameUsdTx status to success and proceed to handleGameUSDTxHash()
@@ -158,7 +158,7 @@ export class DepositService implements OnModuleInit {
           `Error processing deposit for wallet: ${payload.walletAddress} \n
           Minimum Deposit Amount not met. \n
           UserId: ${user.id}. \n
-          Deposit amount: ${payload.amount} \n
+          Deposit amount: $${payload.amount} \n
           TxHash: ${payload.txHash}`,
           'MINIMUM_DEPOSIT_AMOUNT',
           'Deposit Failed',
@@ -193,7 +193,7 @@ export class DepositService implements OnModuleInit {
       } else {
         // deposit amount more than deposit_notify_threshold, inform admin
         await this.adminNotificationService.setAdminNotification(
-          `Deposit of $${payload.amount} ${payload.tokenAddress} received at ${payload.walletAddress}. Please Approve/Reject in backOffice`,
+          `Deposit of $${payload.amount} by ${payload.tokenAddress} received at ${payload.walletAddress}. Please Approve/Reject in backOffice`,
           'DEPOSIT_THRESHOLD_NOTIFICATION',
           'Deposit Threshold Notification',
           false,
@@ -211,7 +211,7 @@ export class DepositService implements OnModuleInit {
         );
       } else {
         await this.adminNotificationService.setAdminNotification(
-          `Deposit of ${payload.amount} ${payload.tokenAddress} received at ${payload.walletAddress}`,
+          `Deposit of ${payload.amount} by ${payload.tokenAddress} received at ${payload.walletAddress}`,
           'DEPOSIT_RECEIVED',
           'Deposit Received',
           false,
@@ -353,7 +353,6 @@ export class DepositService implements OnModuleInit {
         },
         relations: ['walletTx'],
       });
-
       if (!depositTx) {
         throw new BadRequestException('Deposit not found');
       }
@@ -474,7 +473,7 @@ export class DepositService implements OnModuleInit {
         .innerJoinAndSelect('depositTx.walletTx', 'walletTx')
         .innerJoinAndSelect('walletTx.userWallet', 'userWallet')
         .where('depositTx.id = :id', { id: job.data.depositTxId })
-        .orderBy('depositTx.id', 'ASC')
+        // .orderBy('depositTx.id', 'ASC')
         .getOne();
       if (!depositTx) {
         await queryRunner.release();
@@ -484,6 +483,8 @@ export class DepositService implements OnModuleInit {
       }
 
       if (depositTx.isTransferred) {
+        // handleGameUsdTx() failed for some reason and
+        // need to use retryDeposit() will reach this block
         const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
           where: {
             walletTxId: depositTx.walletTxId,
@@ -507,17 +508,17 @@ export class DepositService implements OnModuleInit {
         return;
       }
 
-      const userWallet = await queryRunner.manager.findOne(UserWallet, {
-        where: {
-          id: depositTx.walletTx.userWalletId,
-        },
-      });
+      // const userWallet = await queryRunner.manager.findOne(UserWallet, {
+      //   where: {
+      //     id: depositTx.walletTx.userWalletId,
+      //   },
+      // });
       // if get private key failed, into catch block and retry again in next cron job
       const userSigner = await this.getSigner(
-        userWallet.walletAddress,
+        depositTx.walletTx.userWallet.walletAddress,
         depositTx.chainId,
       );
-      const tokenContract = await this.getTokenContract(
+      const tokenContract = this.getTokenContract(
         depositTx.currency,
         userSigner,
       );
@@ -540,7 +541,7 @@ export class DepositService implements OnModuleInit {
       // if transfer token failed, normally due to insufficient gas fee, means
       // user wallet haven't been reloaded yet in processDeposit() especially new created wallet
       // into catch block and retry again in next cron job
-      const receipt = await onchainEscrowTx.wait(1);
+      const receipt = await onchainEscrowTx.wait();
       const onchainEscrowTxHash = onchainEscrowTx.hash;
 
       // // reload user wallet that execute token transfer if needed
@@ -564,7 +565,7 @@ export class DepositService implements OnModuleInit {
         gameUsdTx.senderAddress = this.configService.get(
           'GAMEUSD_POOL_CONTRACT_ADDRESS',
         );
-        gameUsdTx.receiverAddress = userWallet.walletAddress;
+        gameUsdTx.receiverAddress = depositTx.walletTx.userWallet.walletAddress;
         gameUsdTx.walletTxId = depositTx.walletTx.id;
         gameUsdTx.walletTxs = [depositTx.walletTx];
         await queryRunner.manager.save(gameUsdTx);
@@ -650,23 +651,24 @@ export class DepositService implements OnModuleInit {
     );
   }
 
-  private async getTokenContract(tokenAddress: string, signer: ethers.Wallet) {
-    return new ethers.Contract(
-      tokenAddress,
-      [
-        `function transfer(address,uint256) external`,
-        `function balanceOf(address) external view returns (uint256)`,
-        `function decimals() external view returns (uint8)`,
-        `function approve(address spender, uint256 amount) external returns (bool)`,
+  private getTokenContract(tokenAddress: string, signer: ethers.Wallet) {
+    // return new ethers.Contract(
+    //   tokenAddress,
+    //   [
+    //     `function transfer(address,uint256) external`,
+    //     `function balanceOf(address) external view returns (uint256)`,
+    //     `function decimals() external view returns (uint8)`,
+    //     `function approve(address spender, uint256 amount) external returns (bool)`,
 
-        `function allowance(address owner, address spender) external view returns (uint256)`,
-      ],
-      signer,
-    );
+    //     `function allowance(address owner, address spender) external view returns (uint256)`,
+    //   ],
+    //   signer,
+    // );
+    return ERC20__factory.connect(tokenAddress, signer);
   }
 
   private async transferToken(
-    tokenContract: ethers.Contract,
+    tokenContract: ERC20,
     to: string,
     amount: bigint,
   ) {
@@ -976,17 +978,17 @@ export class DepositService implements OnModuleInit {
     }
   }
 
-  private async lastValidWalletTx(userWalletId: number) {
-    return await this.dataSource.manager.findOne(WalletTx, {
-      where: {
-        userWalletId,
-        status: TxStatus.SUCCESS,
-      },
-      order: {
-        createdDate: 'DESC',
-      },
-    });
-  }
+  // private async lastValidWalletTx(userWalletId: number) {
+  //   return await this.dataSource.manager.findOne(WalletTx, {
+  //     where: {
+  //       userWalletId,
+  //       status: TxStatus.SUCCESS,
+  //     },
+  //     order: {
+  //       createdDate: 'DESC',
+  //     },
+  //   });
+  // }
 
   private async lastValidPointTx(walletId: number) {
     return await this.dataSource.manager.findOne(PointTx, {

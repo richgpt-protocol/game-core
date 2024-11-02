@@ -3,6 +3,7 @@
 /* eslint-disable */
 export type { Core } from "./Core";
 export type { Deposit } from "./Deposit";
+export type { ERC20 } from "./ERC20";
 export type { GameUSD } from "./GameUSD";
 export type { GameUSDPool } from "./GameUSDPool";
 export type { Helper } from "./Helper";
@@ -12,6 +13,7 @@ export type { Payout } from "./Payout";
 export * as factories from "./factories";
 export { Core__factory } from "./factories/Core__factory";
 export { Deposit__factory } from "./factories/Deposit__factory";
+export { ERC20__factory } from "./factories/ERC20__factory";
 export { GameUSD__factory } from "./factories/GameUSD__factory";
 export { GameUSDPool__factory } from "./factories/GameUSDPool__factory";
 export { Helper__factory } from "./factories/Helper__factory";
