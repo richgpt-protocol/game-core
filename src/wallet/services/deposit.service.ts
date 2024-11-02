@@ -189,7 +189,7 @@ export class DepositService implements OnModuleInit {
       await queryRunner.commitTransaction();
 
       if (canProceed) {
-        await this.addToEscrowQueue(depositTx.id);
+        await this.addToEscrowQueue(depositTx);
       } else {
         // deposit amount more than deposit_notify_threshold, inform admin
         await this.adminNotificationService.setAdminNotification(
@@ -244,7 +244,7 @@ export class DepositService implements OnModuleInit {
     queryRunner: QueryRunner,
     canProceed: boolean = true,
     userWallet: UserWallet,
-  ) {
+  ): Promise<DepositTx> {
     try {
       // const userWallet = await queryRunner.manager.findOne(UserWallet, {
       //   where: {
@@ -371,7 +371,7 @@ export class DepositService implements OnModuleInit {
       await queryRunner.commitTransaction();
 
       if (status) {
-        await this.addToEscrowQueue(depositTx.id);
+        await this.addToEscrowQueue(depositTx);
       }
     } catch (error) {
       this.logger.error(`processDepositAdmin() error: ${error}`);
@@ -385,19 +385,31 @@ export class DepositService implements OnModuleInit {
     }
   }
 
-  async addToEscrowQueue(depositTxId: number) {
+  async addToEscrowQueue(depositTx: DepositTx) {
     try {
       // add job to queue
-      const jobId = `escrow-${depositTxId}`;
-      await this.queueService.addJob(QueueName.DEPOSIT, jobId, {
-        depositTxId: depositTxId,
-        queueType: QueueType.DEPOSIT_ESCROW,
-      });
+      const jobId = `escrow-${depositTx.id}`;
+      // await this.queueService.addJob(QueueName.DEPOSIT, jobId, {
+      //   depositTxId: depositTxId,
+      //   queueType: QueueType.DEPOSIT_ESCROW,
+      // });
+      await this.queueService.addDynamicQueueJob(
+        `${QueueName.DEPOSIT}_${depositTx.receiverAddress}`,
+        jobId,
+        {
+          jobHandler: this.handleEscrowTx.bind(this),
+          failureHandler: this.onEscrowTxFailed.bind(this),
+        },
+        {
+          depositTxId: depositTx.id,
+          queueType: QueueType.DEPOSIT_ESCROW,
+        },
+      );
     } catch (error) {
       this.logger.error('addToEscrowQueue() error:', error);
 
       await this.adminNotificationService.setAdminNotification(
-        `Error adding to escrow queue for depositTxId: ${depositTxId}`,
+        `Error adding to escrow queue for depositTxId: ${depositTx.id}`,
         'CRITICAL_ERROR',
         'Critical Error When Adding to Escrow Queue',
         false,
@@ -788,16 +800,28 @@ export class DepositService implements OnModuleInit {
           );
         }
 
-        if (gameUsdTx.status == 'S') {
+        if (gameUsdTx.status == TxStatus.SUCCESS) {
           // handles the db part of gameUsdTx sent to user address.
           await queryRunner.commitTransaction();
           if (!queryRunner.isReleased) await queryRunner.release();
 
           const jobId = `updateStatus-${gameUsdTx.id}`;
-          await this.queueService.addJob(QueueName.DEPOSIT, jobId, {
-            gameUsdTxId: gameUsdTx.id,
-            queueType: QueueType.DEPOSIT_GAMEUSD_DB,
-          });
+          // await this.queueService.addJob(QueueName.DEPOSIT, jobId, {
+          //   gameUsdTxId: gameUsdTx.id,
+          //   queueType: QueueType.DEPOSIT_GAMEUSD_DB,
+          // });
+          await this.queueService.addDynamicQueueJob(
+            `${QueueName.DEPOSIT}_${gameUsdTx.txHash}`,
+            jobId,
+            {
+              jobHandler: this.handleGameUSDTxHash.bind(this),
+              failureHandler: this.onGameUsdTxFailed.bind(this),
+            },
+            {
+              gameUsdTxId: gameUsdTx.id,
+              queueType: QueueType.DEPOSIT_GAMEUSD_DB,
+            },
+          );
         }
       } catch (error) {
         // queryRunner
@@ -892,9 +916,9 @@ export class DepositService implements OnModuleInit {
       const pointInfo = this.pointService.getDepositPoints(
         Number(walletTx.txAmount),
       );
-      const lastValidPointTx = await this.lastValidPointTx(
-        walletTx.userWallet.id,
-      );
+      // const lastValidPointTx = await this.lastValidPointTx(
+      //   walletTx.userWallet.id,
+      // );
       const pointTxAmount =
         pointInfo.xp + (walletTx.txAmount * pointInfo.bonusPerc) / 100;
       const pointTxStartingBalance = walletTx.userWallet.pointBalance;
