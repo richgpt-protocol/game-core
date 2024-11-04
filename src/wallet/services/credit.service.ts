@@ -259,6 +259,7 @@ export class CreditService {
       creditWalletTx.walletId = userWallet.id;
       creditWalletTx.userWallet = userWallet;
       creditWalletTx.expirationDate = expirationDate;
+      creditWalletTx.note = payload.note ? payload.note : null;
 
       if (payload.campaignId) {
         const campaign = await queryRunner.manager.findOne(Campaign, {
