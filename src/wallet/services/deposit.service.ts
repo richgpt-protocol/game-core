@@ -486,19 +486,16 @@ export class DepositService implements OnModuleInit {
           },
         });
 
-        await queryRunner.release();
-
-        //add to next queue here
-        await this.queueService.addJob(
-          QueueName.DEPOSIT,
-          `gameusd-${gameUsdTx.id}`,
-          {
-            gameUsdTx,
-            queueType: QueueType.DEPOSIT_GAMEUSD_ONCHAIN,
-          },
-          // 0,
-          // 0,
-        );
+        if (gameUsdTx) {
+          await this.queueService.addJob(
+            QueueName.DEPOSIT,
+            `gameusd-${gameUsdTx.id}`,
+            {
+              gameUsdTxId: gameUsdTx.id,
+              queueType: QueueType.DEPOSIT_GAMEUSD_ONCHAIN,
+            },
+          );
+        }
 
         return;
       }
@@ -564,7 +561,7 @@ export class DepositService implements OnModuleInit {
           QueueName.DEPOSIT,
           `gameusd-${gameUsdTx.id}`,
           {
-            gameUsdTx: tx,
+            gameUsdTxId: tx.id,
             queueType: QueueType.DEPOSIT_GAMEUSD_ONCHAIN,
           },
         );
@@ -653,13 +650,19 @@ export class DepositService implements OnModuleInit {
   }
 
   // Step2: transfer GameUSD to user wallet.
-  private async handleGameUsdTx(job: Job<{ gameUsdTx: GameUsdTx }>) {
-    const { gameUsdTx } = job.data;
+  private async handleGameUsdTx(job: Job<{ gameUsdTxId: number }>) {
+    const { gameUsdTxId } = job.data;
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
+      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
+        where: {
+          id: gameUsdTxId,
+        },
+      });
+
       if (gameUsdTx.status == TxStatus.SUCCESS) {
         // this block reached normally because of retryDeposit() and
         // handleGameUsdTx() is done because gameUsdTx.status is true
@@ -723,15 +726,21 @@ export class DepositService implements OnModuleInit {
   }
 
   private async onGameUsdTxFailed(
-    job: Job<{ gameUsdTx: GameUsdTx }>,
+    job: Job<{ gameUsdTxId: number }>,
     error: Error,
   ) {
-    const { gameUsdTx } = job.data;
+    const { gameUsdTxId } = job.data;
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
+      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
+        where: {
+          id: gameUsdTxId,
+        },
+      });
+
       if (job.attemptsMade > job.opts.attempts) {
         gameUsdTx.status = TxStatus.FAILED;
         await queryRunner.manager.save(gameUsdTx);
@@ -759,6 +768,11 @@ export class DepositService implements OnModuleInit {
       await queryRunner.commitTransaction();
     } catch (error) {
       this.logger.error('Error in onGameUsdTxFailed', error);
+      const gameUsdTx = await queryRunner.manager.findOne(GameUsdTx, {
+        where: {
+          id: gameUsdTxId,
+        },
+      });
 
       await this.adminNotificationService.setAdminNotification(
         `Critical Error in onGameUsdTxFailed() for gameUsdTx id: ${gameUsdTx.id}`,
