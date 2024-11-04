@@ -493,7 +493,7 @@ export class DepositService implements OnModuleInit {
           QueueName.DEPOSIT,
           `gameusd-${gameUsdTx.id}`,
           {
-            gameUsdTx: gameUsdTx,
+            gameUsdTx,
             queueType: QueueType.DEPOSIT_GAMEUSD_ONCHAIN,
           },
           // 0,
@@ -556,7 +556,7 @@ export class DepositService implements OnModuleInit {
         gameUsdTx.receiverAddress = depositTx.walletTx.userWallet.walletAddress;
         gameUsdTx.walletTxId = depositTx.walletTx.id;
         gameUsdTx.walletTxs = [depositTx.walletTx];
-        await queryRunner.manager.save(gameUsdTx);
+        const tx = await queryRunner.manager.save(gameUsdTx);
 
         await queryRunner.commitTransaction();
 
@@ -564,7 +564,7 @@ export class DepositService implements OnModuleInit {
           QueueName.DEPOSIT,
           `gameusd-${gameUsdTx.id}`,
           {
-            gameUsdTx: gameUsdTx,
+            gameUsdTx: tx,
             queueType: QueueType.DEPOSIT_GAMEUSD_ONCHAIN,
           },
         );
@@ -735,7 +735,7 @@ export class DepositService implements OnModuleInit {
       if (job.attemptsMade > job.opts.attempts) {
         gameUsdTx.status = TxStatus.FAILED;
         await queryRunner.manager.save(gameUsdTx);
-          // set walletTx status to failed
+        // set walletTx status to failed
         await queryRunner.manager.update(
           WalletTx,
           { id: gameUsdTx.walletTxId },
