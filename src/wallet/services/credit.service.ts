@@ -60,7 +60,7 @@ export class CreditService {
     private readonly queueService: QueueService,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
-      'DEPOSIT_BOT_ADDRESS',
+      'CREDIT_BOT_ADDRESS',
     );
   }
 
@@ -798,13 +798,13 @@ export class CreditService {
       await approveTx.wait();
     }
     // execute revoke credit function
-    const depositBot = await this.getSigner(
+    const creditBot = await this.getSigner(
       gameUsdTx.chainId,
       this.GAMEUSD_TRANFER_INITIATOR,
     );
     const depositContract = Deposit__factory.connect(
       depositContractAddress,
-      depositBot,
+      creditBot,
     );
     const txResponse = await depositContract.revokeExpiredCredit(
       gameUsdTx.senderAddress,

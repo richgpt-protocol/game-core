@@ -85,12 +85,14 @@ MULTICALL_CONTRACT_ADDRESS_204=
 MULTICALL_CONTRACT_ADDRESS_5611=
 
 # bot address
-DEPOSIT_BOT_ADDRESS=
+DEPOSIT_BOT_ADDRESS= # supply GameUSD on deposit
 PAYOUT_BOT_ADDRESS=
 RESULT_BOT_ADDRESS=
 HELPER_BOT_ADDRESS=
 SUPPLY_ACCOUNT_ADDRESS= # account to supply all native token, must often check balance, need to make sure there is balance for all deposit support chain
-COMMISION_DISTRIBUTOR_BOT_ADDRESS= #Address which can call distributeReferralFee()
+CREDIT_BOT_ADDRESS= # supply credit GameUSD(campaign or mini game) and revoke expired credit GameUSD
+WITHDRAW_BOT_ADDRESS= # pull back GameUSD from user upon withdraw request
+DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS= # distribute referral fee
 
 # escrow multisig address
 ESCROW_ADDRESS_56=0x # BNB mainnet

@@ -678,21 +678,25 @@ export class DepositService implements OnModuleInit {
         return;
       }
 
-      const depositAdminWallet = await this.getSigner(
-        this.configService.get('DEPOSIT_BOT_ADDRESS'),
+      const signer = await this.getSigner(
+        // use deposit bot for normal deposit(>=1 USD),
+        // else use credit bot for credit deposit
+        gameUsdTx.amount >= 1
+          ? this.configService.get('DEPOSIT_BOT_ADDRESS')
+          : this.configService.get('CREDIT_BOT_ADDRESS'),
         gameUsdTx.chainId,
       );
 
       const onchainGameUsdTx = await this.depositGameUSD(
         gameUsdTx.receiverAddress,
         parseEther(gameUsdTx.amount.toString()),
-        depositAdminWallet,
+        signer,
       );
 
       // reload deposit admin wallet if needed
       this.eventEmitter.emit(
         'gas.service.reload',
-        await depositAdminWallet.getAddress(),
+        await signer.getAddress(),
         gameUsdTx.chainId,
       );
 

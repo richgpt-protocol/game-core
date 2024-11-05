@@ -701,9 +701,9 @@ export class WithdrawService implements OnModuleInit {
         'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
       ),
     );
-    const depositBot = new ethers.Wallet(
+    const withdrawBot = new ethers.Wallet(
       await MPC.retrievePrivateKey(
-        this.configService.get('DEPOSIT_BOT_ADDRESS'),
+        this.configService.get('WITHDRAW_BOT_ADDRESS'),
       ),
       provider,
     );
@@ -712,7 +712,7 @@ export class WithdrawService implements OnModuleInit {
     );
     const depositContract = Deposit__factory.connect(
       depositContractAddress,
-      depositBot,
+      withdrawBot,
     );
 
     const gasUsed = await depositContract.withdraw.estimateGas(
@@ -731,7 +731,7 @@ export class WithdrawService implements OnModuleInit {
     // check native token balance for payout bot
     this.eventEmitter.emit(
       'gas.service.reload',
-      depositBot.address,
+      withdrawBot.address,
       this.configService.get('BASE_CHAIN_ID'),
     );
 

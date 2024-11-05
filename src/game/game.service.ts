@@ -518,7 +518,7 @@ export class GameService implements OnModuleInit {
       );
       const signer = new ethers.Wallet(
         await MPC.retrievePrivateKey(
-          this.configService.get('DEPOSIT_BOT_ADDRESS'),
+          this.configService.get('DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS'),
         ),
         provider,
       );

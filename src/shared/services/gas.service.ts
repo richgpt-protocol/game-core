@@ -213,6 +213,9 @@ export class GasService {
       process.env.PAYOUT_BOT_ADDRESS,
       process.env.RESULT_BOT_ADDRESS,
       process.env.HELPER_BOT_ADDRESS,
+      process.env.CREDIT_BOT_ADDRESS,
+      process.env.WITHDRAW_BOT_ADDRESS,
+      process.env.DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS,
     ]
     return adminAddress.includes(userAddress);
   }

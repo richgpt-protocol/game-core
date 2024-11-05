@@ -834,7 +834,7 @@ export class BetService implements OnModuleInit {
       );
       return tx;
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       throw new Error('Error in betWithoutCredit');
     }
   }
@@ -1254,7 +1254,7 @@ export class BetService implements OnModuleInit {
         this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
         new Wallet(
           await MPC.retrievePrivateKey(
-            this.configService.get('DEPOSIT_BOT_ADDRESS'),
+            this.configService.get('DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS'),
           ),
           new JsonRpcProvider(
             this.configService.get(
@@ -1464,7 +1464,7 @@ export class BetService implements OnModuleInit {
         this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
         new Wallet(
           await MPC.retrievePrivateKey(
-            this.configService.get('DEPOSIT_BOT_ADDRESS'),
+            this.configService.get('DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS'),
           ),
           new JsonRpcProvider(
             this.configService.get(
@@ -1623,7 +1623,7 @@ export class BetService implements OnModuleInit {
           'Bet: Emitting gas.service.reload event for userWallet:',
           userWallet.walletAddress,
         );
-        await this.eventEmitter.emit(
+        this.eventEmitter.emit(
           'gas.service.reload',
           userWallet.walletAddress,
           chainId,
