@@ -114,7 +114,7 @@
 </head>
 <body>
     <div class="container">
-        <%- include('header') %>
+        <%- include('header', {user: data.user}) %>
         <h1 class="header-1">Game Winning Numbers</h1>
         <div class="content-wrapper">
             <% for(let gameId in data.pastDrawResults) { %>

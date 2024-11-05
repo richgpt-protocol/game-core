@@ -58,7 +58,9 @@
     <div class="header">
       <div class="h-btn"><a href="/back-office/users">USER</a></div>
       <div class="h-btn"><a href="/back-office/wallets">WALLET</a></div>
-      <div class="h-btn"><a href="/back-office/staffs">STAFF</a></div>
+      <% if (user?.adminType === 'S') { %>
+        <div class="h-btn"><a href="/back-office/staffs">STAFF</a></div>
+      <% } %>
       <div class="h-btn"><a href="/back-office/campaigns">CAMPAIGN</a></div>
       <div class="h-btn"><a href="/back-office/set-referral-prize-bonus">REFERRAL COMMISION BONUS</a></div>
       <div class="h-btn"><a href="/back-office/points">POINTS</a></div>
