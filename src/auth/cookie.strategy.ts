@@ -55,11 +55,17 @@ export class CookieStrategy extends PassportStrategy(Strategy, 'cookiejwt') {
         throw new UnauthorizedException();
     }
 
-    return {
+    const result = {
       userId: payload.sub,
       username: payload.username,
       role: payload.role,
       rememberMe: payload.rememberMe,
     };
+
+    if (payload.adminType) {
+      result['adminType'] = payload.adminType;
+    }
+
+    return result;
   }
 }

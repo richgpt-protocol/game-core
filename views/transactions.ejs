@@ -233,7 +233,7 @@
         <span class="header-1">User Listing</span> -->
         <!-- {{!-- <p class="content">Pre<a href="#" onclick="window.history.back();">Go back</a>, or head over to <a href="{{data.appUrl}}">Dashboard</a> to choose a new direction.</p> --}} -->
     </div>
-    <%- include('header') %>
+    <%- include('header', { user: data.user }) %>
     <div class="content-wrapper">
       <div class="table-area">
         <!-- <div class="wrapper"> -->

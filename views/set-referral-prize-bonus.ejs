@@ -212,7 +212,7 @@
   </style>
 <body>
   <div class="container">
-    <%- include('sidebar') %>
+    <%- include('sidebar', { user: data.user }) %>
 
     <div class="content-wrapper">
       <form id="referralPrizeBonusForm" class="flex-form" method="post" action="/api/v1/point/set-referral-prize-bonus">
