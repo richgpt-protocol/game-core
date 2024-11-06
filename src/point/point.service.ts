@@ -469,6 +469,7 @@ export class PointService {
       // });
       const pointTxs = await queryRunner.manager
         .createQueryBuilder(PointTx, 'pointTx')
+        .leftJoinAndSelect('pointTx.userWallet', 'userWallet')
         .where('pointTx.isLevelUp IS NULL')
         .getMany();
 
@@ -481,7 +482,7 @@ export class PointService {
           this.walletService.calculateLevel(Number(pointTx.endingBalance)),
         );
         if (levelAfter > levelBefore) {
-          await this.userService.setUserNotification(pointTx.walletId, {
+          await this.userService.setUserNotification(pointTx.userWallet.userId, {
             type: 'point',
             title: 'Congratulations on Level Up',
             message: `You just level up from ${levelBefore} to level ${levelAfter}!`,
