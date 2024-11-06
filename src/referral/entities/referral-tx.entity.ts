@@ -1,3 +1,5 @@
+import { TxStatus } from 'src/shared/enum/status.enum';
+import { ReferralTxType } from 'src/shared/enum/txType.enum';
 import { User } from 'src/user/entities/user.entity';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
@@ -32,7 +34,10 @@ export class ReferralTx {
   @Column({
     comment: 'DEPOSIT, PRIZE, BET, SET_REFERRAL',
   })
-  referralType: string;
+  referralType: ReferralTxType.DEPOSIT |
+    ReferralTxType.PRIZE |
+    ReferralTxType.BET | 
+    ReferralTxType.SET_REFERRAL;
 
   @Column({ nullable: true, comment: 'only used for SET_REFERRAL' })
   txHash: string;
@@ -42,7 +47,10 @@ export class ReferralTx {
     comment:
       'S - success, P - pending, PD - Pending Developer, F - failed, only used for SET_REFERRAL',
   })
-  status: 'S' | 'P' | 'PD' | 'F';
+  status: TxStatus.SUCCESS |
+    TxStatus.PENDING |
+    TxStatus.PENDING_DEVELOPER |
+    TxStatus.FAILED;
 
   @Column({
     nullable: true,

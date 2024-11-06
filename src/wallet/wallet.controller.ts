@@ -29,12 +29,12 @@ import { CalculateLevelDto } from './dto/calculateLevel.dto';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { TransferGameUSDDto } from './dto/InternalTransferDto';
 import { InternalTransferService } from './services/internal-transfer.service';
-import { DepositDTO } from './dto/deposit.dto';
+import { DepositDTO, ReviewDepositDto } from './dto/deposit.dto';
 import { DepositService } from './services/deposit.service';
 import { ConfigService } from 'src/config/config.service';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { CreditService } from './services/credit.service';
-import { AddCreditBackofficeDto, AddCreditDto } from './dto/credit.dto';
+import { AddCreditBackofficeDto } from './dto/credit.dto';
 import { DataSource } from 'typeorm';
 
 @ApiTags('Wallet')
@@ -297,137 +297,158 @@ export class WalletController {
     // @HandlerClass() classInfo: IHandlerClass,
     // @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const betWalletTxs = await this.walletService.getTicket(
-      Number(req.user.userId),
-    );
-    // final result after code below
-    // {
-    //   claimableAmount: 200, // total claimable amount
-    //   tickets: [
-    //     id: 1, // ticket id (walletTx id)
-    //     draws: [
-    //       {
-    //         id: 1, // draw id (game id)
-    //         betOrders: [
-    //           numberPair: "4896",
-    //           bigForecastAmount: 1,
-    //           smallForecastAmount: 0.5,
-    //           isClaimable: true
-    //         ],
-    //       }
-    //     ]
-    //   ]
-    // }
+    try {
+      const betWalletTxs: { [key: number]: BetOrder[] } =
+        await this.walletService.getBetOrders(Number(req.user.userId));
+      // final result after code below
+      // {
+      //   claimableAmount: 200, // total claimable amount
+      //   tickets: [
+      //     id: 1, // ticket id (gameUsdtTx id)
+      //     draws: [
+      //       {
+      //         id: 1, // draw id (game id)
+      //         betOrders: [
+      //           numberPair: "4896",
+      //           bigForecastAmount: 1,
+      //           smallForecastAmount: 0.5,
+      //           isClaimable: true
+      //         ],
+      //       }
+      //     ]
+      //   ]
+      // }
 
-    // naive way to get final result
-    const tickets = await Promise.all(
-      betWalletTxs.map(async (walletTx) => {
-        const draws = [];
-        const gameIds = [];
-        walletTx.betOrders.forEach((betOrder) => {
-          if (!gameIds.includes(betOrder.gameId)) gameIds.push(betOrder.gameId);
-        });
-        const { totalWinningAmount: claimableAmountByTicket, drawResults } =
-          await this.claimService.getPendingClaimByWalletTxId(walletTx.id);
-        for (const gameId of gameIds) {
-          const betOrdersInEpoch = walletTx.betOrders.filter(
-            (betOrder) => betOrder.gameId === gameId,
-          );
+      const tickets = await Promise.all(
+        Object.entries(betWalletTxs).map(async ([gameUsdTxId, betOrders]) => {
+          const draws = [];
+          const { totalWinningAmount: claimableAmountByTicket, drawResults } =
+            await this.claimService.getPendingClaimByGameUsdTxId(
+              Number(gameUsdTxId),
+            );
+          const gameIds = [];
+          betOrders.forEach((betOrder) => {
+            if (!gameIds.includes(betOrder.gameId))
+              gameIds.push(betOrder.gameId);
+          });
+          const drawResultsByGameId = drawResults.reduce((acc, drawResult) => {
+            if (acc[drawResult.gameId]) {
+              acc[drawResult.gameId].push(drawResult);
+            } else {
+              acc[drawResult.gameId] = [drawResult];
+            }
+            return acc;
+          }, {});
 
-          const betOrders = betOrdersInEpoch.map((_betOrder) => {
-            const draw = drawResults.find((drawResult) => {
-              return (
-                drawResult.gameId === gameId &&
-                drawResult.numberPair === _betOrder.numberPair
-              );
+          for (const gameId of gameIds) {
+            const betOrdersInEpoch = betOrders.filter(
+              (betOrder) => betOrder.gameId === gameId,
+            );
+
+            const _betOrders = betOrdersInEpoch.map((_betOrder) => {
+              const draw =
+                drawResultsByGameId[gameId] &&
+                drawResultsByGameId[gameId].find((drawResult) => {
+                  return (
+                    drawResult.gameId === gameId &&
+                    drawResult.numberPair === _betOrder.numberPair
+                  );
+                });
+
+              return {
+                ..._betOrder,
+                isBigForecastWin:
+                  draw && _betOrder.bigForecastAmount > 0 ? true : false,
+                isSmallForecastWin:
+                  draw &&
+                  ['1', '2', '3'].includes(draw.prizeCategory) &&
+                  _betOrder.smallForecastAmount > 0
+                    ? true
+                    : false,
+              };
             });
 
-            return {
-              ..._betOrder,
-              isBigForecastWin:
-                draw && _betOrder.bigForecastAmount > 0 ? true : false,
-              isSmallForecastWin:
-                draw &&
-                ['1', '2', '3'].includes(draw.prizeCategory) &&
-                _betOrder.smallForecastAmount > 0
-                  ? true
-                  : false,
+            const gameInfo = _betOrders[0].game;
+            const draw = {
+              id: gameInfo.epoch,
+              date: gameInfo.startDate,
+              betOrders: _betOrders,
             };
-          });
-          const gameInfo = betOrders[0].game;
-          const draw = {
-            id: gameInfo.epoch,
-            date: gameInfo.startDate,
-            betOrders,
+
+            draws.push(draw);
+          }
+          return {
+            id: gameUsdTxId,
+            date: betOrders[0].createdDate,
+            draws,
+            claimableAmountByTicket,
           };
-          draws.push(draw);
-        }
+        }),
+      );
 
-        return {
-          id: walletTx.id,
-          date: walletTx.createdDate,
-          draws,
-          claimableAmountByTicket,
-        };
-      }),
-    );
+      tickets.sort((a, b) => {
+        return Number(b.id) - Number(a.id);
+      });
 
-    const data = {
-      claimableAmount: await this.claimService.getPendingClaimAmount(
-        req.user.userId,
-      ),
-      tickets: tickets.map((ticket) => {
-        return {
-          id: ticket.id,
-          createdDate: ticket.date,
-          claimableAmountByTicket: ticket.claimableAmountByTicket,
-          draws: ticket.draws.map((draw: any) => {
-            return {
-              id: draw.id,
-              date: draw.date,
-              betOrders: draw.betOrders.map(
-                (
-                  betOrder: BetOrder & {
-                    isBigForecastWin: boolean;
-                    isSmallForecastWin: boolean;
-                  },
-                ) => {
-                  const isClaimable =
-                    betOrder.availableClaim === false
-                      ? false
-                      : betOrder.availableClaim === true &&
-                          betOrder.isClaimed === true
+      const data = {
+        claimableAmount: await this.claimService.getPendingClaimAmount(
+          req.user.userId,
+        ),
+        tickets: tickets.map((ticket) => {
+          return {
+            id: ticket.id,
+            createdDate: ticket.date,
+            claimableAmountByTicket: ticket.claimableAmountByTicket,
+            draws: ticket.draws.map((draw: any) => {
+              return {
+                id: draw.id,
+                date: draw.date,
+                betOrders: draw.betOrders.map(
+                  (
+                    betOrder: BetOrder & {
+                      isBigForecastWin: boolean;
+                      isSmallForecastWin: boolean;
+                    },
+                  ) => {
+                    const isClaimable =
+                      betOrder.availableClaim === false
                         ? false
-                        : true;
+                        : betOrder.availableClaim === true &&
+                            betOrder.isClaimed === true
+                          ? false
+                          : true;
 
-                  const isWin =
-                    betOrder.isClaimed === true || betOrder.availableClaim
-                      ? true
-                      : false;
-                  return {
-                    numberPair: betOrder.numberPair,
-                    bigForecastAmount: betOrder.bigForecastAmount,
-                    smallForecastAmount: betOrder.smallForecastAmount,
-                    drawSetup: betOrder.type,
-                    motherPair: betOrder.motherPair,
-                    isClaimable,
-                    isWin,
-                    isBigForecastWin: betOrder.isBigForecastWin,
-                    isSmallForecastWin: betOrder.isSmallForecastWin,
-                  };
-                },
-              ),
-            };
-          }),
-        };
-      }),
-    };
+                    const isWin =
+                      betOrder.isClaimed === true || betOrder.availableClaim
+                        ? true
+                        : false;
+                    return {
+                      numberPair: betOrder.numberPair,
+                      bigForecastAmount: betOrder.bigForecastAmount,
+                      smallForecastAmount: betOrder.smallForecastAmount,
+                      drawSetup: betOrder.type,
+                      motherPair: betOrder.motherPair,
+                      isClaimable,
+                      isWin,
+                      isBigForecastWin: betOrder.isBigForecastWin,
+                      isSmallForecastWin: betOrder.isSmallForecastWin,
+                    };
+                  },
+                ),
+              };
+            }),
+          };
+        }),
+      };
 
-    return {
-      statusCode: HttpStatus.OK,
-      data,
-      message: '',
-    };
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: '',
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
   }
 
   @Secure(null, UserRole.USER)
@@ -484,6 +505,7 @@ export class WalletController {
     }
   }
 
+  // This endpoint can only be accessed by whitelisted ip in IpWhitelistMiddleware class
   @Post('deposit')
   @ApiHeaders([
     {
@@ -507,6 +529,21 @@ export class WalletController {
       data: {},
       message: 'Deposit',
     };
+  }
+
+  @Post('review-deposit')
+  @SecureEJS(PermissionEnum.PAYOUT, UserRole.ADMIN)
+  async reviewDeposit(@Body() payload: ReviewDepositDto) {
+    try {
+      await this.depositService.processDepositAdmin(payload);
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Action success',
+        data: {},
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
   }
 
   @Get('all-wallet-addresses')

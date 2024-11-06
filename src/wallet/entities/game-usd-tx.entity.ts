@@ -1,7 +1,6 @@
 import {
   Column,
   Entity,
-  ManyToOne,
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
@@ -11,6 +10,7 @@ import { CreditWalletTx } from './credit-wallet-tx.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
 
 @Entity()
 export class GameUsdTx {
@@ -31,12 +31,17 @@ export class GameUsdTx {
   @Column({
     comment: 'S - success, P - pending, F - failed',
   })
-  status: string;
+  status: TxStatus.SUCCESS | TxStatus.PENDING | TxStatus.FAILED;
 
   @Column({
     nullable: true,
   })
   txHash: string;
+
+  @Column({
+    nullable: true,
+  })
+  maskingTxHash: string;
 
   @Column()
   senderAddress: string;
@@ -58,8 +63,8 @@ export class GameUsdTx {
   @OneToMany(() => WalletTx, (walletTx) => walletTx.gameUsdTx)
   walletTxs: WalletTx[];
 
-  @ManyToOne(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.gameUsdTx)
-  creditWalletTx: CreditWalletTx;
+  @OneToMany(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.gameUsdTx)
+  creditWalletTx: CreditWalletTx[];
 
   @OneToMany(() => BetOrder, (betOrder) => betOrder.gameUsdTx)
   betOrders: BetOrder[];

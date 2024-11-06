@@ -1,15 +1,18 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Not, QueryRunner, Repository } from 'typeorm';
+import { Brackets, DataSource, QueryRunner, Repository } from 'typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
 import { WalletTx } from './entities/wallet-tx.entity';
-import * as dotenv from 'dotenv';
 import { User } from 'src/user/entities/user.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
 import { ConfigService } from 'src/config/config.service';
 import { GameUsdTx } from './entities/game-usd-tx.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
+import { UsdtTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import * as dotenv from 'dotenv';
+import { BetOrder } from 'src/game/entities/bet-order.entity';
 dotenv.config();
 
 type TransactionHistory = {
@@ -33,7 +36,8 @@ export class WalletService {
     private configService: ConfigService,
   ) {
     for (let i = 1; i <= 100; i++) {
-      const xp = Math.floor(50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i));
+      // const xp = Math.floor(50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i));
+      const xp = 50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i);
       const prev = this.levelMap.length > 0 ? this.levelMap[i - 2].xp : 0;
       this.levelMap.push({ xp: xp + prev, level: i });
     }
@@ -47,7 +51,7 @@ export class WalletService {
     return walletInfo;
   }
 
-  calculateLevel(point: number): number {
+  private _calculateLevel(point: number): number {
     // minimum level 1
     const level1 = this.levelMap.find((level) => level.level === 1);
     if (point < level1.xp) return 1;
@@ -55,36 +59,56 @@ export class WalletService {
     const levels = this.levelMap
       .sort((a, b) => a.xp - b.xp)
       .filter((level) => level.xp <= point);
-    const highestLevel = levels[levels.length - 1].level;
-
+    const highestLevel = levels[levels.length - 1].level + 1;
+    // console.log(this.levelMap)
+    // [
+    //   { xp: 1155.1709180756477, level: 1 },
+    //   { xp: 2776.5736762358174, level: 2 },
+    //   { xp: 5476.432483811821, level: 3 },
+    //   ...
+    // ]
+    // All the new user is level 1 at the beginning.
+    // if xp > 1155.17, level 2.
+    // if xp > 2776.57, level 3.
+    // ...and so on
+    // get the highest level based on xp
+    // i.e. XP = 1000, level = 1
+    // i.e. XP = 2000, level = 2
+    // i.e. XP = 3000, level = 3
+    // i.e. XP = 4000, level = 3
+    // i.e. XP = 5000, level = 3
+    // i.e. XP = 6000, level = 4
+    // refer https://daoventuresco.slack.com/archives/C02AUMV9C3S/p1729164331651769?thread_ts=1728281319.679679&cid=C02AUMV9C3S
     return highestLevel;
+  }
+
+  calculateLevel(point: number): number {
+    return this._calculateLevel(point);
   }
 
   calculateLevelAndPercentage(point: number): {
     level: number;
     percentage: number;
   } {
-    const level1 = this.levelMap.find((level) => level.level === 1);
-    if (point < level1.xp) return { level: 0, percentage: 0 };
-
-    const levels = this.levelMap
-      .sort((a, b) => a.xp - b.xp)
-      .filter((level) => level.xp <= point);
-    const highestLevel = levels[levels.length - 1].level;
+    const highestLevel = this._calculateLevel(point);
     // highestLevel is the current level
 
     // Find the next and previous level
-    const nextLevel = this.levelMap.find(
-      (level) => level.level === highestLevel + 1,
-    );
     const previousLevel = this.levelMap.find(
+      (level) => level.level === highestLevel - 1,
+    );
+    const currentLevel = this.levelMap.find(
       (level) => level.level === highestLevel,
     );
 
     // Calculate the percentage towards the next level
-    const xpForCurrentLevel = point - previousLevel.xp;
-    const xpForNextLevel = nextLevel.xp - previousLevel.xp;
-    const percentage = Math.floor((xpForCurrentLevel / xpForNextLevel) * 100);
+    // refer _calculateLevel() for how to define "next level" based on levelMap
+    const xpSincePreviousLevel = point - (previousLevel ? previousLevel.xp : 0);
+    const xpNeededFromPreviousLevelToNextLeven =
+      currentLevel.xp - (previousLevel ? previousLevel.xp : 0);
+    const percentage = Math.floor(
+      (xpSincePreviousLevel / xpNeededFromPreviousLevelToNextLeven) * 100,
+    );
 
     return { level: highestLevel, percentage };
   }
@@ -115,61 +139,97 @@ export class WalletService {
       .createQueryBuilder('gameUsdTx')
       .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
       .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
-      .where('gameUsdTx.status = :status', { status: 'S' })
+      .where('gameUsdTx.status = :status', { status: TxStatus.SUCCESS })
       .andWhere(
-        'walletTxs.userWalletId = :userWalletId AND walletTxs.txType != :txType',
-        {
-          userWalletId: wallet.id,
-          txType: 'GAME_TRANSACTION',
-        },
+        new Brackets((qb) => {
+          qb.where(
+            'walletTxs.userWalletId = :userWalletId AND walletTxs.txType != :txType',
+            {
+              userWalletId: wallet.id,
+              txType: 'GAME_TRANSACTION',
+            },
+          ).orWhere('creditWalletTx.walletId = :walletId', {
+            walletId: wallet.id,
+          });
+        }),
       )
-      .orWhere('creditWalletTx.walletId = :walletId', {
-        walletId: wallet.id,
-      })
+      .orderBy('gameUsdTx.id', 'DESC')
+      .limit(count)
       .getMany();
 
     const allTxs = gameTxnsDb.map((gameUsdTx) => {
       let amount = 0;
 
-      if (gameUsdTx.walletTxs[0]) {
-        amount = gameUsdTx.walletTxs[0].txAmount;
+      if (gameUsdTx.walletTxs.length > 0) {
+        // amount = gameUsdTx.walletTxs[0].txAmount;
+        amount = gameUsdTx.walletTxs.reduce(
+          (acc, curr) => acc + Number(curr.txAmount),
+          0,
+        );
       }
 
-      if (gameUsdTx.creditWalletTx) {
-        amount = Number(amount) + Number(gameUsdTx.creditWalletTx.amount);
+      if (gameUsdTx.creditWalletTx.length > 0) {
+        const creditAmount = gameUsdTx.creditWalletTx.reduce((acc, curr) => {
+          return acc + Number(curr.amount);
+        }, 0);
+        amount = Number(amount) + Number(creditAmount);
+      }
+
+      let startingBalance = 0;
+      let endingBalance = 0;
+      if (
+        gameUsdTx.walletTxs.length > 0 &&
+        gameUsdTx.walletTxs[0].txType === 'INTERNAL_TRANSFER'
+      ) {
+        startingBalance = gameUsdTx.walletTxs[0].startingBalance;
+        endingBalance = gameUsdTx.walletTxs[0].endingBalance;
       }
 
       return {
-        txType: gameUsdTx.creditWalletTx
-          ? gameUsdTx.creditWalletTx.txType
+        txType: gameUsdTx.creditWalletTx[0]
+          ? gameUsdTx.creditWalletTx[0].txType
           : gameUsdTx.walletTxs[0].txType,
         txAmount: amount,
         createdDate: gameUsdTx.walletTxs[0]
           ? gameUsdTx.walletTxs[0].createdDate
-          : gameUsdTx.creditWalletTx.createdDate,
+          : gameUsdTx.creditWalletTx[0].createdDate,
         status: gameUsdTx.status,
+        startingBalance,
+        endingBalance,
       };
     });
 
     return allTxs;
   }
 
-  async getTicket(userId: number) {
-    const userWallet = await this.userWalletRepository.findOne({
-      where: { userId },
-    });
+  async getBetOrders(userId: number) {
+    const betOrders = await this.datasource.manager
+      .createQueryBuilder(BetOrder, 'betOrder')
+      .leftJoinAndSelect('betOrder.gameUsdTx', 'gameUsdTx')
+      .leftJoinAndSelect('betOrder.game', 'game')
+      .leftJoinAndSelect('game.drawResult', 'drawResult')
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'walletTxUserWallet')
+      .leftJoinAndSelect('creditWalletTx.userWallet', 'creditTxUserWallet')
+      .leftJoinAndSelect('walletTxUserWallet.user', 'walletTxUser')
+      .leftJoinAndSelect('creditTxUserWallet.user', 'creditTxUser')
+      .where('walletTxUserWallet.userId = :userId', { userId })
+      .orWhere('creditTxUser.id = :userId', { userId })
+      .andWhere('gameUsdTx.status = :status', { status: 'S' })
+      .orderBy('betOrder.id', 'DESC')
+      .getMany();
 
-    const betWalletTxs = await this.walletTxRepository.find({
-      where: {
-        userWalletId: userWallet.id,
-        txType: 'PLAY',
-        status: 'S',
-      },
-      order: { id: 'DESC' },
-      relations: ['betOrders', 'betOrders.game', 'betOrders.game.drawResult'],
-    });
+    const groupedBetOrders = betOrders.reduce((acc, betOrder) => {
+      const gameUsdTxId = betOrder.gameUsdTx.id;
+      if (!acc[gameUsdTxId]) {
+        acc[gameUsdTxId] = [];
+      }
+      acc[gameUsdTxId].push(betOrder);
+      return acc;
+    }, {});
 
-    return betWalletTxs;
+    return groupedBetOrders;
   }
 
   async getPointHistory(userId: number, count: number) {
@@ -219,19 +279,19 @@ export class WalletService {
 
       const usdtTx = new UsdtTx();
       usdtTx.amount = amount;
-      usdtTx.status = 'P';
+      usdtTx.status = TxStatus.PENDING;
       usdtTx.txHash = null;
       usdtTx.retryCount = 0;
       usdtTx.receiverAddress = user.wallet.walletAddress;
       usdtTx.senderAddress = miniGameUsdtSender.value;
       usdtTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-      usdtTx.txType = 'CAMPAIGN';
+      usdtTx.txType = UsdtTxType.CAMPAIGN;
       await queryRunner.manager.save(usdtTx);
 
       const walletTx = new WalletTx();
       walletTx.txAmount = amount;
-      walletTx.txType = 'CAMPAIGN';
-      walletTx.status = 'P';
+      walletTx.txType = WalletTxType.CAMPAIGN;
+      walletTx.status = TxStatus.PENDING;
       walletTx.userWalletId = user.wallet.id;
       walletTx.usdtTx = usdtTx;
 

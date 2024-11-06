@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsNumber, IsOptional } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsBoolean,
+} from 'class-validator';
 
 export class DepositDTO {
   @ApiProperty()
@@ -36,4 +42,20 @@ export class DepositDTO {
   @IsOptional()
   @IsNumber()
   usdtTxId: number;
+}
+
+export class ReviewDepositDto {
+  @ApiProperty()
+  @IsNumber()
+  @IsNotEmpty()
+  depositTxId: number;
+
+  @ApiProperty()
+  @IsBoolean()
+  @IsNotEmpty()
+  status: boolean;
+
+  @ApiProperty()
+  @IsString()
+  note: string;
 }

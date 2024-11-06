@@ -102,6 +102,7 @@ export class GameGateway {
         'ExecutionError',
         'Execution Error in emitDrawResult()',
         true,
+        true,
       );
     }
   }

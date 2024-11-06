@@ -20,6 +20,8 @@ import { MPC } from 'src/shared/mpc';
 import { User } from 'src/user/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { WalletTxType } from 'src/shared/enum/txType.enum';
+import { TxStatus } from 'src/shared/enum/status.enum';
+
 @Injectable()
 export class InternalTransferService {
   private readonly logger = new Logger(InternalTransferService.name);
@@ -97,7 +99,7 @@ export class InternalTransferService {
       const pendingAmountResult = await queryRunner.manager.query(
         `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
           WHERE
-            userWalletId = ${userId} AND
+            userWalletId = ${senderWallet.id} AND
             txType IN ('REDEEM', 'PLAY', 'INTERNAL_TRANSFER') AND
             status IN ('P', 'PD', 'PA')`,
       );
@@ -118,7 +120,7 @@ export class InternalTransferService {
       const senderWalletTx = new WalletTx();
       senderWalletTx.txType = WalletTxType.INTERNAL_TRANSFER;
       senderWalletTx.txAmount = payload.amount;
-      senderWalletTx.status = 'P';
+      senderWalletTx.status = TxStatus.PENDING;
       senderWalletTx.userWalletId = senderWallet.id;
       senderWalletTx.userWallet = senderWallet;
       await queryRunner.manager.save(senderWalletTx);
@@ -126,7 +128,7 @@ export class InternalTransferService {
       const receiverWalletTx = new WalletTx();
       receiverWalletTx.txType = WalletTxType.INTERNAL_TRANSFER;
       receiverWalletTx.txAmount = payload.amount;
-      receiverWalletTx.status = 'P';
+      receiverWalletTx.status = TxStatus.PENDING;
       receiverWalletTx.userWalletId = receiverWallet.id;
       receiverWalletTx.userWallet = receiverWallet;
       await queryRunner.manager.save(receiverWalletTx);
@@ -134,7 +136,7 @@ export class InternalTransferService {
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = payload.amount;
       gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
-      gameUsdTx.status = 'P';
+      gameUsdTx.status = TxStatus.PENDING;
       gameUsdTx.senderAddress = senderWallet.walletAddress;
       gameUsdTx.receiverAddress = receiverWallet.walletAddress;
       gameUsdTx.retryCount = 0;
@@ -223,25 +225,27 @@ export class InternalTransferService {
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
         .where('gameUsdTx.status = :status', { status: 'P' })
         .andWhere('gameUsdTx.retryCount > 0')
-        .andWhere('walletTx.txType = :txType', { txType: WalletTxType.INTERNAL_TRANSFER })
+        .andWhere('walletTx.txType = :txType', {
+          txType: WalletTxType.INTERNAL_TRANSFER,
+        })
         .getMany();
 
       for (const gameUsdTx of pendingGameUsdTxns) {
         try {
           if (gameUsdTx.retryCount >= 5) {
-            gameUsdTx.status = 'F';
+            gameUsdTx.status = TxStatus.FAILED;
             await this.gameUsdTxRepository.save(gameUsdTx);
 
             const senderWalletTx = gameUsdTx.walletTxs.find(
               (tx) => tx.userWallet.walletAddress == gameUsdTx.senderAddress,
-            )
-            senderWalletTx.status = 'F';
+            );
+            senderWalletTx.status = TxStatus.FAILED;
             await this.walletTxRepository.save(senderWalletTx);
 
             const receiverWalletTx = gameUsdTx.walletTxs.find(
               (tx) => tx.userWallet.walletAddress == gameUsdTx.receiverAddress,
-            )
-            receiverWalletTx.status = 'F';
+            );
+            receiverWalletTx.status = TxStatus.FAILED;
             await this.walletTxRepository.save(receiverWalletTx);
 
             this.adminNotificationService.setAdminNotification(
@@ -348,9 +352,9 @@ export class InternalTransferService {
         const receipt = await tx.wait();
 
         if (receipt && receipt.status == 1) {
-          senderWalletTx.status = 'S';
-          receiverWalletTx.status = 'S';
-          gameUsdTx.status = 'S';
+          senderWalletTx.status = TxStatus.SUCCESS;
+          receiverWalletTx.status = TxStatus.SUCCESS;
+          gameUsdTx.status = TxStatus.SUCCESS;
           gameUsdTx.txHash = tx.hash;
 
           senderWalletTx.txHash = tx.hash;
@@ -407,7 +411,9 @@ export class InternalTransferService {
           throw new Error('Transaction failed');
         }
       } catch (error) {
-        this.logger.error('InternalTransferService.processTransfer() error: ' + error);
+        this.logger.error(
+          'InternalTransferService.processTransfer() error: ' + error,
+        );
 
         // gameUsdTx.status = 'F';
         // senderWalletTx.status = 'F';
@@ -423,7 +429,9 @@ export class InternalTransferService {
 
       await queryRunner.commitTransaction();
     } catch (error) {
-      this.logger.log('InternalTransferService.processTransfer() error: ' + error);
+      this.logger.log(
+        'InternalTransferService.processTransfer() error: ' + error,
+      );
       await queryRunner.rollbackTransaction();
 
       await this.adminNotificationService.setAdminNotification(
@@ -443,9 +451,7 @@ export class InternalTransferService {
   ): Promise<boolean> {
     try {
       const provider = new JsonRpcProvider(
-        this.configService.get(
-          'PROVIDER_RPC_URL_' + chainId.toString(),
-        )
+        this.configService.get('PROVIDER_RPC_URL_' + chainId.toString()),
       );
 
       const nativeBalance = await provider.getBalance(userWallet.walletAddress);

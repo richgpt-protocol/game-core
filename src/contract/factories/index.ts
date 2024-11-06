@@ -7,4 +7,5 @@ export { GameUSD__factory } from "./GameUSD__factory";
 export { GameUSDPool__factory } from "./GameUSDPool__factory";
 export { Helper__factory } from "./Helper__factory";
 export { JackpotHash__factory } from "./JackpotHash__factory";
+export { MultiCall__factory } from "./MultiCall__factory";
 export { Payout__factory } from "./Payout__factory";

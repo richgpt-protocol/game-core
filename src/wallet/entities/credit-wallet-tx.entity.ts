@@ -4,7 +4,6 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
-  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -14,6 +13,8 @@ import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { GameUsdTx } from './game-usd-tx.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
+import { CreditWalletTxType } from 'src/shared/enum/txType.enum';
+import { TxStatus } from 'src/shared/enum/status.enum';
 
 @Entity()
 export class CreditWalletTx {
@@ -23,7 +24,12 @@ export class CreditWalletTx {
   @Column({
     comment: 'CREDIT, PLAY',
   })
-  txType: string;
+  txType:
+    | CreditWalletTxType.CREDIT
+    | CreditWalletTxType.PLAY
+    | CreditWalletTxType.CAMPAIGN
+    | CreditWalletTxType.GAME_TRANSACTION
+    | CreditWalletTxType.EXPIRY;
 
   @Column({
     type: 'decimal',
@@ -52,12 +58,17 @@ export class CreditWalletTx {
   @Column({
     comment: 'S - success, P - Pending, F - Failed',
   })
-  status: string;
+  status: TxStatus.SUCCESS | TxStatus.PENDING | TxStatus.FAILED | 'E';
 
   @Column({
     nullable: true,
   })
   expirationDate: Date;
+
+  @Column({
+    nullable: true,
+  })
+  note: string;
 
   @CreateDateColumn()
   createdDate: Date;
@@ -77,9 +88,9 @@ export class CreditWalletTx {
   @ManyToOne(() => Campaign, (campaign) => campaign.creditWalletTx)
   campaign: Campaign;
 
-  @OneToMany(() => GameUsdTx, (gameUsdTx) => gameUsdTx.creditWalletTx)
+  @ManyToOne(() => GameUsdTx, (gameUsdTx) => gameUsdTx.creditWalletTx)
   // @JoinColumn()
-  gameUsdTx: GameUsdTx[];
+  gameUsdTx: GameUsdTx;
 
   @JoinColumn()
   @OneToOne(() => GameTx, (gameTx) => gameTx.creditWalletTx)
