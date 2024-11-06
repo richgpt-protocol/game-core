@@ -1250,18 +1250,27 @@ export class BetService implements OnModuleInit {
         +this.configService.get('BASE_CHAIN_ID'),
       );
 
+      const provider = new JsonRpcProvider(
+        this.configService.get(
+          'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
+        ),
+      );
+      const distributeReferralFeeBot = new Wallet(
+        await MPC.retrievePrivateKey(
+          this.configService.get('DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS'),
+        ),
+        provider
+      )
       const depositContract = Deposit__factory.connect(
         this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
-        new Wallet(
-          await MPC.retrievePrivateKey(
-            this.configService.get('DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS'),
-          ),
-          new JsonRpcProvider(
-            this.configService.get(
-              'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
-            ),
-          ),
-        ),
+        distributeReferralFeeBot,
+      );
+
+      // reload distribute referral fee bot if needed
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        distributeReferralFeeBot.address,
+        this.configService.get('BASE_CHAIN_ID'),
       );
 
       const referralRewardOnchainTx =

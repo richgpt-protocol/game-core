@@ -485,6 +485,13 @@ export class CreditService {
         signer,
       );
 
+      // reload credit bot if needed
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        signer.address,
+        this.configService.get('BASE_CHAIN_ID'),
+      );
+
       const receipt = await onchainTx.wait(2);
 
       if (receipt && receipt.status != 1) {
@@ -796,6 +803,13 @@ export class CreditService {
         ethers.MaxUint256,
       );
       await approveTx.wait();
+
+      // reload user wallet if needed
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        user.address,
+        this.configService.get('BASE_CHAIN_ID'),
+      );
     }
     // execute revoke credit function
     const creditBot = await this.getSigner(
@@ -811,6 +825,13 @@ export class CreditService {
       parseUnits(gameUsdTx.amount.toString(), 18),
     );
     const txReceipt = await txResponse.wait();
+
+    // reload credit bot if needed
+    this.eventEmitter.emit(
+      'gas.service.reload',
+      creditBot.address,
+      this.configService.get('BASE_CHAIN_ID'),
+    );
 
     if (txReceipt.status != 1) {
       // throw error to retry again in next job
