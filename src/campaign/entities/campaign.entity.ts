@@ -1,4 +1,5 @@
 import { PointTx } from 'src/point/entities/point-tx.entity';
+import { ClaimApproach } from 'src/shared/enum/campaign.enum';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 
@@ -35,6 +36,17 @@ export class Campaign {
     nullable: true,
   })
   numberOfWinners: number;
+
+  @Column({
+    nullable: true,
+  })
+  validationParams: string;
+
+  @Column()
+  claimApproach: ClaimApproach;
+
+  @Column()
+  maxNumberOfClaims: number;
 
   @OneToMany(() => CreditWalletTx, (creditWalletTx) => creditWalletTx.campaign)
   creditWalletTx: CreditWalletTx[];
