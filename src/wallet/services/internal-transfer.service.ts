@@ -95,6 +95,10 @@ export class InternalTransferService {
         throw new BadRequestException('Receiver wallet not found');
       }
 
+      if (senderWallet.id == receiverWallet.id) {
+        throw new BadRequestException('Cannot transfer to self');
+      }
+
       await this.validateLevel(senderWallet);
       const pendingAmountResult = await queryRunner.manager.query(
         `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
