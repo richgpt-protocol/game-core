@@ -159,6 +159,7 @@ export class CreditService {
           where: { id: payload.campaignId },
         });
         creditTx.campaign = campaign;
+        creditTx.campaignId = campaign.id;
       }
 
       const gameUsdTx = new GameUsdTx();
@@ -266,6 +267,7 @@ export class CreditService {
           where: { id: payload.campaignId },
         });
         creditWalletTx.campaign = campaign;
+        creditWalletTx.campaignId = campaign.id;
       }
 
       await queryRunner.manager.save(creditWalletTx);

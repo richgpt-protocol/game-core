@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Campaign } from './entities/campaign.entity';
 import {
@@ -16,6 +16,7 @@ import { CreditService } from 'src/wallet/services/credit.service';
 
 @Injectable()
 export class CampaignService {
+  private readonly logger = new Logger(CampaignService.name);
   constructor(
     @InjectRepository(Campaign)
     private campaignRepository: Repository<Campaign>,
@@ -32,6 +33,21 @@ export class CampaignService {
       campaign.banner = payload.banner;
       campaign.startTime = new Date(+payload.startTime).getTime();
       campaign.endTime = new Date(+payload.endTime).getTime();
+      campaign.maxNumberOfClaims = +payload.maxUsers;
+      campaign.claimApproach = payload.claimApproach;
+
+      const validationParams = {};
+      if (payload.referralCode && payload.referralCode !== '') {
+        validationParams['referralCode'] = payload.referralCode;
+      }
+      if (payload.ignoredReferralCodes && payload.ignoredReferralCodes !== '') {
+        validationParams['ignoredReferralCodes'] =
+          payload.ignoredReferralCodes.split(',');
+      }
+      if (Object.keys(validationParams).length > 0) {
+        campaign.validationParams = JSON.stringify(validationParams);
+      }
+
       await this.campaignRepository.save(campaign);
 
       return;
@@ -65,13 +81,26 @@ export class CampaignService {
 
   async findActiveCampaignsByClaimApproach(claimApproach: ClaimApproach) {
     try {
-      const activeCampaigns = await this.campaignRepository.find({
-        where: {
-          claimApproach,
-          startTime: LessThan(new Date().getTime() / 1000),
-          endTime: MoreThan(new Date().getTime() / 1000),
-        },
-      });
+      const activeCampaigns = await this.campaignRepository
+        .createQueryBuilder('campaign')
+        .leftJoinAndSelect('campaign.creditWalletTx', 'creditWalletTx')
+        .where('campaign.claimApproach = :claimApproach', { claimApproach })
+        .andWhere('campaign.startTime < :currentTime', {
+          currentTime: new Date().getTime() / 1000,
+        })
+        .andWhere('campaign.endTime > :currentTime', {
+          currentTime: new Date().getTime() / 1000,
+        })
+        .andWhere((qb) => {
+          const subQuery = qb
+            .subQuery()
+            .select('COUNT(creditWalletTx.id)')
+            .from(CreditWalletTx, 'creditWalletTx')
+            .where('creditWalletTx.campaignId = campaign.id')
+            .getQuery();
+          return `(${subQuery}) < campaign.maxNumberOfClaims`;
+        })
+        .getMany();
 
       return activeCampaigns;
     } catch (error) {
@@ -85,28 +114,33 @@ export class CampaignService {
     userId: number,
     queryRunner?: QueryRunner,
   ): Promise<CreditWalletTx> {
-    const userInfo = await queryRunner.manager.findOne(User, {
-      where: { id: userId },
-      relations: ['wallet'],
-    });
-    if (!userInfo) return;
+    try {
+      const userInfo = await queryRunner.manager.findOne(User, {
+        where: { id: userId },
+        relations: ['wallet'],
+      });
+      if (!userInfo) return;
 
-    const campaigns =
-      await this.findActiveCampaignsByClaimApproach(claimApproach);
+      const campaigns =
+        await this.findActiveCampaignsByClaimApproach(claimApproach);
 
-    const activeCampaigns = campaigns.filter(
-      (campaign) => campaign.maxNumberOfClaims > campaign.creditWalletTx.length,
-    );
+      const activeCampaigns = campaigns.filter(
+        (campaign) =>
+          campaign.maxNumberOfClaims > campaign.creditWalletTx.length,
+      );
 
-    switch (claimApproach) {
-      case ClaimApproach.SIGNUP:
-        return await this.claimSignupCampaign(
-          userInfo,
-          activeCampaigns,
-          queryRunner,
-        );
-      default:
-        return;
+      switch (claimApproach) {
+        case ClaimApproach.SIGNUP:
+          return await this.claimSignupCampaign(
+            userInfo,
+            activeCampaigns,
+            queryRunner,
+          );
+        default:
+          return;
+      }
+    } catch (error) {
+      throw new Error(error.message);
     }
   }
 
@@ -153,12 +187,14 @@ export class CampaignService {
           {
             amount: campaign.rewardPerUser,
             walletAddress: userInfo.wallet.walletAddress,
+            note: campaign.name,
           },
           queryRunner,
           false,
         );
 
-        //TODO add to array, which will later be added to queue  after commiting
+        campaign.creditWalletTx.push(creditTx);
+        await queryRunner.manager.save(campaign);
       }
 
       if (!creditTx) {
@@ -175,6 +211,8 @@ export class CampaignService {
       return creditTx;
     } catch (error) {
       if (!runner) await queryRunner.rollbackTransaction();
+
+      throw new Error('Failed to claim signup bonus');
     } finally {
       if (!runner && !queryRunner.isReleased) await queryRunner.release();
     }
@@ -185,44 +223,56 @@ export class CampaignService {
     activeCampaigns: Campaign[],
     queryRunner: QueryRunner,
   ) {
-    const defaultCampaign = activeCampaigns.find(
-      (c) => c.name === 'Signup Bonus',
-    );
-    const hasUserClaimed = defaultCampaign.creditWalletTx.some(
-      (tx) =>
-        tx.walletId === userInfo.wallet.id && tx.campaign === defaultCampaign,
-    );
+    try {
+      const defaultCampaign = activeCampaigns.find(
+        (c) => c.name === 'Signup Bonus',
+      );
 
-    if (hasUserClaimed) return;
-    const referralUserId = userInfo.referralUserId;
+      if (!defaultCampaign) return;
+      const hasUserClaimed = defaultCampaign.creditWalletTx.some(
+        (tx) =>
+          tx.walletId === userInfo.wallet.id && tx.campaign === defaultCampaign,
+      );
 
-    if (defaultCampaign.validationParams && referralUserId) {
-      const validations = JSON.parse(defaultCampaign.validationParams);
-      const ignoredRefferers = validations.ignoredRefferers;
+      if (hasUserClaimed) return;
+      const referralUserId = userInfo.referralUserId;
 
-      const referrer = await queryRunner.manager.findOne(User, {
-        where: { id: referralUserId },
-      });
+      if (defaultCampaign.validationParams && referralUserId) {
+        const validations = JSON.parse(defaultCampaign.validationParams);
+        const ignoredRefferers = validations.ignoredReferralCodes;
+        console.log(ignoredRefferers);
 
-      if (
-        ignoredRefferers &&
-        ignoredRefferers.length > 0 &&
-        ignoredRefferers.includes(referrer.referralCode)
-      ) {
-        return;
+        const referrer = await queryRunner.manager.findOne(User, {
+          where: { id: referralUserId },
+        });
+
+        if (
+          ignoredRefferers &&
+          ignoredRefferers.length > 0 &&
+          ignoredRefferers.includes(referrer.referralCode)
+        ) {
+          return;
+        }
       }
+
+      const creditTx = await this.creditService.addCreditQueryRunner(
+        {
+          amount: defaultCampaign.rewardPerUser,
+          walletAddress: userInfo.wallet.walletAddress,
+          note: defaultCampaign.name,
+        },
+        queryRunner,
+        false,
+      );
+
+      defaultCampaign.creditWalletTx.push(creditTx);
+      await queryRunner.manager.save(defaultCampaign);
+
+      return creditTx;
+    } catch (error) {
+      this.logger.error(error);
+      throw new Error('Failed to claim default signup bonus');
     }
-
-    const creditTx = await this.creditService.addCreditQueryRunner(
-      {
-        amount: defaultCampaign.rewardPerUser,
-        walletAddress: userInfo.wallet.walletAddress,
-      },
-      queryRunner,
-      false,
-    );
-
-    return creditTx;
   }
 
   async findActiveCampaigns() {

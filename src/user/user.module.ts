@@ -19,6 +19,7 @@ import { ConfigModule } from 'src/config/config.module';
 import { ConfigService } from 'src/config/config.service';
 import { WalletModule } from 'src/wallet/wallet.module';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
+import { CampaignModule } from 'src/campaign/campaign.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
     ConfigModule,
     forwardRef(() => WalletModule),
     CacheModule.register(),
+    CampaignModule,
   ],
   providers: [UserService, WalletService, ConfigService],
   controllers: [UserController],
