@@ -283,7 +283,9 @@ export class UserService {
       const referralUser = await this.userRepository
         .createQueryBuilder('user')
         .leftJoinAndSelect('user.wallet', 'wallet')
-        .where('LOWER(user.referralCode) = LOWER(:referralCode)', { referralCode: payload.referralCode })
+        .where('LOWER(user.referralCode) = LOWER(:referralCode)', {
+          referralCode: payload.referralCode,
+        })
         .getOne();
       if (!referralUser) {
         return { error: 'invalid referral code', data: null };
@@ -923,6 +925,7 @@ export class UserService {
             {
               amount: settingvalue.creditAmount,
               walletAddress: walletAddress,
+              note: 'Sign Up Bonus',
             },
             queryRunner,
             false,
