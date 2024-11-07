@@ -248,6 +248,9 @@ export class AdminController {
     @HandlerClass() classInfo: IHandlerClass,
     @Body() payload: AdminDto,
   ): Promise<ResponseVo<any>> {
+    if (req.user.adminType != 'S') {
+      throw new UnauthorizedException('Only superuser can create admin.');
+    }
     const admin = await this.adminService.create(payload);
 
     delete payload.password; // Hide password
@@ -294,6 +297,9 @@ export class AdminController {
     @Param() params,
     @Body() payload: UpdateAdminDto,
   ): Promise<ResponseVo<any>> {
+    if (req.user.adminType != 'S') {
+      throw new UnauthorizedException('Only superuser can update admin.');
+    }
     const success = await this.adminService.update(params.id, payload);
 
     await this.auditLogService.addAuditLog(
