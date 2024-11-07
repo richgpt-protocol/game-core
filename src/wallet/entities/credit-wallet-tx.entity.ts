@@ -85,6 +85,9 @@ export class CreditWalletTx {
   @OneToOne(() => BetOrder, (betOrder) => betOrder.creditWalletTx)
   betOrder: BetOrder;
 
+  @Column({ nullable: true })
+  campaignId: number;
+
   @ManyToOne(() => Campaign, (campaign) => campaign.creditWalletTx)
   campaign: Campaign;
 

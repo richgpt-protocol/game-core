@@ -17,6 +17,7 @@ import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { CampaignService } from 'src/campaign/campaign.service';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { PointService } from 'src/point/point.service';
+import { ClaimApproach } from 'src/shared/enum/campaign.enum';
 
 @ApiTags('back-office')
 @Controller('back-office')
@@ -229,6 +230,7 @@ export class BackOfficeController {
     return {
       data: {
         user: req.user,
+        claimApproaches: Object.values(ClaimApproach),
       },
     };
   }

@@ -1,10 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsNotEmpty,
-  IsNumber,
   IsNumberString,
+  IsOptional,
   IsString,
 } from 'class-validator';
+import { ClaimApproach } from 'src/shared/enum/campaign.enum';
 
 export class CreateCampaignDto {
   @ApiProperty()
@@ -35,4 +36,30 @@ export class CreateCampaignDto {
   @IsNumberString()
   @IsNotEmpty()
   endTime: string;
+
+  @ApiProperty()
+  @IsNumberString()
+  @IsNotEmpty()
+  maxUsers: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsOptional()
+  referralCode: string;
+
+  @ApiProperty({
+    type: 'string',
+    description: 'Comma separated referral codes to be ignored',
+  })
+  @IsString()
+  @IsOptional()
+  ignoredReferralCodes: string;
+
+  @ApiProperty({
+    type: 'string',
+    description: 'When the campaign is triggered (onSignUp, onDeposit etc)',
+  })
+  @IsString()
+  @IsNotEmpty()
+  claimApproach: ClaimApproach;
 }
