@@ -203,33 +203,39 @@ export class WalletService {
   }
 
   async getBetOrders(userId: number) {
-    const betOrders = await this.datasource.manager
-      .createQueryBuilder(BetOrder, 'betOrder')
-      .leftJoinAndSelect('betOrder.gameUsdTx', 'gameUsdTx')
-      .leftJoinAndSelect('betOrder.game', 'game')
-      .leftJoinAndSelect('game.drawResult', 'drawResult')
-      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
-      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
-      .leftJoinAndSelect('walletTx.userWallet', 'walletTxUserWallet')
-      .leftJoinAndSelect('creditWalletTx.userWallet', 'creditTxUserWallet')
-      .leftJoinAndSelect('walletTxUserWallet.user', 'walletTxUser')
-      .leftJoinAndSelect('creditTxUserWallet.user', 'creditTxUser')
-      .where('walletTxUserWallet.userId = :userId', { userId })
-      .orWhere('creditTxUser.id = :userId', { userId })
-      .andWhere('gameUsdTx.status = :status', { status: 'S' })
-      .orderBy('betOrder.id', 'DESC')
-      .getMany();
+    try {
+      const betOrders = await this.datasource.manager
+        .createQueryBuilder(BetOrder, 'betOrder')
+        .innerJoinAndSelect('betOrder.gameUsdTx', 'gameUsdTx')
+        .leftJoinAndSelect('betOrder.game', 'game')
+        .leftJoinAndSelect('game.drawResult', 'drawResult')
+        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'walletTxUserWallet')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditTxUserWallet')
+        .leftJoinAndSelect('walletTxUserWallet.user', 'walletTxUser')
+        .leftJoinAndSelect('creditTxUserWallet.user', 'creditTxUser')
+        .where('walletTxUserWallet.userId = :userId', { userId })
+        .orWhere('creditTxUser.id = :userId', { userId })
+        .andWhere('gameUsdTx.status = :status', { status: 'S' })
+        .orderBy('betOrder.id', 'DESC')
+        .getMany();
 
-    const groupedBetOrders = betOrders.reduce((acc, betOrder) => {
-      const gameUsdTxId = betOrder.gameUsdTx.id;
-      if (!acc[gameUsdTxId]) {
-        acc[gameUsdTxId] = [];
-      }
-      acc[gameUsdTxId].push(betOrder);
-      return acc;
-    }, {});
+      const groupedBetOrders = betOrders.reduce((acc, betOrder) => {
+        const gameUsdTxId = betOrder.gameUsdTx.id;
+        if (!acc[gameUsdTxId]) {
+          acc[gameUsdTxId] = [];
+        }
+        acc[gameUsdTxId].push(betOrder);
+        return acc;
+      }, {});
 
-    return groupedBetOrders;
+      return groupedBetOrders;
+    } catch (error) {
+      console.error(error);
+
+      return [];
+    }
   }
 
   async getPointHistory(userId: number, count: number) {
