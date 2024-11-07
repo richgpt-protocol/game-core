@@ -275,7 +275,7 @@
 
 
                   <td>
-                    <% if (user?.adminType === 'S') { %>
+                    <% if (data.user?.adminType === 'S') { %>
                     <select class="status" data-id="<%= data.transactions[i].id %>">
                       <option value="A" <%= data.transactions[i].status === 'A' ? 'selected' : '' %>>Approve</option>
                       <option value="I" <%= data.transactions[i].status === 'I' ? 'selected' : '' %>>Reject</option>
