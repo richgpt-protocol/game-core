@@ -191,8 +191,7 @@ export class UserController {
       };
     }
 
-    // update otp method into database
-    await this.userService.updateOtpMethod(userId, payload.otpMethod);
+    const result = await this.userService.updateProfile(userId, payload.otpMethod);
 
     // save payload into cache to use in verifyOtp()
     // the cache is valid for 60 seconds(60000 milliseconds), which is same expired time as the otp
@@ -203,12 +202,9 @@ export class UserController {
       60000,
     );
 
-    // pass to handleGenerateOtpEvent() to generate and send otp
-    this.eventEmitter.emit('user.service.otp', { userId, phoneNumber });
-
     return {
       statusCode: HttpStatus.OK,
-      data: {},
+      data: result.data,
       message: 'otp sent',
     };
   }

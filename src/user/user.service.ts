@@ -1062,8 +1062,30 @@ export class UserService {
       .execute();
   }
 
-  async updateOtpMethod(userId: number, otpMethod: string) {
+  async updateProfile(userId: number, otpMethod: string) {
+    const user = await this.userRepository.findOneBy({
+      id: userId,
+    });
+
     await this.userRepository.update(userId, { otpMethod });
+
+    if (otpMethod == 'TELEGRAM') {
+      const code = RandomUtil.generateRandomNumber(6);
+      await this.update(user.id, {
+        verificationCode: code,
+        otpGenerateTime: new Date(),
+      });
+
+      const tgUrl = `https://t.me/${this.telegramOTPBotUserName}?start=${user.uid}`;
+
+      return { error: null, data: { tgUrl, ...user } };
+    } else {
+      // pass to handleGenerateOtpEvent() to generate otp and send to user
+      this.eventEmitter.emit('user.service.otp', {
+        userId: user.id,
+        phoneNumber: user.phoneNumber,
+      });
+    }
   }
 
   async getRefereePerformance(userId: number, count: number) {
