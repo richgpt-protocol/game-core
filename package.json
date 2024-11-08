@@ -24,7 +24,8 @@
     "migration:generate": "typeorm migration:generate -d dist/data-source.js",
     "migration:create": "typeorm migration:create -d dist/data-source.js",
     "migration:run": "typeorm migration:run -d dist/data-source.js",
-    "migration:revert": "typeorm migration:revert -d dist/data-source.js"
+    "migration:revert": "typeorm migration:revert -d dist/data-source.js",
+    "seed:run-create-campaign": "ts-node ./src/database/seeds/run-campaign-seed.ts"
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.2",
