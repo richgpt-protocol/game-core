@@ -53,7 +53,7 @@ export class GameGateway {
     );
   }
 
-  @Cron('0 2 */1 * * *') // 2 minutes after every hour
+  // @Cron('0 2 */1 * * *') // 2 minutes after every hour
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
     this.logger.log('emitDrawResult()');
