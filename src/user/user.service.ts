@@ -421,7 +421,6 @@ export class UserService {
   async signInWithTelegram(
     payload: LoginWithTelegramDTO,
   ): Promise<{ error: string; data: User }> {
-    console.log('signInWithTelegram', payload);
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

@@ -172,8 +172,6 @@ export class CreditService {
       gameUsdTx.creditWalletTx = [creditTx];
       gameUsdTx.retryCount = 0;
 
-      console.log('gameUsdTx', gameUsdTx);
-
       await queryRunner.manager.save(gameUsdTx);
       creditTx.gameUsdTx = gameUsdTx;
       await queryRunner.manager.save(creditTx);

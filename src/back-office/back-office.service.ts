@@ -65,8 +65,6 @@ export class BackOfficeService {
         .take(limit)
         .getManyAndCount();
 
-      console.log(data);
-
       const users = data[0];
 
       const userInfo = users.map((user) => {
@@ -105,7 +103,6 @@ export class BackOfficeService {
       });
 
       const walletsInfo = wallets[0].map((wallet) => {
-        console.log(wallet);
         return {
           ...wallet,
           walletBalance: (+wallet.walletBalance).toFixed(2),
@@ -142,8 +139,6 @@ export class BackOfficeService {
         take: limit,
       });
 
-      console.log(data);
-
       return {
         data: data[0],
         currentPage: page,
@@ -174,8 +169,6 @@ export class BackOfficeService {
         .take(limit)
         .getManyAndCount();
 
-      console.log(wallets[0]);
-
       const data = wallets[0].map((wallet) => {
         const level = this.walletService.calculateLevel(wallet.pointBalance);
         return {
@@ -185,8 +178,6 @@ export class BackOfficeService {
           level: Math.trunc(level),
         };
       });
-
-      console.log(data);
 
       return {
         data,
@@ -311,8 +302,6 @@ export class BackOfficeService {
         };
       });
 
-      console.log(transactions);
-
       return {
         data: transactions,
         currentPage: page,
@@ -412,8 +401,6 @@ export class BackOfficeService {
           createdDate: tx.createdDate.toLocaleDateString(),
         };
       });
-
-      console.log(transactions);
 
       return {
         data: transactions,
@@ -600,8 +587,6 @@ export class BackOfficeService {
       }
       return acc;
     }, {});
-
-    console.log(betsByDate);
 
     return {
       data: betsByDate,
