@@ -482,12 +482,15 @@ export class PointService {
           this.walletService.calculateLevel(Number(pointTx.endingBalance)),
         );
         if (levelAfter > levelBefore) {
-          await this.userService.setUserNotification(pointTx.userWallet.userId, {
-            type: 'point',
-            title: 'Congratulations on Level Up',
-            message: `You just level up from ${levelBefore} to level ${levelAfter}!`,
-            walletTxId: pointTx.walletTxId,
-          });
+          await this.userService.setUserNotification(
+            pointTx.userWallet.userId,
+            {
+              type: 'point',
+              title: 'Congratulations on Level Up',
+              message: `You just level up from ${levelBefore} to level ${levelAfter}!`,
+              walletTxId: pointTx.walletTxId,
+            },
+          );
 
           isLevelUp = true;
         }
@@ -513,13 +516,31 @@ export class PointService {
   }
 
   async getAllTimeLeaderBoard(limit: number) {
-    const leaderboard = await this.getLeaderBoard(
-      new Date(0),
-      new Date(),
-      limit,
-    );
+    const leaderBoard = await this.dataSource
+      .createQueryBuilder()
+      .from(User, 'user')
+      .select('user.uid', 'uid')
+      .leftJoinAndSelect('user.wallet', 'wallet')
+      .addSelect('wallet.pointBalance', 'pointBalance')
+      .orderBy('pointBalance', 'DESC')
+      .limit(limit)
+      .getRawMany();
 
-    return leaderboard;
+    const result = leaderBoard.map((item) => {
+      return {
+        uid: item.uid,
+        pointBalance: item.pointBalance,
+        totalXp: item.pointBalance,
+        level: this.walletService.calculateLevel(item.pointBalance),
+      };
+    });
+    // const leaderboard = await this.getLeaderBoard(
+    //   new Date(0),
+    //   new Date(),
+    //   limit,
+    // );
+
+    return result;
   }
 
   async getCurrentWeekLeaderBoard(limit: number) {
