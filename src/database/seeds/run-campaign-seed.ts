@@ -1,4 +1,4 @@
-import { dataSource } from '../data-source'; // Adjust path
+import { AppDataSource as dataSource } from '../../../src/data-source'; // Adjust path
 import CreateCampaigns from './campaign.seed';
 
 const runSeeder = async () => {
