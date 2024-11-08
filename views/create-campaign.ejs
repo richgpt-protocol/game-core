@@ -240,6 +240,30 @@
           <span>End time: </span>
           <input type="text" name="endTime" required/>
         </div>
+
+        <div class="input-area">
+          <span>Ignored Referral Codes: </span>
+          <input type="text" name="ignoredReferralCodes"/>
+        </div>
+
+        <div class="input-area">
+          <span>Referral Code: </span>
+          <input type="text" name="referralCode"/>
+        </div>
+
+        <div class="input-area">
+          <span>Max Users: </span>
+          <input type="number" name="maxUsers" required/>
+        </div>
+
+        <div class="input-area">
+          <span>Claim Type: </span>
+          <select name="claimApproach" required>
+            <% data.claimApproaches.forEach(function(approach) { %>
+              <option value="<%= approach %>"><%= approach %></option>
+            <% }); %>
+          </select>
+        </div>
         
         <button type="submit">Create</button>
       </form>

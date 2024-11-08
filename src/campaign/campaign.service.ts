@@ -1,14 +1,27 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Campaign } from './entities/campaign.entity';
-import { LessThan, MoreThan, Repository } from 'typeorm';
+import {
+  DataSource,
+  LessThan,
+  MoreThan,
+  QueryRunner,
+  Repository,
+} from 'typeorm';
 import { CreateCampaignDto } from './dto/campaign.dto';
+import { ClaimApproach } from 'src/shared/enum/campaign.enum';
+import { User } from 'src/user/entities/user.entity';
+import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
+import { CreditService } from 'src/wallet/services/credit.service';
 
 @Injectable()
 export class CampaignService {
+  private readonly logger = new Logger(CampaignService.name);
   constructor(
     @InjectRepository(Campaign)
     private campaignRepository: Repository<Campaign>,
+    private datasource: DataSource,
+    private creditService: CreditService,
   ) {}
 
   async createCampaign(payload: CreateCampaignDto): Promise<any> {
@@ -20,6 +33,21 @@ export class CampaignService {
       campaign.banner = payload.banner;
       campaign.startTime = new Date(+payload.startTime).getTime();
       campaign.endTime = new Date(+payload.endTime).getTime();
+      campaign.maxNumberOfClaims = +payload.maxUsers;
+      campaign.claimApproach = payload.claimApproach;
+
+      const validationParams = {};
+      if (payload.referralCode && payload.referralCode !== '') {
+        validationParams['referralCode'] = payload.referralCode;
+      }
+      if (payload.ignoredReferralCodes && payload.ignoredReferralCodes !== '') {
+        validationParams['ignoredReferralCodes'] =
+          payload.ignoredReferralCodes.split(',');
+      }
+      if (Object.keys(validationParams).length > 0) {
+        campaign.validationParams = JSON.stringify(validationParams);
+      }
+
       await this.campaignRepository.save(campaign);
 
       return;
@@ -49,6 +77,202 @@ export class CampaignService {
       currentPage: page,
       totalPages: Math.ceil(campaigns[1] / limit),
     };
+  }
+
+  async findActiveCampaignsByClaimApproach(claimApproach: ClaimApproach) {
+    try {
+      const activeCampaigns = await this.campaignRepository
+        .createQueryBuilder('campaign')
+        .leftJoinAndSelect('campaign.creditWalletTx', 'creditWalletTx')
+        .where('campaign.claimApproach = :claimApproach', { claimApproach })
+        .andWhere('campaign.startTime < :currentTime', {
+          currentTime: new Date().getTime() / 1000,
+        })
+        .andWhere('campaign.endTime > :currentTime', {
+          currentTime: new Date().getTime() / 1000,
+        })
+        .andWhere((qb) => {
+          const subQuery = qb
+            .subQuery()
+            .select('COUNT(creditWalletTx.id)')
+            .from(CreditWalletTx, 'creditWalletTx')
+            .where('creditWalletTx.campaignId = campaign.id')
+            .getQuery();
+          return `(${subQuery}) < campaign.maxNumberOfClaims`;
+        })
+        .getMany();
+
+      return activeCampaigns;
+    } catch (error) {
+      console.error(error);
+      throw new Error('Failed to fetch active campaigns');
+    }
+  }
+
+  async executeClaim(
+    claimApproach: ClaimApproach,
+    userId: number,
+    queryRunner?: QueryRunner,
+  ): Promise<CreditWalletTx> {
+    try {
+      const userInfo = await queryRunner.manager.findOne(User, {
+        where: { id: userId },
+        relations: ['wallet'],
+      });
+      if (!userInfo) return;
+
+      const campaigns =
+        await this.findActiveCampaignsByClaimApproach(claimApproach);
+
+      const activeCampaigns = campaigns.filter(
+        (campaign) =>
+          campaign.maxNumberOfClaims > campaign.creditWalletTx.length,
+      );
+
+      switch (claimApproach) {
+        case ClaimApproach.SIGNUP:
+          return await this.claimSignupCampaign(
+            userInfo,
+            activeCampaigns,
+            queryRunner,
+          );
+        default:
+          return;
+      }
+    } catch (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  private async claimSignupCampaign(
+    userInfo: User,
+    activeCampaigns: Campaign[],
+    runner?: QueryRunner,
+  ) {
+    const queryRunner = runner || this.datasource.createQueryRunner();
+    try {
+      if (!runner) {
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+      }
+
+      //exclude default signup bonus campaign
+      const campaigns = activeCampaigns.filter(
+        (c) => c.name !== 'Signup Bonus',
+      );
+
+      let creditTx: CreditWalletTx;
+      for (const campaign of campaigns) {
+        const hasUserClaimed = campaign.creditWalletTx.some(
+          (tx) =>
+            tx.walletId === userInfo.wallet.id && tx.campaign === campaign,
+        );
+
+        if (hasUserClaimed) continue;
+
+        if (campaign.validationParams) {
+          const validations = JSON.parse(campaign.validationParams);
+          const referralCode = validations.referralCode;
+
+          const referrer = await queryRunner.manager.findOne(User, {
+            where: { referralCode },
+          });
+
+          if (userInfo.referralUser && userInfo.referralUserId != referrer.id) {
+            continue;
+          }
+        }
+
+        creditTx = await this.creditService.addCreditQueryRunner(
+          {
+            amount: campaign.rewardPerUser,
+            walletAddress: userInfo.wallet.walletAddress,
+            note: campaign.name,
+          },
+          queryRunner,
+          false,
+        );
+
+        campaign.creditWalletTx.push(creditTx);
+        await queryRunner.manager.save(campaign);
+      }
+
+      if (!creditTx) {
+        //not eligible for any KOL campaign, add default signup bonus
+        creditTx = await this.handleDefaultSignupBonus(
+          userInfo,
+          activeCampaigns,
+          queryRunner,
+        );
+      }
+
+      if (!runner) await queryRunner.commitTransaction();
+
+      return creditTx;
+    } catch (error) {
+      if (!runner) await queryRunner.rollbackTransaction();
+
+      throw new Error('Failed to claim signup bonus');
+    } finally {
+      if (!runner && !queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  private async handleDefaultSignupBonus(
+    userInfo: User,
+    activeCampaigns: Campaign[],
+    queryRunner: QueryRunner,
+  ) {
+    try {
+      const defaultCampaign = activeCampaigns.find(
+        (c) => c.name === 'Signup Bonus',
+      );
+
+      if (!defaultCampaign) return;
+      const hasUserClaimed = defaultCampaign.creditWalletTx.some(
+        (tx) =>
+          tx.walletId === userInfo.wallet.id && tx.campaign === defaultCampaign,
+      );
+
+      if (hasUserClaimed) return;
+      const referralUserId = userInfo.referralUserId;
+
+      if (defaultCampaign.validationParams && referralUserId) {
+        const validations = JSON.parse(defaultCampaign.validationParams);
+        const ignoredRefferers = validations.ignoredReferralCodes;
+        console.log(ignoredRefferers);
+
+        const referrer = await queryRunner.manager.findOne(User, {
+          where: { id: referralUserId },
+        });
+
+        if (
+          ignoredRefferers &&
+          ignoredRefferers.length > 0 &&
+          ignoredRefferers.includes(referrer.referralCode)
+        ) {
+          return;
+        }
+      }
+
+      const creditTx = await this.creditService.addCreditQueryRunner(
+        {
+          amount: defaultCampaign.rewardPerUser,
+          walletAddress: userInfo.wallet.walletAddress,
+          note: defaultCampaign.name,
+        },
+        queryRunner,
+        false,
+      );
+
+      defaultCampaign.creditWalletTx.push(creditTx);
+      await queryRunner.manager.save(defaultCampaign);
+
+      return creditTx;
+    } catch (error) {
+      this.logger.error(error);
+      throw new Error('Failed to claim default signup bonus');
+    }
   }
 
   async findActiveCampaigns() {

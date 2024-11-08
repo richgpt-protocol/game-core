@@ -45,6 +45,8 @@ import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { keywords } from 'src/shared/constants/referralCodeKeyword.constant';
 import { ReferralTxType } from 'src/shared/enum/txType.enum';
+import { CampaignService } from 'src/campaign/campaign.service';
+import { ClaimApproach } from 'src/shared/enum/campaign.enum';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -83,6 +85,7 @@ export class UserService {
     private cacheSettingService: CacheSettingService,
     private configService: ConfigService,
     private creditService: CreditService,
+    private campaignService: CampaignService,
   ) {
     this.telegramOTPBotUserName = this.configService.get(
       'TELEGRAM_OTP_BOT_USERNAME',
@@ -519,10 +522,10 @@ export class UserService {
           { headers: { 'Content-Type': 'application/json' } },
         );
 
-        const creditTx = await this.processSignUpBonus(
-          walletAddress,
+        const creditTx = await this.campaignService.executeClaim(
+          ClaimApproach.SIGNUP,
+          newUser.id,
           queryRunner,
-          referralUserId,
         );
 
         if (creditTx) {
@@ -822,10 +825,10 @@ export class UserService {
           { headers: { 'Content-Type': 'application/json' } },
         );
 
-        const creditTx = await this.processSignUpBonus(
-          userWallet.walletAddress,
+        const creditTx = await this.campaignService.executeClaim(
+          ClaimApproach.SIGNUP,
+          user.id,
           queryRunner,
-          user.referralUserId,
         );
 
         if (creditTx) {
@@ -856,87 +859,6 @@ export class UserService {
       return { error: err.message, data: null };
     } finally {
       await queryRunner.release();
-    }
-  }
-
-  private async processSignUpBonus(
-    walletAddress: string,
-    queryRunner: QueryRunner,
-    referralUserId?: number,
-  ): Promise<CreditWalletTx> {
-    try {
-      if (referralUserId) {
-        const referrer = await queryRunner.manager.findOne(User, {
-          where: { id: referralUserId },
-        });
-
-        const ignoredReferrersSetting = await queryRunner.manager.findOne(
-          Setting,
-          {
-            where: {
-              key: SettingEnum.FILTERED_REFERRAL_CODES,
-            },
-          },
-        );
-
-        const ignoredRefferers: Array<string> | null =
-          ignoredReferrersSetting.value
-            ? JSON.parse(ignoredReferrersSetting.value)
-            : null;
-
-        if (
-          ignoredRefferers &&
-          ignoredRefferers.length > 0 &&
-          ignoredRefferers.includes(referrer.referralCode)
-        ) {
-          return;
-        }
-      }
-
-      const signupBonusSetting = await queryRunner.manager.findOne(Setting, {
-        where: {
-          key: SettingEnum.ENABLE_SIGNUP_BONUS,
-        },
-      });
-
-      if (signupBonusSetting) {
-        this.eventEmitter.emit(
-          'gas.service.reload',
-          walletAddress,
-          this.configService.get('BASE_CHAIN_ID'),
-        );
-        const settingvalue = JSON.parse(signupBonusSetting.value);
-        const timeNow = new Date().getTime() / 1000;
-        const startDate = new Date(settingvalue.startTime * 1000);
-        const endDate = new Date(settingvalue.endTime * 1000);
-        const registrations = await queryRunner.manager.count(User, {
-          where: {
-            createdDate: Between(startDate, endDate),
-            status: UserStatus.ACTIVE,
-          },
-        });
-
-        if (
-          timeNow >= settingvalue.startTime &&
-          timeNow <= settingvalue.endTime &&
-          registrations <= settingvalue.noOfUsers
-        ) {
-          const creditTx = await this.creditService.addCreditQueryRunner(
-            {
-              amount: settingvalue.creditAmount,
-              walletAddress: walletAddress,
-              note: 'Sign Up Bonus',
-            },
-            queryRunner,
-            false,
-          );
-
-          return creditTx;
-        }
-      }
-    } catch (error) {
-      this.logger.error(error);
-      throw new Error(error.message);
     }
   }
 
