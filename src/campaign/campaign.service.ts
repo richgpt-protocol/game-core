@@ -92,18 +92,6 @@ export class CampaignService {
         .andWhere('campaign.endTime > :currentTime', {
           currentTime: new Date().getTime() / 1000,
         })
-        // .andWhere((qb) => {
-        //   const subQuery = qb
-        //     .subQuery()
-        //     .select('COUNT(creditWalletTx.id)')
-        //     .from(CreditWalletTx, 'creditWalletTx')
-        //     .where('creditWalletTx.campaignId = campaign.id')
-        //     .andWhere('creditWalletTx.status = :status', {
-        //       status: TxStatus.SUCCESS,
-        //     })
-        //     .getQuery();
-        //   return `(${subQuery}) < campaign.maxNumberOfClaims`;
-        // })
         .getMany();
 
       return activeCampaigns;
@@ -127,11 +115,6 @@ export class CampaignService {
 
       const campaigns =
         await this.findActiveCampaignsByClaimApproach(claimApproach);
-
-      // const activeCampaigns = campaigns.filter(
-      //   (campaign) =>
-      //     campaign.maxNumberOfClaims > campaign.creditWalletTx.length,
-      // );
 
       switch (claimApproach) {
         case ClaimApproach.SIGNUP:
@@ -170,7 +153,8 @@ export class CampaignService {
       for (const campaign of campaigns) {
         const hasUserClaimed = campaign.creditWalletTx.some(
           (tx) =>
-            tx.walletId === userInfo.wallet.id && tx.campaign === campaign,
+            tx.walletId === userInfo.wallet.id &&
+            tx.campaign.id === campaign.id,
         );
 
         if (hasUserClaimed) continue;
@@ -202,7 +186,7 @@ export class CampaignService {
         //unless the campaign has reached its max number of claims
         hasUsedCampaignReferralKey = true;
 
-        if (!this.vaidateMaxClaims(campaign)) {
+        if (!this.validateMaxClaims(campaign)) {
           continue;
         }
 
@@ -252,12 +236,13 @@ export class CampaignService {
       );
 
       if (!defaultCampaign) return;
-      if (!this.vaidateMaxClaims(defaultCampaign)) {
+      if (!this.validateMaxClaims(defaultCampaign)) {
         return;
       }
       const hasUserClaimed = defaultCampaign.creditWalletTx.some(
         (tx) =>
-          tx.walletId === userInfo.wallet.id && tx.campaign === defaultCampaign,
+          tx.walletId === userInfo.wallet.id &&
+          tx.campaign.id === defaultCampaign.id,
       );
 
       if (hasUserClaimed) return;
@@ -265,17 +250,16 @@ export class CampaignService {
 
       if (defaultCampaign.validationParams && referralUserId) {
         const validations = JSON.parse(defaultCampaign.validationParams);
-        const ignoredRefferers = validations.ignoredReferralCodes;
-        console.log(ignoredRefferers);
+        const ignoredReferrers = validations.ignoredReferralCodes;
 
         const referrer = await queryRunner.manager.findOne(User, {
           where: { id: referralUserId },
         });
 
         if (
-          ignoredRefferers &&
-          ignoredRefferers.length > 0 &&
-          ignoredRefferers.includes(referrer.referralCode)
+          ignoredReferrers &&
+          ignoredReferrers.length > 0 &&
+          ignoredReferrers.includes(referrer.referralCode)
         ) {
           return;
         }
@@ -301,7 +285,7 @@ export class CampaignService {
     }
   }
 
-  private vaidateMaxClaims(campaign: Campaign): boolean {
+  private validateMaxClaims(campaign: Campaign): boolean {
     const successfulClaims = campaign.creditWalletTx.filter(
       (tx) => tx.status === TxStatus.SUCCESS,
     );

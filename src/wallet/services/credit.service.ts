@@ -59,8 +59,9 @@ export class CreditService {
     private eventEmitter: EventEmitter2,
     private readonly queueService: QueueService,
   ) {
-    this.GAMEUSD_TRANFER_INITIATOR =
-      this.configService.get('CREDIT_BOT_ADDRESS');
+    this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
+      'DEPOSIT_BOT_ADDRESS',
+    );
   }
 
   onModuleInit() {
@@ -170,8 +171,6 @@ export class CreditService {
       gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.creditWalletTx = [creditTx];
       gameUsdTx.retryCount = 0;
-
-      console.log('gameUsdTx', gameUsdTx);
 
       await queryRunner.manager.save(gameUsdTx);
       creditTx.gameUsdTx = gameUsdTx;
