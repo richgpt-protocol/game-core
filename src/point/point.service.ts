@@ -455,7 +455,7 @@ export class PointService {
     return setting ? +setting.value : 0;
   }
 
-  // @Cron('* * * * *') // check every minute
+  @Cron('* * * * *') // check every minute
   async checkLevelUp(): Promise<void> {
     // start queryRunner
     const queryRunner = this.dataSource.createQueryRunner();
@@ -572,7 +572,7 @@ export class PointService {
     return result;
   }
 
-  // @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.EVERY_HOUR)
   async updateLeaderBoard() {
     const today = new Date();
     const oneWeek = 7 * 24 * 60 * 60 * 1000;

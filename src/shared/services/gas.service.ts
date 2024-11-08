@@ -187,22 +187,22 @@ export class GasService {
     }
   }
 
-  // @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx56(): Promise<void> {
     await this.handlePendingReloadTx(56);
   }
 
-  // @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx97(): Promise<void> {
     await this.handlePendingReloadTx(97);
   }
 
-  // @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx204(): Promise<void> {
     await this.handlePendingReloadTx(204);
   }
 
-  // @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx5611(): Promise<void> {
     await this.handlePendingReloadTx(5611);
   }
