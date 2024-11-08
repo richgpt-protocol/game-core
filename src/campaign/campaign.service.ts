@@ -13,6 +13,7 @@ import { ClaimApproach } from 'src/shared/enum/campaign.enum';
 import { User } from 'src/user/entities/user.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { CreditService } from 'src/wallet/services/credit.service';
+import { TxStatus } from 'src/shared/enum/status.enum';
 
 @Injectable()
 export class CampaignService {
@@ -91,15 +92,18 @@ export class CampaignService {
         .andWhere('campaign.endTime > :currentTime', {
           currentTime: new Date().getTime() / 1000,
         })
-        .andWhere((qb) => {
-          const subQuery = qb
-            .subQuery()
-            .select('COUNT(creditWalletTx.id)')
-            .from(CreditWalletTx, 'creditWalletTx')
-            .where('creditWalletTx.campaignId = campaign.id')
-            .getQuery();
-          return `(${subQuery}) < campaign.maxNumberOfClaims`;
-        })
+        // .andWhere((qb) => {
+        //   const subQuery = qb
+        //     .subQuery()
+        //     .select('COUNT(creditWalletTx.id)')
+        //     .from(CreditWalletTx, 'creditWalletTx')
+        //     .where('creditWalletTx.campaignId = campaign.id')
+        //     .andWhere('creditWalletTx.status = :status', {
+        //       status: TxStatus.SUCCESS,
+        //     })
+        //     .getQuery();
+        //   return `(${subQuery}) < campaign.maxNumberOfClaims`;
+        // })
         .getMany();
 
       return activeCampaigns;
@@ -117,23 +121,23 @@ export class CampaignService {
     try {
       const userInfo = await queryRunner.manager.findOne(User, {
         where: { id: userId },
-        relations: ['wallet'],
+        relations: ['wallet', 'referralUser'],
       });
       if (!userInfo) return;
 
       const campaigns =
         await this.findActiveCampaignsByClaimApproach(claimApproach);
 
-      const activeCampaigns = campaigns.filter(
-        (campaign) =>
-          campaign.maxNumberOfClaims > campaign.creditWalletTx.length,
-      );
+      // const activeCampaigns = campaigns.filter(
+      //   (campaign) =>
+      //     campaign.maxNumberOfClaims > campaign.creditWalletTx.length,
+      // );
 
       switch (claimApproach) {
         case ClaimApproach.SIGNUP:
           return await this.claimSignupCampaign(
             userInfo,
-            activeCampaigns,
+            campaigns,
             queryRunner,
           );
         default:
@@ -162,6 +166,7 @@ export class CampaignService {
       );
 
       let creditTx: CreditWalletTx;
+      let hasUsedCampaignReferralKey = false;
       for (const campaign of campaigns) {
         const hasUserClaimed = campaign.creditWalletTx.some(
           (tx) =>
@@ -178,9 +183,27 @@ export class CampaignService {
             where: { referralCode },
           });
 
+          if (!referrer) {
+            continue;
+          }
+
+          //user doesn't have any referrers
+          if (!userInfo.referralUserId) {
+            continue;
+          }
+
+          // user doesn't use the campaign referral key
           if (userInfo.referralUser && userInfo.referralUserId != referrer.id) {
             continue;
           }
+        }
+
+        //passed all validation at this point, so user could have participated in this campaign
+        //unless the campaign has reached its max number of claims
+        hasUsedCampaignReferralKey = true;
+
+        if (!this.vaidateMaxClaims(campaign)) {
+          continue;
         }
 
         creditTx = await this.creditService.addCreditQueryRunner(
@@ -197,8 +220,8 @@ export class CampaignService {
         await queryRunner.manager.save(campaign);
       }
 
-      if (!creditTx) {
-        //not eligible for any KOL campaign, add default signup bonus
+      if (!creditTx && !hasUsedCampaignReferralKey) {
+        //not participated in any KOL campaign, add default signup bonus
         creditTx = await this.handleDefaultSignupBonus(
           userInfo,
           activeCampaigns,
@@ -229,6 +252,9 @@ export class CampaignService {
       );
 
       if (!defaultCampaign) return;
+      if (!this.vaidateMaxClaims(defaultCampaign)) {
+        return;
+      }
       const hasUserClaimed = defaultCampaign.creditWalletTx.some(
         (tx) =>
           tx.walletId === userInfo.wallet.id && tx.campaign === defaultCampaign,
@@ -273,6 +299,14 @@ export class CampaignService {
       this.logger.error(error);
       throw new Error('Failed to claim default signup bonus');
     }
+  }
+
+  private vaidateMaxClaims(campaign: Campaign): boolean {
+    const successfulClaims = campaign.creditWalletTx.filter(
+      (tx) => tx.status === TxStatus.SUCCESS,
+    );
+
+    return successfulClaims.length < campaign.maxNumberOfClaims;
   }
 
   async findActiveCampaigns() {

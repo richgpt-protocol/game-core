@@ -20,8 +20,8 @@ export default class CreateCampaigns implements Seeder {
       .into('campaign')
       .values([
         {
-          name: 'Signup Bonus-1',
-          description: 'Signup Bonus-1',
+          name: 'Signup Bonus',
+          description: 'Signup Bonus',
           rewardPerUser: 5,
           startTime: 1730968522,
           endTime: 1830968523,
