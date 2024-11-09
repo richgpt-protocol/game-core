@@ -4,7 +4,7 @@ import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { User } from 'src/user/entities/user.entity';
-import { DataSource, Repository, Like, Brackets, Between } from 'typeorm';
+import { DataSource, Repository, Like, Brackets } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { PointTx } from './entities/point-tx.entity';
@@ -543,19 +543,110 @@ export class PointService {
     return result;
   }
 
-  async getCurrentWeekLeaderBoard(limit: number) {
+  async getCurrentWeekLeaderBoard(
+    limit: number = 50,
+    startDate?: Date,
+    endDate?: Date,
+  ) {
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay());
     startOfWeek.setHours(0, 0, 0, 0); // Set to the start of the day
 
-    const endOfWeek = new Date(today);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999); // Set to the end of the day
-    const leaderboard = await this.getLeaderBoard(
-      startOfWeek,
-      endOfWeek,
-      limit,
-    );
+
+    if (!startDate || !endDate) {
+      startDate = startOfWeek;
+      endDate = endOfWeek;
+    }
+
+    //return empty for next week or future date
+    if (startDate.getTime() > endOfWeek.getTime()) {
+      return [];
+    }
+
+    const lastAvailableSnapshot = await this.dataSource
+      .createQueryBuilder()
+      .select('MAX(leaderboard.snapshotDate)', 'snapshotDate')
+      .from(PointSnapshot, 'leaderboard')
+      .getRawOne();
+
+    let leaderboard = [];
+
+    if (lastAvailableSnapshot) {
+      if (endDate.getTime() > lastAvailableSnapshot.snapshotDate.getTime()) {
+        //don't have this snapshot. calculate from userWallet table
+
+        //get current top users. Subtract last snapshot points from current points
+        //to get the points earned after the last snapshot
+        const currentLeaderboard = await this.dataSource
+          .createQueryBuilder()
+          .select('user.uid', 'uid')
+          .addSelect('wallet.pointBalance', 'pointBalance')
+          .from(User, 'user')
+          .leftJoin('user.wallet', 'wallet')
+          .orderBy('pointBalance', 'DESC')
+          .limit(limit)
+          .getRawMany();
+
+        const uids = currentLeaderboard.map((item) => item.uid);
+
+        //fetches the last available snapshot for each user. If a user is not included in last snapshot,
+        //it will fetch from the snapshot before the last snapshot.
+        const lastSnapshot = await this.dataSource
+          .createQueryBuilder()
+          .select('leaderboard.walletId', 'walletId')
+          .addSelect('SUM(leaderboard.xp)', 'totalXp') //workaround for group by issue. Won't sum as the query fetches one record per user
+          .addSelect('user.uid', 'uid')
+          .from(PointSnapshot, 'leaderboard')
+          .leftJoin('leaderboard.user', 'user')
+          .leftJoin('user.wallet', 'wallet', 'wallet.id = leaderboard.walletId')
+          .where((qb) => {
+            const subQuery = qb
+              .subQuery()
+              .select('MAX(ps.snapshotDate)')
+              .from(PointSnapshot, 'ps')
+              .where('ps.userId = leaderboard.userId')
+              .getQuery();
+            return `leaderboard.snapshotDate = (${subQuery})`;
+          })
+          .andWhere('user.uid IN (:...uids)', { uids })
+          .groupBy('leaderboard.walletId')
+          .addGroupBy('user.uid')
+          .getRawMany();
+
+        const lastSnapshotMap = Object.assign(
+          {},
+          ...lastSnapshot.map((item) => ({ [item.uid]: item.totalXp })),
+        );
+
+        leaderboard = currentLeaderboard.map((item) => {
+          return {
+            uid: item.uid,
+            pointBalance: item.pointBalance,
+            totalXp: lastSnapshotMap[item.uid]
+              ? item.pointBalance - lastSnapshotMap[item.uid]
+              : item.pointBalance,
+            level: this.walletService.calculateLevel(item.pointBalance),
+          };
+        });
+
+        //remove users who are top users but have 0 points this week
+        leaderboard = leaderboard.filter((item) => item.totalXp > 0);
+
+        //sort by totalXp
+        leaderboard.sort((a, b) => b.totalXp - a.totalXp);
+      } else {
+        //we have this snapshot
+        leaderboard = await this.getLeaderBoard(startDate, endDate, limit);
+        return leaderboard;
+      }
+    } else {
+      //don't have any snapshot. return all time leaderboard
+      leaderboard = await this.getAllTimeLeaderBoard(limit);
+    }
 
     return leaderboard;
   }
