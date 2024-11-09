@@ -20,7 +20,10 @@ import { RandomUtil } from 'src/shared/utils/random.util';
 import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { Provider } from 'src/shared/enum/provider.enum';
 import { UtilConstant } from 'src/shared/constants/util.constant';
-import { TopAccountTestnet } from 'src/shared/constants/topAccountTestnet.constant';
+import {
+  TESTNET_CAMPAIGN_ID,
+  TopAccountTestnet,
+} from 'src/shared/constants/topAccountTestnet.constant';
 import { buildFilterCriterias } from 'src/shared/utils/pagination.util';
 import { ObjectUtil } from 'src/shared/utils/object.util';
 import { DateUtil } from 'src/shared/utils/date.util';
@@ -1078,7 +1081,7 @@ export class UserService {
     signUpMethod: 'TG' | 'PhoneNumber',
     user: User,
     userWallet: UserWallet,
-    queryRunner: QueryRunner
+    queryRunner: QueryRunner,
   ) {
     const topAccount = TopAccountTestnet.find(
       (account) =>
@@ -1094,7 +1097,7 @@ export class UserService {
       pointTx.endingBalance = topAccount.pointAmount;
       pointTx.walletId = userWallet.id;
       pointTx.userWallet = userWallet;
-      pointTx.campaignId = 1;
+      pointTx.campaignId = TESTNET_CAMPAIGN_ID;
       await queryRunner.manager.save(pointTx);
 
       userWallet.pointBalance = topAccount.pointAmount;
