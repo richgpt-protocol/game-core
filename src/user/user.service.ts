@@ -1075,9 +1075,6 @@ export class UserService {
       (account) => account.signUpMethod === signUpMethod
         && account.accountValue === user.phoneNumber
     );
-    console.log(signUpMethod, user, userWallet)
-    console.log(TopAccountTestnet)
-    console.log(topAccount)
     if (topAccount) {
       const pointTx = new PointTx();
       pointTx.txType = PointTxType.ADJUSTMENT;
