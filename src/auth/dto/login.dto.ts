@@ -78,7 +78,7 @@ export class LoginWithTelegramDTO {
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   username: string;
 
   @ApiProperty()
