@@ -369,7 +369,15 @@ export class UserService {
   }
 
   async validateTelegramPayload(tgId: string, hash: string, data: any) {
-    const dataCheckString = Object.keys(data)
+    //removes all falsy values from data
+    //(username can be null, so we need to remove it before validating)
+    const nonFalsyData = Object.keys(data).reduce((acc, key) => {
+      if (data[key]) {
+        acc[key] = data[key];
+      }
+      return acc;
+    }, {});
+    const dataCheckString = Object.keys(nonFalsyData)
       .sort()
       .map((key) => `${key}=${data[key]}`)
       .join('\n');

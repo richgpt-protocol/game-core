@@ -64,6 +64,11 @@ export class LoginWithTelegramDTO {
 
   @ApiProperty()
   @IsString()
+  @IsOptional()
+  last_name?: string;
+
+  @ApiProperty()
+  @IsString()
   @IsNotEmpty()
   hash: string;
 
@@ -78,7 +83,7 @@ export class LoginWithTelegramDTO {
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   username: string;
 
   @ApiProperty()
