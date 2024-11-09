@@ -9,6 +9,7 @@ import {
   Query,
   Req,
   Request,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -533,7 +534,11 @@ export class WalletController {
 
   @Post('review-deposit')
   @SecureEJS(PermissionEnum.PAYOUT, UserRole.ADMIN)
-  async reviewDeposit(@Body() payload: ReviewDepositDto) {
+  async reviewDeposit(@Request() req, @Body() payload: ReviewDepositDto) {
+    if (req.user.adminType != 'S') {
+      throw new UnauthorizedException('Only superuser can create admin.');
+    }
+
     try {
       await this.depositService.processDepositAdmin(payload);
       return {

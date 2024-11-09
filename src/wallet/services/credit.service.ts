@@ -159,6 +159,7 @@ export class CreditService {
           where: { id: payload.campaignId },
         });
         creditTx.campaign = campaign;
+        creditTx.campaignId = campaign.id;
       }
 
       const gameUsdTx = new GameUsdTx();
@@ -170,8 +171,6 @@ export class CreditService {
       gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
       gameUsdTx.creditWalletTx = [creditTx];
       gameUsdTx.retryCount = 0;
-
-      console.log('gameUsdTx', gameUsdTx);
 
       await queryRunner.manager.save(gameUsdTx);
       creditTx.gameUsdTx = gameUsdTx;
@@ -211,12 +210,12 @@ export class CreditService {
         creditWalletTxId: creditWalletTxId,
         queueType: QueueType.SUBMIT_CREDIT,
       },
-      3000,
+      // 3000,
     );
     return true;
   }
 
-  /// IMPORTANT: this.addToQueue(creditWalletTx.id); SHOULD BE CALLED COMMITING THE TRANSACTION
+  /// IMPORTANT: this.addToQueue(creditWalletTx.id); SHOULD BE CALLED AFTER COMMITING THE TRANSACTION
   private async _addCredit(
     payload: AddCreditDto,
     queryRunner: QueryRunner,
@@ -259,12 +258,14 @@ export class CreditService {
       creditWalletTx.walletId = userWallet.id;
       creditWalletTx.userWallet = userWallet;
       creditWalletTx.expirationDate = expirationDate;
+      creditWalletTx.note = payload.note ? payload.note : null;
 
       if (payload.campaignId) {
         const campaign = await queryRunner.manager.findOne(Campaign, {
           where: { id: payload.campaignId },
         });
         creditWalletTx.campaign = campaign;
+        creditWalletTx.campaignId = campaign.id;
       }
 
       await queryRunner.manager.save(creditWalletTx);
@@ -312,7 +313,7 @@ export class CreditService {
           creditWalletTxId: creditWalletTx.id,
           queueType: QueueType.SUBMIT_CREDIT,
         },
-        3000,
+        // 3000,
       );
 
       return { message: 'Retry job added' };
@@ -676,7 +677,7 @@ export class CreditService {
               gameUsdTx: gameUsdTx,
               queueType: QueueType.REVOKE_CREDIT,
             },
-            3000,
+            // 3000,
           );
         }
       }

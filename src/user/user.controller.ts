@@ -658,7 +658,6 @@ export class UserController {
     @Query('code') code: string,
   ) {
     try {
-      console.log('code', code);
       if (!code) throw new Error();
       const referrer = await this.userService.getReferrer(code);
       return {

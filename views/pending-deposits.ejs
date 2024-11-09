@@ -248,7 +248,7 @@
 
 <body>
   <div class="container">
-    <%- include('sidebar') %>
+    <%- include('sidebar', { user: data.user }) %>
 
       <div class="content-wrapper">
         <div class="table-area">
@@ -304,14 +304,18 @@
 
 
                   <td>
+                    <% if (data.user?.adminType === 'S') { %>
                     <select class="status" data-id="<%= data.transactions[i].id %>">
                       <option value="A" <%=data.transactions[i].status==='A' ? 'selected' : '' %>>Approve</option>
                       <option value="I" <%=data.transactions[i].status==='I' ? 'selected' : '' %>>Reject</option>
                     </select>
+                    <% } %>
                   </td>
                   <td>
+                    <% if (data.user?.adminType === 'S') { %>
                     <button class="update-btn" data-id="<%= data.transactions[i].id %>"
                       data-deposit-tx-id="<%= data.transactions[i].depositTx.id %>">Update</button>
+                    <% } %>
                   </td>
                   <!-- <td><a href="/api/v1/admin/update-admin-view/<%= data.transactions[i].id %>">update</a></td> -->
                 </tr>

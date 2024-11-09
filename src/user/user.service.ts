@@ -20,6 +20,10 @@ import { RandomUtil } from 'src/shared/utils/random.util';
 import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { Provider } from 'src/shared/enum/provider.enum';
 import { UtilConstant } from 'src/shared/constants/util.constant';
+import {
+  TESTNET_CAMPAIGN_ID,
+  TopAccountTestnet,
+} from 'src/shared/constants/topAccountTestnet.constant';
 import { buildFilterCriterias } from 'src/shared/utils/pagination.util';
 import { ObjectUtil } from 'src/shared/utils/object.util';
 import { DateUtil } from 'src/shared/utils/date.util';
@@ -44,7 +48,10 @@ import { CreditService } from 'src/wallet/services/credit.service';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { keywords } from 'src/shared/constants/referralCodeKeyword.constant';
-import { ReferralTxType } from 'src/shared/enum/txType.enum';
+import { PointTxType, ReferralTxType } from 'src/shared/enum/txType.enum';
+import { PointTx } from 'src/point/entities/point-tx.entity';
+import { CampaignService } from 'src/campaign/campaign.service';
+import { ClaimApproach } from 'src/shared/enum/campaign.enum';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -83,6 +90,7 @@ export class UserService {
     private cacheSettingService: CacheSettingService,
     private configService: ConfigService,
     private creditService: CreditService,
+    private campaignService: CampaignService,
   ) {
     this.telegramOTPBotUserName = this.configService.get(
       'TELEGRAM_OTP_BOT_USERNAME',
@@ -283,7 +291,9 @@ export class UserService {
       const referralUser = await this.userRepository
         .createQueryBuilder('user')
         .leftJoinAndSelect('user.wallet', 'wallet')
-        .where('LOWER(user.referralCode) = LOWER(:referralCode)', { referralCode: payload.referralCode })
+        .where('LOWER(user.referralCode) = LOWER(:referralCode)', {
+          referralCode: payload.referralCode,
+        })
         .getOne();
       if (!referralUser) {
         return { error: 'invalid referral code', data: null };
@@ -416,7 +426,6 @@ export class UserService {
   async signInWithTelegram(
     payload: LoginWithTelegramDTO,
   ): Promise<{ error: string; data: User }> {
-    console.log('signInWithTelegram', payload);
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -488,7 +497,7 @@ export class UserService {
         newWallet.walletAddress = walletAddress;
         newWallet.pointBalance = 0;
         newWallet.userId = newUser.id;
-        await queryRunner.manager.save(newWallet);
+        const newWalletWithId = await queryRunner.manager.save(newWallet);
 
         newUser.wallet = newWallet;
         newUser.referralCode = this.generateReferralCode(newUser.id);
@@ -508,6 +517,14 @@ export class UserService {
           await queryRunner.manager.save(referralTx);
         }
 
+        // validate if user eligible for point carry forward from alpha testnet to mainnet
+        await this.validatePointCarryForward(
+          'TG',
+          newUser,
+          newWalletWithId,
+          queryRunner,
+        );
+
         //Add address to deposit bot
         await axios.post(
           depositBotAddAddress,
@@ -517,10 +534,10 @@ export class UserService {
           { headers: { 'Content-Type': 'application/json' } },
         );
 
-        const creditTx = await this.processSignUpBonus(
-          walletAddress,
+        const creditTx = await this.campaignService.executeClaim(
+          ClaimApproach.SIGNUP,
+          newUser.id,
           queryRunner,
-          referralUserId,
         );
 
         if (creditTx) {
@@ -788,7 +805,7 @@ export class UserService {
         userWallet.walletAddress = walletAddress;
         userWallet.pointBalance = 0;
         userWallet.userId = user.id;
-        await queryRunner.manager.save(userWallet);
+        const userWalletWithId = await queryRunner.manager.save(userWallet);
 
         user.wallet = userWallet;
         user.referralCode = this.generateReferralCode(user.id);
@@ -811,6 +828,14 @@ export class UserService {
           await queryRunner.manager.save(referralTx);
         }
 
+        // validate if user eligible for point carry forward from alpha testnet to mainnet
+        await this.validatePointCarryForward(
+          'PhoneNumber',
+          user,
+          userWalletWithId,
+          queryRunner,
+        );
+
         //Add address to deposit bot
         await axios.post(
           depositBotAddAddress,
@@ -820,10 +845,10 @@ export class UserService {
           { headers: { 'Content-Type': 'application/json' } },
         );
 
-        const creditTx = await this.processSignUpBonus(
-          userWallet.walletAddress,
+        const creditTx = await this.campaignService.executeClaim(
+          ClaimApproach.SIGNUP,
+          user.id,
           queryRunner,
-          user.referralUserId,
         );
 
         if (creditTx) {
@@ -854,86 +879,6 @@ export class UserService {
       return { error: err.message, data: null };
     } finally {
       await queryRunner.release();
-    }
-  }
-
-  private async processSignUpBonus(
-    walletAddress: string,
-    queryRunner: QueryRunner,
-    referralUserId?: number,
-  ): Promise<CreditWalletTx> {
-    try {
-      if (referralUserId) {
-        const referrer = await queryRunner.manager.findOne(User, {
-          where: { id: referralUserId },
-        });
-
-        const ignoredReferrersSetting = await queryRunner.manager.findOne(
-          Setting,
-          {
-            where: {
-              key: SettingEnum.FILTERED_REFERRAL_CODES,
-            },
-          },
-        );
-
-        const ignoredRefferers: Array<string> | null =
-          ignoredReferrersSetting.value
-            ? JSON.parse(ignoredReferrersSetting.value)
-            : null;
-
-        if (
-          ignoredRefferers &&
-          ignoredRefferers.length > 0 &&
-          ignoredRefferers.includes(referrer.referralCode)
-        ) {
-          return;
-        }
-      }
-
-      const signupBonusSetting = await queryRunner.manager.findOne(Setting, {
-        where: {
-          key: SettingEnum.ENABLE_SIGNUP_BONUS,
-        },
-      });
-
-      if (signupBonusSetting) {
-        this.eventEmitter.emit(
-          'gas.service.reload',
-          walletAddress,
-          this.configService.get('BASE_CHAIN_ID'),
-        );
-        const settingvalue = JSON.parse(signupBonusSetting.value);
-        const timeNow = new Date().getTime() / 1000;
-        const startDate = new Date(settingvalue.startTime * 1000);
-        const endDate = new Date(settingvalue.endTime * 1000);
-        const registrations = await queryRunner.manager.count(User, {
-          where: {
-            createdDate: Between(startDate, endDate),
-            status: UserStatus.ACTIVE,
-          },
-        });
-
-        if (
-          timeNow >= settingvalue.startTime &&
-          timeNow <= settingvalue.endTime &&
-          registrations <= settingvalue.noOfUsers
-        ) {
-          const creditTx = await this.creditService.addCreditQueryRunner(
-            {
-              amount: settingvalue.creditAmount,
-              walletAddress: walletAddress,
-            },
-            queryRunner,
-            false,
-          );
-
-          return creditTx;
-        }
-      }
-    } catch (error) {
-      this.logger.error(error);
-      throw new Error(error.message);
     }
   }
 
@@ -1130,5 +1075,33 @@ export class UserService {
     const uid = bigIntHash.toString().slice(-10);
 
     return uid;
+  }
+
+  async validatePointCarryForward(
+    signUpMethod: 'TG' | 'PhoneNumber',
+    user: User,
+    userWallet: UserWallet,
+    queryRunner: QueryRunner,
+  ) {
+    const topAccount = TopAccountTestnet.find(
+      (account) =>
+        account.signUpMethod === signUpMethod &&
+        account.accountValue ===
+          (signUpMethod === 'TG' ? user.tgId.toString() : user.phoneNumber),
+    );
+    if (topAccount) {
+      const pointTx = new PointTx();
+      pointTx.txType = PointTxType.ADJUSTMENT;
+      pointTx.amount = topAccount.pointAmount;
+      pointTx.startingBalance = 0;
+      pointTx.endingBalance = topAccount.pointAmount;
+      pointTx.walletId = userWallet.id;
+      pointTx.userWallet = userWallet;
+      pointTx.campaignId = TESTNET_CAMPAIGN_ID;
+      await queryRunner.manager.save(pointTx);
+
+      userWallet.pointBalance = topAccount.pointAmount;
+      await queryRunner.manager.save(userWallet);
+    }
   }
 }

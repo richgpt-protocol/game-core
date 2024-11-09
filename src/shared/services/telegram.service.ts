@@ -156,8 +156,6 @@ export class TelegramService {
       ],
     });
 
-    console.log(user);
-
     if (!user) {
       return await ctx.reply('Invalid request');
     }

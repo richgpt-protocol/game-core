@@ -17,6 +17,7 @@ import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { CampaignService } from 'src/campaign/campaign.service';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { PointService } from 'src/point/point.service';
+import { ClaimApproach } from 'src/shared/enum/campaign.enum';
 
 @ApiTags('back-office')
 @Controller('back-office')
@@ -42,11 +43,12 @@ export class BackOfficeController {
   @Get('users')
   @ApiExcludeEndpoint()
   @Render('user-listing')
-  async users() {
+  async users(@Request() req) {
     const data = await this.backOfficeService.getUsers();
     return {
       data: {
         users: data.data,
+        user: req.user,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
       },
@@ -57,10 +59,11 @@ export class BackOfficeController {
   @Get('wallets')
   @ApiExcludeEndpoint()
   @Render('wallet-listing')
-  async wallets() {
+  async wallets(@Request() req) {
     const data = await this.backOfficeService.getWallets();
     return {
       data: {
+        user: req.user,
         wallets: data.data,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
@@ -72,11 +75,15 @@ export class BackOfficeController {
   @Get('staffs')
   @ApiExcludeEndpoint()
   @Render('staff-listing')
-  async staffs() {
+  async staffs(@Request() req) {
+    if (req.user.adminType !== 'S') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const data = await this.backOfficeService.getStaffs();
     return {
       data: {
         staffs: data.data,
+        user: req.user,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
       },
@@ -87,10 +94,11 @@ export class BackOfficeController {
   @Get('campaigns')
   @ApiExcludeEndpoint()
   @Render('campaign-listing')
-  async campaigns(@Query('page') page: number) {
+  async campaigns(@Request() req, @Query('page') page: number) {
     const data = await this.campaignService.findAll(page);
     return {
       data: {
+        user: req.user,
         campaigns: data.data,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
@@ -102,10 +110,11 @@ export class BackOfficeController {
   @Get('points')
   @ApiExcludeEndpoint()
   @Render('point-listing')
-  async points(@Query('page') page: number) {
+  async points(@Request() req, @Query('page') page: number) {
     const data = await this.backOfficeService.getUserPoints(page);
     return {
       data: {
+        user: req.user,
         points: data.data,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
@@ -118,12 +127,14 @@ export class BackOfficeController {
   @ApiExcludeEndpoint()
   @Render('pending-withdraw')
   async pendingWithdraw(
+    @Request() req,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
     const data = await this.backOfficeService.getPendingWithdraw(page, limit);
     return {
       data: {
+        user: req.user,
         transactions: data.data,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
@@ -136,12 +147,14 @@ export class BackOfficeController {
   @ApiExcludeEndpoint()
   @Render('pending-deposits')
   async pendingDeposits(
+    @Request() req,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
     const data = await this.backOfficeService.getPendingDeposits(page, limit);
     return {
       data: {
+        user: req.user,
         transactions: data.data,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
@@ -153,10 +166,11 @@ export class BackOfficeController {
   @Get('transactions')
   @ApiExcludeEndpoint()
   @Render('transactions')
-  async transactions() {
+  async transactions(@Request() req) {
     const data = await this.backOfficeService.getTransactions();
     return {
       data: {
+        user: req.user,
         transactions: data.data,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
@@ -169,21 +183,23 @@ export class BackOfficeController {
   @ApiExcludeEndpoint()
   @Render('past-draw-results')
   async pastDrawResults(
+    @Request() req,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
     // if (!page) page = 1;
     // if (!limit) limit = 10;
     const data = await this.backOfficeService.getPastDrawResults(page, limit);
-    console.log({
-      data: {
-        pastDrawResults: data.data,
-        currentPage: data.currentPage,
-        totalPages: data.totalPages,
-      },
-    });
+    // console.log({
+    //   data: {
+    //     pastDrawResults: data.data,
+    //     currentPage: data.currentPage,
+    //     totalPages: data.totalPages,
+    //   },
+    // });
     return {
       data: {
+        user: req.user,
         pastDrawResults: data.data,
         currentPage: data.currentPage,
         totalPages: data.totalPages,
@@ -195,9 +211,14 @@ export class BackOfficeController {
   @Get('create-admin')
   @ApiExcludeEndpoint()
   @Render('create-admin')
-  async createAdmin() {
+  async createAdmin(@Request() req) {
+    if (req.user.adminType !== 'S') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     return {
-      data: {},
+      data: {
+        user: req.user,
+      },
     };
   }
 
@@ -205,9 +226,12 @@ export class BackOfficeController {
   @Get('create-campaign')
   @ApiExcludeEndpoint()
   @Render('create-campaign')
-  async createCampaign() {
+  async createCampaign(@Request() req) {
     return {
-      data: {},
+      data: {
+        user: req.user,
+        claimApproaches: Object.values(ClaimApproach),
+      },
     };
   }
 
@@ -225,10 +249,11 @@ export class BackOfficeController {
 
   @SecureEJS(null, UserRole.ADMIN)
   @Get('referralListing')
-  async referralListing() {
+  async referralListing(@Request() req) {
     const result = await this.backOfficeService.getReferralListing();
     return {
       data: {
+        user: req.user,
         referrals: result.data,
         currentPage: result.currentPage,
         totalPages: result.totalPages,
@@ -239,6 +264,7 @@ export class BackOfficeController {
   @SecureEJS(null, UserRole.ADMIN)
   @Get('betListing')
   async betListing(
+    @Request() req,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
     @Query('page') page?: number,
@@ -252,6 +278,7 @@ export class BackOfficeController {
     );
     return {
       data: {
+        user: req.user,
         bets: result.data,
         currentPage: result.currentPage,
         totalPages: result.totalPages,
@@ -263,6 +290,7 @@ export class BackOfficeController {
   @Get('sales-report')
   @Render('sales-report')
   async salesReport(
+    @Request() req,
     @Query('startDate') _startDate: string,
     @Query('endDate') _endDate: string,
   ) {
@@ -272,6 +300,7 @@ export class BackOfficeController {
     );
     return {
       data: {
+        user: req.user,
         bets: result.data,
       },
     };
@@ -280,10 +309,11 @@ export class BackOfficeController {
   @SecureEJS(null, UserRole.ADMIN)
   @Get('sales-report-epoch')
   @Render('sales-report-epoch')
-  async salesReportByEpoch(@Query('epoch') epoch: number) {
+  async salesReportByEpoch(@Request() req, @Query('epoch') epoch: number) {
     const result = await this.backOfficeService.salesReportByEpoch(epoch);
     return {
       data: {
+        user: req.user,
         currentEpoch: result.currentEpoch,
         bets: result.data,
       },
@@ -294,6 +324,7 @@ export class BackOfficeController {
   @Get('credit-txns-listing')
   @Render('credit-txns-listing')
   async creditTxns(
+    @Request() req,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
@@ -301,6 +332,7 @@ export class BackOfficeController {
       await this.creditService.getAllCreditWalletTxList(page, limit);
     return {
       data: {
+        user: req.user,
         transactions: data,
         currentPage: currentPage,
         totalPages: total,
@@ -312,10 +344,11 @@ export class BackOfficeController {
   @Get('pa')
   @ApiExcludeEndpoint()
   @Render('pa')
-  async getCurrentPrizeAlgo() {
+  async getCurrentPrizeAlgo(@Request() req) {
     const res = await this.backOfficeService.getCurrentPrizeAlgo();
     return {
       data: {
+        user: req.user,
         currentPa: {
           ce: res.currentEpoch,
 
@@ -527,6 +560,7 @@ export class BackOfficeController {
     const res = await this.backOfficeService.getCurrentPrizeAlgo();
     return {
       data: {
+        user: req.user,
         status: 'updated successfully',
         currentPa: {
           ce: res.currentEpoch,
@@ -582,17 +616,19 @@ export class BackOfficeController {
   @SecureEJS(null, UserRole.ADMIN)
   @Get('add-credit')
   @Render('add-credit')
-  async addCredit() {
+  async addCredit(@Request() req) {
     try {
       const campaigns = await this.campaignService.findActiveCampaigns();
       return {
         data: {
+          user: req.user,
           campaigns,
         },
       };
     } catch (error) {
       return {
         data: {
+          user: req.user,
           campaigns: [],
         },
       };
@@ -602,10 +638,13 @@ export class BackOfficeController {
   @SecureEJS(null, UserRole.ADMIN)
   @Get('set-referral-prize-bonus')
   @Render('set-referral-prize-bonus')
-  async setReferralPrizeBonus() {
+  async setReferralPrizeBonus(@Request() req) {
     const data = await this.pointService.getAllReferralPrizeBonus();
     return {
-      data,
+      data: {
+        user: req.user,
+        ...data,
+      },
     };
   }
 }

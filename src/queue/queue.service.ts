@@ -108,7 +108,7 @@ export class QueueService {
     queueName: string,
     jobName: string,
     data: any,
-    delay: number = 1000, // 1 second
+    delay: number = 0, // no delay
     attempts: number = 5,
   ) {
     const queue = this.createQueue(queueName);
@@ -138,7 +138,7 @@ export class QueueService {
     jobName: string,
     handlers: QueueHandler,
     data: any,
-    delay: number = 1000, // 1 second
+    delay: number = 0, // no delay by default
     attempts: number = 5,
   ) {
     const queue = this.createQueue(queueName);

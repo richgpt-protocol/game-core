@@ -212,7 +212,7 @@
   </style>
 <body>
   <div class="container">
-    <%- include('sidebar') %>
+    <%- include('sidebar', { user: data.user }) %>
 
     <div class="content-wrapper">
       <form id="createCampaignForm" class="flex-form" method="post" action="/api/v1/campaign/create">
@@ -239,6 +239,30 @@
         <div class="input-area">
           <span>End time: </span>
           <input type="text" name="endTime" required/>
+        </div>
+
+        <div class="input-area">
+          <span>Ignored Referral Codes: </span>
+          <input type="text" name="ignoredReferralCodes"/>
+        </div>
+
+        <div class="input-area">
+          <span>Referral Code: </span>
+          <input type="text" name="referralCode"/>
+        </div>
+
+        <div class="input-area">
+          <span>Max Users: </span>
+          <input type="number" name="maxUsers" required/>
+        </div>
+
+        <div class="input-area">
+          <span>Claim Type: </span>
+          <select name="claimApproach" required>
+            <% data.claimApproaches.forEach(function(approach) { %>
+              <option value="<%= approach %>"><%= approach %></option>
+            <% }); %>
+          </select>
         </div>
         
         <button type="submit">Create</button>

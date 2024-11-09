@@ -128,6 +128,10 @@ export class AuthService {
         new Date().getTime() +
         Number(this.configService.get('JWT_EXPIRATION_TIME')) * 1000,
     };
+
+    if (user.adminType) {
+      Object.assign(payload, { adminType: user.adminType });
+    }
     return {
       expiresIn: Number(this.configService.get('JWT_EXPIRATION_TIME')) * 1000,
       access_token: this.jwtService.sign(payload),

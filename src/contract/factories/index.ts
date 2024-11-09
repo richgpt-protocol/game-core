@@ -3,6 +3,7 @@
 /* eslint-disable */
 export { Core__factory } from "./Core__factory";
 export { Deposit__factory } from "./Deposit__factory";
+export { ERC20__factory } from "./ERC20__factory";
 export { GameUSD__factory } from "./GameUSD__factory";
 export { GameUSDPool__factory } from "./GameUSDPool__factory";
 export { Helper__factory } from "./Helper__factory";
