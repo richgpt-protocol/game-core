@@ -20,6 +20,7 @@ import { RandomUtil } from 'src/shared/utils/random.util';
 import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { Provider } from 'src/shared/enum/provider.enum';
 import { UtilConstant } from 'src/shared/constants/util.constant';
+import { TopAccountTestnet } from 'src/shared/constants/topAccountTestnet.constant';
 import { buildFilterCriterias } from 'src/shared/utils/pagination.util';
 import { ObjectUtil } from 'src/shared/utils/object.util';
 import { DateUtil } from 'src/shared/utils/date.util';
@@ -44,7 +45,8 @@ import { CreditService } from 'src/wallet/services/credit.service';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { keywords } from 'src/shared/constants/referralCodeKeyword.constant';
-import { ReferralTxType } from 'src/shared/enum/txType.enum';
+import { PointTxType, ReferralTxType } from 'src/shared/enum/txType.enum';
+import { PointTx } from 'src/point/entities/point-tx.entity';
 import { CampaignService } from 'src/campaign/campaign.service';
 import { ClaimApproach } from 'src/shared/enum/campaign.enum';
 
@@ -492,7 +494,7 @@ export class UserService {
         newWallet.walletAddress = walletAddress;
         newWallet.pointBalance = 0;
         newWallet.userId = newUser.id;
-        await queryRunner.manager.save(newWallet);
+        const newWalletWithId = await queryRunner.manager.save(newWallet);
 
         newUser.wallet = newWallet;
         newUser.referralCode = this.generateReferralCode(newUser.id);
@@ -511,6 +513,9 @@ export class UserService {
           referralTx.referralUserId = newUser.referralUserId;
           await queryRunner.manager.save(referralTx);
         }
+
+        // validate if user eligible for point carry forward from alpha testnet to mainnet
+        this.validatePointCarryForward('TG', newUser, newWalletWithId, queryRunner);
 
         //Add address to deposit bot
         await axios.post(
@@ -792,7 +797,7 @@ export class UserService {
         userWallet.walletAddress = walletAddress;
         userWallet.pointBalance = 0;
         userWallet.userId = user.id;
-        await queryRunner.manager.save(userWallet);
+        const userWalletWithId = await queryRunner.manager.save(userWallet);
 
         user.wallet = userWallet;
         user.referralCode = this.generateReferralCode(user.id);
@@ -814,6 +819,9 @@ export class UserService {
           referralTx.referralUserId = user.referralUserId;
           await queryRunner.manager.save(referralTx);
         }
+
+        // validate if user eligible for point carry forward from alpha testnet to mainnet
+        this.validatePointCarryForward('PhoneNumber', user, userWalletWithId, queryRunner);
 
         //Add address to deposit bot
         await axios.post(
@@ -1054,5 +1062,35 @@ export class UserService {
     const uid = bigIntHash.toString().slice(-10);
 
     return uid;
+  }
+
+  async validatePointCarryForward(
+    signUpMethod: 'TG' | 'PhoneNumber',
+    user: User,
+    userWallet: UserWallet,
+    queryRunner: QueryRunner
+  ) {
+    // query if signUpMethod and user.phoneNumber is in TopAccountTestnet
+    const topAccount = TopAccountTestnet.find(
+      (account) => account.signUpMethod === signUpMethod
+        && account.accountValue === user.phoneNumber
+    );
+    console.log(signUpMethod, user, userWallet)
+    console.log(TopAccountTestnet)
+    console.log(topAccount)
+    if (topAccount) {
+      const pointTx = new PointTx();
+      pointTx.txType = PointTxType.ADJUSTMENT;
+      pointTx.amount = topAccount.pointAmount;
+      pointTx.startingBalance = 0;
+      pointTx.endingBalance = topAccount.pointAmount;
+      pointTx.walletId = userWallet.id;
+      pointTx.userWallet = userWallet;
+      pointTx.campaignId = 1;
+      await queryRunner.manager.save(pointTx);
+
+      userWallet.pointBalance = topAccount.pointAmount;
+      await queryRunner.manager.save(userWallet);
+    }
   }
 }

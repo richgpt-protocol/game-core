@@ -33,6 +33,7 @@ export enum PointTxType {
   CHAT = 'CHAT',
   REFERRAL = 'REFERRAL',
   QUEST = 'QUEST',
+  ADJUSTMENT = 'ADJUSTMENT',
 }
 
 export enum UsdtTxType {
