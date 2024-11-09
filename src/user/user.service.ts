@@ -515,7 +515,12 @@ export class UserService {
         }
 
         // validate if user eligible for point carry forward from alpha testnet to mainnet
-        this.validatePointCarryForward('TG', newUser, newWalletWithId, queryRunner);
+        await this.validatePointCarryForward(
+          'TG',
+          newUser,
+          newWalletWithId,
+          queryRunner,
+        );
 
         //Add address to deposit bot
         await axios.post(
@@ -821,7 +826,12 @@ export class UserService {
         }
 
         // validate if user eligible for point carry forward from alpha testnet to mainnet
-        this.validatePointCarryForward('PhoneNumber', user, userWalletWithId, queryRunner);
+        await this.validatePointCarryForward(
+          'PhoneNumber',
+          user,
+          userWalletWithId,
+          queryRunner,
+        );
 
         //Add address to deposit bot
         await axios.post(
@@ -1070,10 +1080,11 @@ export class UserService {
     userWallet: UserWallet,
     queryRunner: QueryRunner
   ) {
-    // query if signUpMethod and user.phoneNumber is in TopAccountTestnet
     const topAccount = TopAccountTestnet.find(
-      (account) => account.signUpMethod === signUpMethod
-        && account.accountValue === user.phoneNumber
+      (account) =>
+        account.signUpMethod === signUpMethod &&
+        account.accountValue ===
+          (signUpMethod === 'TG' ? user.tgId.toString() : user.phoneNumber),
     );
     if (topAccount) {
       const pointTx = new PointTx();
