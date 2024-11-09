@@ -66,11 +66,17 @@ export class PointController {
     let currentWeekLeaderboard = [];
 
     if (startDate && endDate) {
-      currentWeekLeaderboard = await this.pointService.getLeaderBoard(
-        startDate,
-        endDate,
-        limit,
-      );
+      currentWeekLeaderboard =
+        await this.pointService.getCurrentWeekLeaderBoard(
+          limit,
+          new Date(startDate),
+          new Date(endDate),
+        );
+      // currentWeekLeaderboard = await this.pointService.getLeaderBoard(
+      //   startDate,
+      //   endDate,
+      //   limit,
+      // );
     } else {
       currentWeekLeaderboard =
         await this.pointService.getCurrentWeekLeaderBoard(limit);
