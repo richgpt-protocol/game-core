@@ -30,7 +30,8 @@ export class PointTx {
     PointTxType.REFERRAL |
     PointTxType.CHAT |
     PointTxType.GAME_TRANSACTION |
-    PointTxType.QUEST;
+    PointTxType.QUEST |
+    PointTxType.ADJUSTMENT;
 
   @Column({
     type: 'decimal',
