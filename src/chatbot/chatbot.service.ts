@@ -301,6 +301,9 @@ Today date: ${new Date().toDateString()}.`;
         txType: PointTxType.CHAT,
         amount: 1,
         walletId: userWallet.id,
+        userWallet: {
+          id: userWallet.id,
+        },
       });
       pointTx.startingBalance = Number(userWallet.pointBalance);
       pointTx.endingBalance = Number(pointTx.startingBalance) + 1;
