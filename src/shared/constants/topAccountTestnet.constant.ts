@@ -15,4 +15,4 @@ export const TopAccountTestnet: Array<{
   // },
 ];
 
-export const TESTNET_CAMPAIGN_ID = 1;
+export const TESTNET_CAMPAIGN_ID = 2;
