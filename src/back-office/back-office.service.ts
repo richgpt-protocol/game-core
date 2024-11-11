@@ -92,7 +92,7 @@ export class BackOfficeService {
     try {
       const wallets = await this.userWalletRepository.findAndCount({
         select: [
-          'user',
+          'userId',
           'walletBalance',
           'creditBalance',
           'pointBalance',
