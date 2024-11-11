@@ -298,7 +298,7 @@
                                     <% } %>
 
                                         <% if (data.currentPage < data.totalPages) { %>
-                                            <a href="?page=<%= data.currentPage + 1 %>">Next</a>
+                                            <a href="?page=<%= Number(data.currentPage) + 1 %>">Next</a>
                                             <% } %>
                     </div>
                 </div>

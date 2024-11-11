@@ -92,7 +92,7 @@ export class BackOfficeService {
     try {
       const wallets = await this.userWalletRepository.findAndCount({
         select: [
-          'user',
+          'userId',
           'walletBalance',
           'creditBalance',
           'pointBalance',
@@ -635,7 +635,10 @@ export class BackOfficeService {
         //       _commision.createdDate.toDateString() === start.toDateString(),
         //   )?.txAmount || 0,
         // ),
-        commissionAmount: commissions.reduce((acc, commission) => acc + (+commission.txAmount), 0),
+        commissionAmount: commissions.reduce(
+          (acc, commission) => acc + +commission.txAmount,
+          0,
+        ),
       };
       start.setDate(start.getDate() + 1);
     }
@@ -661,29 +664,29 @@ export class BackOfficeService {
       userByDate[date].add(betOrder.walletTx.userWallet.userId);
 
       if (betOrder.availableClaim) {
-      //   resultByDate[date].totalPayoutRewards =
-      //     Number(resultByDate[date].totalPayoutRewards) +
-      //     (Number(betOrder.claimDetail.claimAmount) || 0) +
-      //     (Number(betOrder.claimDetail.bonusAmount) || 0);
+        //   resultByDate[date].totalPayoutRewards =
+        //     Number(resultByDate[date].totalPayoutRewards) +
+        //     (Number(betOrder.claimDetail.claimAmount) || 0) +
+        //     (Number(betOrder.claimDetail.bonusAmount) || 0);
 
-      //   resultByDate[date].totalPayout =
-      //     Number(resultByDate[date].totalPayout) +
-      //       Number(betOrder.claimDetail.claimAmount) || 0;
+        //   resultByDate[date].totalPayout =
+        //     Number(resultByDate[date].totalPayout) +
+        //       Number(betOrder.claimDetail.claimAmount) || 0;
         const draw_result = await this.drawResultRepository.findOne({
           where: {
             gameId: betOrder.gameId,
             numberPair: betOrder.numberPair,
           },
         });
-        const {
-          bigForecastWinAmount,
-          smallForecastWinAmount
-        } = this.claimService.calculateWinningAmount(betOrder, draw_result);
-        resultByDate[date].totalPayoutRewards += bigForecastWinAmount + smallForecastWinAmount;
-        resultByDate[date].totalPayout += bigForecastWinAmount + smallForecastWinAmount;
+        const { bigForecastWinAmount, smallForecastWinAmount } =
+          this.claimService.calculateWinningAmount(betOrder, draw_result);
+        resultByDate[date].totalPayoutRewards +=
+          bigForecastWinAmount + smallForecastWinAmount;
+        resultByDate[date].totalPayout +=
+          bigForecastWinAmount + smallForecastWinAmount;
       }
-    // });
-    };
+      // });
+    }
 
     return {
       data: resultByDate,
