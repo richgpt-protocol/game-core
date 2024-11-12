@@ -323,6 +323,7 @@
                                     <tr>
                                         <th>Date</th>
                                         <th>Total Bet Amount</th>
+                                        <th>Total Credit Used</th>
                                         <th>Bet Count</th>
                                         <th>User Count</th>
                                         <th>Total Payout</th>
@@ -338,7 +339,10 @@
                                                 <%= date %>
                                             </td>
                                             <td>
-                                                <%= data.bets[date].totalBetAmount %>
+                                                $<%= data.bets[date].totalBetAmount %>
+                                            </td>
+                                            <td>
+                                                $<%= data.bets[date].totalCreditAmount %>
                                             </td>
                                             <td>
                                                 <%= data.bets[date].betCount %>
@@ -347,16 +351,16 @@
                                                 <%= data.bets[date].userCount %>
                                             </td>
                                             <td>
-                                                <%= data.bets[date].totalPayout %>
+                                                $<%= data.bets[date].totalPayout %>
                                             </td>
                                             <td>
-                                                <%= data.bets[date].totalPayoutRewards %>
+                                                $<%= data.bets[date].totalPayoutRewards %>
                                             </td>
                                             <td>
-                                                <%= data.bets[date].commissionAmount %>
+                                                $<%= data.bets[date].commissionAmount %>
                                             </td>
                                             <td>
-                                                <%= data.bets[date].totalBetAmount - (data.bets[date].totalPayoutRewards + data.bets[date].commissionAmount) %>
+                                                $<%= data.bets[date].totalBetAmount - (data.bets[date].totalPayoutRewards + data.bets[date].commissionAmount) %>
                                             </td>
                                         </tr>
                                         <% }); %>
