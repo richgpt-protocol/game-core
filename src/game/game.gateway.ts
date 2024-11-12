@@ -58,12 +58,22 @@ export class GameGateway {
   async emitDrawResult() {
     this.logger.log('emitDrawResult()');
     try {
-      // get draw result from last game
-      const lastGame = await this.gameRepository.findOne({
-        where: { isClosed: true },
-        order: { id: 'DESC' },
-        relations: { drawResult: true },
-      });
+      // get draw result from last hour game
+      const lastHour = new Date(Date.now() - 60 * 60 * 1000);
+      const lastHourUTC = new Date(
+        lastHour.getUTCFullYear(),
+        lastHour.getUTCMonth(),
+        lastHour.getUTCDate(),
+        lastHour.getUTCHours(),
+        lastHour.getUTCMinutes(),
+        lastHour.getUTCSeconds()
+      );
+      const lastGame = await this.gameRepository
+        .createQueryBuilder('game')
+        .leftJoinAndSelect('game.drawResult', 'drawResult')
+        .where('game.startDate < :lastHourUTC', { lastHourUTC })
+        .andWhere('game.endDate > :lastHourUTC', { lastHourUTC })
+        .getOne();
       const drawResults = lastGame.drawResult;
       // current drawResults is in sequence(first, second...)
       // loop through drawResults in reverse order(consolation, special...) and emit to client
