@@ -18,6 +18,8 @@ import { CampaignService } from 'src/campaign/campaign.service';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { PointService } from 'src/point/point.service';
 import { ClaimApproach } from 'src/shared/enum/campaign.enum';
+import { UserMessageDto } from 'src/shared/dto/admin-notification.dto';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 @ApiTags('back-office')
 @Controller('back-office')
@@ -28,6 +30,7 @@ export class BackOfficeController {
     private campaignService: CampaignService,
     private creditService: CreditService,
     private pointService: PointService,
+    private adminNotificationService: AdminNotificationService,
   ) {}
 
   @Get('admin-login')
@@ -131,6 +134,28 @@ export class BackOfficeController {
         currentPage: data.currentPage,
         totalPages: data.totalPages,
       },
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Get('messages')
+  @ApiExcludeEndpoint()
+  @Render('admin-message')
+  async message(@Request() req) {
+    return {
+      data: {
+        user: req.user,
+      },
+    };
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Post('messages')
+  @ApiExcludeEndpoint()
+  async sendMessage(@Request() req, @Body() payload: UserMessageDto) {
+    await this.adminNotificationService.sendUserMessage(payload);
+    return {
+      message: 'Message sent successfully',
     };
   }
 

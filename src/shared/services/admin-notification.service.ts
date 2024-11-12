@@ -3,16 +3,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
-import { Connection, Repository } from 'typeorm';
+import { Connection, In, Repository } from 'typeorm';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { ConfigService } from 'src/config/config.service';
 import { WebClient } from '@slack/web-api';
+import { User } from 'src/user/entities/user.entity';
+import {
+  NotificationType,
+  UserMessageDto,
+} from '../dto/admin-notification.dto';
 
 @Injectable()
 export class AdminNotificationService {
   private readonly logger = new Logger(AdminNotificationService.name);
 
   private bot: TelegramBot;
+  private userNotificationBot: TelegramBot;
   // private tg_admins: Array<string>;
   private TG_ADMIN_GROUP;
   private slackToken: string;
@@ -25,6 +31,8 @@ export class AdminNotificationService {
     private userNotificationRepository: Repository<UserNotification>,
     @InjectRepository(Admin)
     private adminRepository: Repository<Admin>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
     private configService: ConfigService,
     private connection: Connection,
   ) {
@@ -117,6 +125,76 @@ export class AdminNotificationService {
       throw new BadRequestException(err.message);
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  async sendUserMessage(payload: UserMessageDto) {
+    const { title, message, userIds, channels } = payload;
+    const queryRunner = this.connection.createQueryRunner();
+
+    //remove duplicate user ids
+    const uids = [...new Set(userIds)];
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const users = await queryRunner.manager.find(User, {
+        where: {
+          uid: In(uids),
+        },
+      });
+
+      if (channels.includes(NotificationType.TELEGRAM)) {
+        const chatIds = users.filter((u) => !u.tgId);
+        if (chatIds.length > 0) {
+          throw new BadRequestException(
+            `User ${chatIds.map((u) => u.uid).join(', ')} does not have telegram id`,
+          );
+        }
+      }
+
+      const createQueries = [];
+
+      for (const u of users) {
+        if (channels.includes(NotificationType.INBOX)) {
+          const notification = await queryRunner.manager.save(
+            this.notificationRepository.create({
+              title,
+              message,
+            }),
+          );
+          createQueries.push(
+            queryRunner.manager.create(UserNotification, {
+              isRead: false,
+              user: u,
+              notification,
+            }),
+          );
+        }
+
+        if (channels.includes(NotificationType.TELEGRAM)) {
+          // const chat = await this.bot.getChat('@' + u.tgUsername);
+          // console.log(chat);
+          //TODO
+        }
+      }
+
+      if (createQueries.length > 0) {
+        await this.userNotificationRepository.save(createQueries);
+
+        await queryRunner.commitTransaction();
+      }
+    } catch (error) {
+      console.error(error);
+      await queryRunner.rollbackTransaction();
+      if (error instanceof BadRequestException) {
+        throw error;
+      } else {
+        throw new BadRequestException('Error sending message to user');
+      }
+    } finally {
+      if (!queryRunner.isReleased) {
+        await queryRunner.release();
+      }
     }
   }
 
