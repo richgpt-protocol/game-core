@@ -153,10 +153,17 @@ export class BackOfficeController {
   @Post('messages')
   @ApiExcludeEndpoint()
   async sendMessage(@Request() req, @Body() payload: UserMessageDto) {
-    await this.adminNotificationService.sendUserMessage(payload);
-    return {
-      message: 'Message sent successfully',
-    };
+    try {
+      const result =
+        await this.adminNotificationService.sendUserMessage(payload);
+
+      if (result.isError) throw new BadRequestException(result.message);
+      return {
+        message: result.message,
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
   }
 
   @SecureEJS(null, UserRole.ADMIN)

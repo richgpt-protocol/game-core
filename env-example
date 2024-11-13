@@ -96,6 +96,7 @@ ESCROW_ADDRESS_5611=0x # opBNB testnet
 
 # telegram
 TG_ADMIN_NOTIFIER_BOT_TOKEN= # Bot token for tg notifier bot
+TG_USER_NOTIFICATION_BOT_TOKEN= # Bot token for messages from back-office
 ADMIN_TG_CHAT_ID= # Chat id of admin group where notification will be sent
 
 TELEGRAM_OTP_BOT_TOKEN= #token of Bot that sends telegram OTP
