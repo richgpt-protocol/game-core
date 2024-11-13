@@ -174,7 +174,7 @@ export class GasService {
 
       // inform admin
       await this.adminNotificationService.setAdminNotification(
-        error,
+        `Error occur in gas.service.handlePendingReloadTx, error: ${error}`,
         'CRITICAL_FAILURE',
         `Critical failure in handlePendingReloadTx${chainId.toString()}()`,
         true,
