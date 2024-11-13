@@ -66,25 +66,14 @@ export class GameService implements OnModuleInit {
     private betOrderRepository: Repository<BetOrder>,
   ) {}
 
-  // process of closing bet for current epoch, set draw result, and announce draw result
+  // process of closing bet for current epoch, set draw result, announce draw result, set available claim and process referral bonus
   // 1. GameService.setBetClose: scheduled at :00UTC, create new game, and also submit masked betOrder to Core contract
   // 2. Local script: cron at :01UTC create drawResult records and save directly into database
-  // 3. GameGateway.emitDrawResult: scheduled at :02UTC, emit draw result to all connected clients
-  // 4. follow by job GameService.submitDrawResult: submit draw result to Core contract
-  // 5. :05UTC, allow claim
+  // 3. GameGateway.emitDrawResult: scheduled at :02UTC, emit draw result to all connected clients(UI)
+  // 4. follow by GameService.submitDrawResult: submit draw result to Core contract
+  // 5. follow by GameService.availableClaimAndProcessReferralBonus: set availableClaim for winning betOrder, and process referral bonus
 
   onModuleInit() {
-    this.queueService.registerHandler(
-      QueueName.GAME,
-      QueueType.SUBMIT_DRAW_RESULT,
-      {
-        jobHandler: this.submitDrawResult.bind(this),
-
-        //Executed when onchain tx is failed for 5 times continously
-        failureHandler: this.onChainTxFailed.bind(this),
-      },
-    );
-
     this.queueService.registerHandler(
       QueueName.REFERRAL_BONUS,
       QueueType.WINNING_REFERRAL_BONUS,
@@ -281,9 +270,7 @@ export class GameService implements OnModuleInit {
     }
   }
 
-  async submitDrawResult(job: Job<SubmitDrawResultDTO>): Promise<void> {
-    const { drawResults, gameId } = job.data;
-
+  async submitDrawResult(drawResults: Array<DrawResult>, gameId: number) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -299,14 +286,14 @@ export class GameService implements OnModuleInit {
         this.configService.get('CORE_CONTRACT_ADDRESS'),
         setDrawResultBot,
       );
-      const numberPairs = drawResults.map((result) => result.numberPair);
+      const winningNumberPairs = drawResults.map((result) => result.numberPair);
       const estimatedGas = await coreContract.setDrawResults.estimateGas(
-        numberPairs,
+        winningNumberPairs,
         ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
         '0x',
       );
       const txResponse = await coreContract.setDrawResults(
-        numberPairs,
+        winningNumberPairs,
         ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
         '0x',
         {
@@ -322,49 +309,13 @@ export class GameService implements OnModuleInit {
         .getOne();
       if (txReceipt.status === 1) {
         // on-chain tx success
-        // MUST NOT ERROR FROM HERE else setDrawResults() will be called again in next job
-        game.drawTxStatus = 'S';
+        game.drawTxStatus = TxStatus.SUCCESS;
         game.drawTxHash = txReceipt.hash;
         await queryRunner.manager.save(game);
-
-        // find betOrder that numberPair matched and update availableClaim to true
-        for (const drawResult of drawResults) {
-          const betOrders = await queryRunner.manager
-            .createQueryBuilder(BetOrder, 'betOrder')
-            .where('betOrder.gameId = :gameId', { gameId })
-            .andWhere('betOrder.numberPair = :numberPair', {
-              numberPair: drawResult.numberPair,
-            })
-            .getMany();
-          // there might be more than 1 betOrder that numberPair matched
-          for (const betOrder of betOrders) {
-            betOrder.availableClaim = true;
-            await queryRunner.manager.save(betOrder);
-
-            try {
-              const { bigForecastWinAmount, smallForecastWinAmount } =
-                this.claimService.calculateWinningAmount(betOrder, drawResult);
-              const totalAmount =
-                Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
-              const jobId = `processWinReferralBonus_${betOrder.id}`;
-              await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
-                prizeAmount: totalAmount,
-                betOrderId: betOrder.id,
-                queueType: QueueType.WINNING_REFERRAL_BONUS,
-                // delay: 2000,
-              });
-            } catch (error) {
-              this.logger.error(
-                'Error in game.service.submitDrawResult.processWinReferralBonus',
-                error,
-              );
-            }
-          }
-        }
         await queryRunner.commitTransaction();
       } else {
         // on-chain tx failed
-        game.drawTxStatus = 'P';
+        game.drawTxStatus = TxStatus.FAILED;
         await queryRunner.manager.save(game);
         await queryRunner.commitTransaction();
         throw new Error(
@@ -386,6 +337,59 @@ export class GameService implements OnModuleInit {
       await queryRunner.release();
     }
   }
+
+  async setAvailableClaimAndProcessReferralBonus(
+    drawResults: Array<DrawResult>,
+    gameId: number,
+  ): Promise<void> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      for (const drawResult of drawResults) {
+        const betOrders = await queryRunner.manager
+          .createQueryBuilder(BetOrder, 'betOrder')
+          .where('betOrder.gameId = :gameId', { gameId })
+          .andWhere('betOrder.numberPair = :numberPair', {
+            numberPair: drawResult.numberPair,
+          })
+          .getMany();
+        // there might be more than 1 betOrder that numberPair matched
+        for (const betOrder of betOrders) {
+          betOrder.availableClaim = true;
+          await queryRunner.manager.save(betOrder);
+
+          try {
+            const { bigForecastWinAmount, smallForecastWinAmount } =
+              this.claimService.calculateWinningAmount(betOrder, drawResult);
+            const totalAmount =
+              Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
+
+            const jobId = `processWinReferralBonus_${betOrder.id}`;
+            await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
+              prizeAmount: totalAmount,
+              betOrderId: betOrder.id,
+              queueType: QueueType.WINNING_REFERRAL_BONUS,
+            });
+          } catch (error) {
+            this.logger.error('Error in processWinReferralBonus', error);
+          }
+        }
+      }
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      this.logger.error(
+        'Error in setAvailableClaimAndProcessReferralBonus',
+        error,
+      );
+      // no rollbackTransaction() to prevent duplicate REFERRAL_BONUS queue added
+      // await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   async reProcessReferralBonus(
     gameId: number,
     betOrderId: number,

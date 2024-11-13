@@ -16,7 +16,7 @@ import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { ClaimService } from 'src/wallet/services/claim.service';
 import { WalletService } from 'src/wallet/wallet.service';
-import { Between, In, Repository } from 'typeorm';
+import { Between, Brackets, In, Repository } from 'typeorm';
 
 @Injectable()
 export class BackOfficeService {
@@ -600,13 +600,21 @@ export class BackOfficeService {
       .createQueryBuilder('betOrder')
       .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-      // .leftJoinAndSelect('betOrder.claimDetail', 'claimDetail')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
       .where('betOrder.createdDate BETWEEN :startDate AND :endDate', {
         // need to pass as string instead of Date object because of the timezone issue
         startDate,
         endDate,
       })
-      .andWhere('walletTx.status = :status', { status: 'S' })
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('walletTx.status = :status', { status: 'S' }).orWhere(
+            'creditWalletTx.status = :status',
+            { status: 'S' },
+          );
+        }),
+      )
       .getMany();
 
     const commissions = await this.walletTxRepository
@@ -625,6 +633,7 @@ export class BackOfficeService {
     while (start < new Date(endDate)) {
       resultByDate[start.toDateString()] = {
         totalBetAmount: 0,
+        totalCreditAmount: 0,
         betCount: 0,
         userCount: 0,
         totalPayout: 0,
@@ -635,7 +644,10 @@ export class BackOfficeService {
         //       _commision.createdDate.toDateString() === start.toDateString(),
         //   )?.txAmount || 0,
         // ),
-        commissionAmount: commissions.reduce((acc, commission) => acc + (+commission.txAmount), 0),
+        commissionAmount: commissions.reduce(
+          (acc, commission) => acc + +commission.txAmount,
+          0,
+        ),
       };
       start.setDate(start.getDate() + 1);
     }
@@ -648,42 +660,45 @@ export class BackOfficeService {
         userByDate[date] = new Set();
       }
 
+      const userId = betOrder.walletTx
+        ? betOrder.walletTx.userWallet.userId
+        : betOrder.creditWalletTx.userWallet.userId;
+
       resultByDate[date].totalBetAmount =
         Number(resultByDate[date].totalBetAmount) +
         Number(betOrder.bigForecastAmount) +
         Number(betOrder.smallForecastAmount);
+      resultByDate[date].totalCreditAmount = 
+        Number(resultByDate[date].totalCreditAmount) +
+        (betOrder.creditWalletTx ? Number(betOrder.creditWalletTx.amount) : 0);
       resultByDate[date].betCount += 1;
-      resultByDate[date].userCount += userByDate[date].has(
-        betOrder.walletTx.userWallet.userId,
-      )
-        ? 0
-        : 1;
-      userByDate[date].add(betOrder.walletTx.userWallet.userId);
+      resultByDate[date].userCount += userByDate[date].has(userId) ? 0 : 1;
+      userByDate[date].add(userId);
 
       if (betOrder.availableClaim) {
-      //   resultByDate[date].totalPayoutRewards =
-      //     Number(resultByDate[date].totalPayoutRewards) +
-      //     (Number(betOrder.claimDetail.claimAmount) || 0) +
-      //     (Number(betOrder.claimDetail.bonusAmount) || 0);
+        //   resultByDate[date].totalPayoutRewards =
+        //     Number(resultByDate[date].totalPayoutRewards) +
+        //     (Number(betOrder.claimDetail.claimAmount) || 0) +
+        //     (Number(betOrder.claimDetail.bonusAmount) || 0);
 
-      //   resultByDate[date].totalPayout =
-      //     Number(resultByDate[date].totalPayout) +
-      //       Number(betOrder.claimDetail.claimAmount) || 0;
+        //   resultByDate[date].totalPayout =
+        //     Number(resultByDate[date].totalPayout) +
+        //       Number(betOrder.claimDetail.claimAmount) || 0;
         const draw_result = await this.drawResultRepository.findOne({
           where: {
             gameId: betOrder.gameId,
             numberPair: betOrder.numberPair,
           },
         });
-        const {
-          bigForecastWinAmount,
-          smallForecastWinAmount
-        } = this.claimService.calculateWinningAmount(betOrder, draw_result);
-        resultByDate[date].totalPayoutRewards += bigForecastWinAmount + smallForecastWinAmount;
-        resultByDate[date].totalPayout += bigForecastWinAmount + smallForecastWinAmount;
+        const { bigForecastWinAmount, smallForecastWinAmount } =
+          this.claimService.calculateWinningAmount(betOrder, draw_result);
+        resultByDate[date].totalPayoutRewards +=
+          bigForecastWinAmount + smallForecastWinAmount;
+        resultByDate[date].totalPayout +=
+          bigForecastWinAmount + smallForecastWinAmount;
       }
-    // });
-    };
+      // });
+    }
 
     return {
       data: resultByDate,
@@ -745,7 +760,11 @@ export class BackOfficeService {
 
     const totalBetUser = new Set();
     for (const betOrder of betOrders) {
-      totalBetUser.add(betOrder.walletTx.userWalletId);
+      totalBetUser.add(
+        betOrder.walletTx
+          ? betOrder.walletTx.userWalletId
+          : betOrder.creditWalletTx.walletId,
+      );
       result.totalBetCount += 1;
       const betAmount =
         Number(betOrder.bigForecastAmount) +

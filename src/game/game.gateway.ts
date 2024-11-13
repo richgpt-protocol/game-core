@@ -58,12 +58,22 @@ export class GameGateway {
   async emitDrawResult() {
     this.logger.log('emitDrawResult()');
     try {
-      // get draw result from last game
-      const lastGame = await this.gameRepository.findOne({
-        where: { isClosed: true },
-        order: { id: 'DESC' },
-        relations: { drawResult: true },
-      });
+      // get draw result from last hour game
+      const lastHour = new Date(Date.now() - 60 * 60 * 1000);
+      const lastHourUTC = new Date(
+        lastHour.getUTCFullYear(),
+        lastHour.getUTCMonth(),
+        lastHour.getUTCDate(),
+        lastHour.getUTCHours(),
+        lastHour.getUTCMinutes(),
+        lastHour.getUTCSeconds(),
+      );
+      const lastGame = await this.gameRepository
+        .createQueryBuilder('game')
+        .leftJoinAndSelect('game.drawResult', 'drawResult')
+        .where('game.startDate < :lastHourUTC', { lastHourUTC })
+        .andWhere('game.endDate > :lastHourUTC', { lastHourUTC })
+        .getOne();
       const drawResults = lastGame.drawResult;
       // current drawResults is in sequence(first, second...)
       // loop through drawResults in reverse order(consolation, special...) and emit to client
@@ -80,16 +90,33 @@ export class GameGateway {
       }
 
       // submit draw result to Core contract
-      const jobId = `submitDrawResult-${lastGame.id}`;
-      await this.queueService.addJob(
-        QueueName.GAME,
-        jobId,
-        {
-          drawResults: drawResults,
-          gameId: lastGame.id,
-          queueType: QueueType.SUBMIT_DRAW_RESULT,
-        },
-        0, // no delay
+      let attempts = 0;
+      while (true) {
+        if (attempts === 5) {
+          // failed for 5 times, inform admin
+          await this.adminNotificationService.setAdminNotification(
+            'Submit draw result on-chain tx had failed for 5 times',
+            'SUBMIT_DRAW_RESULT_FAILED_5_TIMES',
+            'Submit draw result failed 5 times',
+            true,
+            true,
+          );
+          break;
+        }
+        try {
+          await this.gameService.submitDrawResult(drawResults, lastGame.id);
+          // no error, success
+          break;
+        } catch (error) {
+          // error occur, log and retry
+          this.logger.error(error);
+          attempts++;
+        }
+      }
+
+      await this.gameService.setAvailableClaimAndProcessReferralBonus(
+        drawResults,
+        lastGame.id,
       );
     } catch (err) {
       // inform admin
