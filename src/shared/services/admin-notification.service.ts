@@ -185,6 +185,7 @@ export class AdminNotificationService {
               parse_mode: 'Markdown',
             });
           } catch (error) {
+            this.logger.error('Error sending message to telegram', error);
             tgErrors.push(u.tgId);
           }
         }
