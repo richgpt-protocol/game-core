@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsNotEmpty,
+  IsNumber,
   IsNumberString,
   IsOptional,
   IsString,
@@ -62,4 +63,15 @@ export class CreateCampaignDto {
   @IsString()
   @IsNotEmpty()
   claimApproach: ClaimApproach;
+}
+
+export class ExecuteClaimDto {
+  @ApiProperty()
+  @IsNotEmpty()
+  claimApproach: ClaimApproach;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsNumber()
+  userId: number;
 }
