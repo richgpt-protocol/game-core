@@ -510,7 +510,7 @@ export class InternalTransferService {
   private async getTotalPoints(userWallet: UserWallet): Promise<number> {
     const points = await this.pointTxRepository.findOne({
       where: {
-        userWallet,
+        walletId: userWallet.id,
       },
       order: {
         id: 'DESC',

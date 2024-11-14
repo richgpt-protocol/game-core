@@ -139,7 +139,6 @@ export class WalletService {
       .createQueryBuilder('gameUsdTx')
       .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
       .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
-      .where('gameUsdTx.status = :status', { status: TxStatus.SUCCESS })
       .andWhere(
         new Brackets((qb) => {
           qb.where(
@@ -156,6 +155,12 @@ export class WalletService {
       .orderBy('gameUsdTx.id', 'DESC')
       .limit(count)
       .getMany();
+
+    const statusText = {
+      [TxStatus.PENDING]: 'Pending',
+      [TxStatus.SUCCESS]: 'Success',
+      [TxStatus.FAILED]: 'Failed',
+    };
 
     const allTxs = gameTxnsDb.map((gameUsdTx) => {
       let amount = 0;
@@ -193,7 +198,7 @@ export class WalletService {
         createdDate: gameUsdTx.walletTxs[0]
           ? gameUsdTx.walletTxs[0].createdDate
           : gameUsdTx.creditWalletTx[0].createdDate,
-        status: gameUsdTx.status,
+        status: statusText[gameUsdTx.status],
         startingBalance,
         endingBalance,
       };
