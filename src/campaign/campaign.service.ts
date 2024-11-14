@@ -324,7 +324,7 @@ export class CampaignService {
       (tx) => tx.status === TxStatus.SUCCESS,
     );
 
-    return successfulClaims.length < campaign.maxNumberOfClaims;
+    return successfulClaims.length <= campaign.maxNumberOfClaims;
   }
 
   async findActiveCampaigns() {
