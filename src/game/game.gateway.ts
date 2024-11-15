@@ -74,7 +74,24 @@ export class GameGateway {
         .where('game.startDate < :lastHourUTC', { lastHourUTC })
         .andWhere('game.endDate > :lastHourUTC', { lastHourUTC })
         .getOne();
-      const drawResults = lastGame.drawResult;
+      let drawResults = lastGame.drawResult;
+
+      // fallback method if drawResults.length === 0 for some reason i.e. set draw result bot/server down
+      if (drawResults.length === 0) {
+        drawResults = await this.gameService.setFallbackDrawResults(
+          lastGame.id,
+        );
+
+        // inform admin
+        await this.adminNotificationService.setAdminNotification(
+          'game.gateway.emitDrawResult: drawResults.length === 0',
+          'NO_DRAW_RESULT_FOUND',
+          'No draw result record found in last game',
+          true,
+          true,
+        );
+      }
+
       // current drawResults is in sequence(first, second...)
       // loop through drawResults in reverse order(consolation, special...) and emit to client
       for (let i = drawResults.length - 1; i >= 0; i--) {
@@ -101,7 +118,7 @@ export class GameGateway {
             true,
             true,
           );
-          break;
+          return;
         }
         try {
           await this.gameService.submitDrawResult(drawResults, lastGame.id);
