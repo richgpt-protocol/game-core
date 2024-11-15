@@ -148,6 +148,13 @@ export class WithdrawService implements OnModuleInit {
         };
       }
 
+      if (payload.chainId !== 5611) {
+        return {
+          error: 'Invalid network supported',
+          data: null,
+        };
+      }
+
       const pendingAmountResult = await queryRunner.manager.query(
         `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx 
           WHERE
