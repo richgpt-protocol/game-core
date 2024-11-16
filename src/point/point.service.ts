@@ -522,9 +522,6 @@ export class PointService {
       .select('user.uid', 'uid')
       .leftJoinAndSelect('user.wallet', 'wallet')
       .addSelect('wallet.pointBalance', 'pointBalance')
-      .where('user.tgUsername NOT LIKE :tgUsername', {
-        tgUsername: '%fuyomarketing%',
-      })
       .orderBy('wallet.pointBalance', 'DESC')
       .limit(limit)
       .getRawMany();
@@ -590,9 +587,6 @@ export class PointService {
           .addSelect('wallet.pointBalance', 'pointBalance')
           .from(User, 'user')
           .leftJoin('user.wallet', 'wallet')
-          .where('user.tgUsername NOT LIKE :tgUsername', {
-            tgUsername: '%fuyomarketing%',
-          })
           .orderBy('wallet.pointBalance', 'DESC')
           .limit(limit)
           .getRawMany();
@@ -670,9 +664,6 @@ export class PointService {
       .leftJoin('user.wallet', 'wallet', 'wallet.id = leaderboard.walletId')
       .where('leaderboard.snapshotDate >= :startDate', { startDate })
       .andWhere('leaderboard.snapshotDate <= :endDate', { endDate })
-      .andWhere('user.tgUsername NOT LIKE :tgUsername', {
-        tgUsername: '%fuyomarketing%',
-      })
       .groupBy('leaderboard.walletId')
       .addGroupBy('user.uid')
       .orderBy('totalXp', 'DESC')
