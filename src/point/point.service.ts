@@ -522,7 +522,7 @@ export class PointService {
       .select('user.uid', 'uid')
       .leftJoinAndSelect('user.wallet', 'wallet')
       .addSelect('wallet.pointBalance', 'pointBalance')
-      .orderBy('pointBalance', 'DESC')
+      .orderBy('wallet.pointBalance', 'DESC')
       .limit(limit)
       .getRawMany();
 
@@ -587,7 +587,7 @@ export class PointService {
           .addSelect('wallet.pointBalance', 'pointBalance')
           .from(User, 'user')
           .leftJoin('user.wallet', 'wallet')
-          .orderBy('pointBalance', 'DESC')
+          .orderBy('wallet.pointBalance', 'DESC')
           .limit(limit)
           .getRawMany();
 
