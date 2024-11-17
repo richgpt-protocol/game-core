@@ -148,7 +148,7 @@ export class WithdrawService implements OnModuleInit {
         };
       }
 
-      if (payload.chainId !== 5611) {
+      if (payload.chainId !== Number(this.configService.get('BASE_CHAIN_ID'))) {
         return {
           error: 'Invalid network supported',
           data: null,
