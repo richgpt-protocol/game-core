@@ -234,6 +234,10 @@ export class PublicService {
       throw new BadRequestException('User wallet not found');
     }
 
+    if (payload.usdtAmount > 0.01 || payload.gameUsdAmount > 0.02) {
+      throw new BadRequestException('Invalid amount');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
@@ -251,12 +255,12 @@ export class PublicService {
         payload.gameUsdAmount > 0 || payload.usdtAmount > 0 ? false : true; // Notify only if there is included gameUSD or USDT transfer transaction
       await queryRunner.manager.save(tx);
 
-      if (payload.usdtAmount > 0) {
+      if (payload.usdtAmount > 0 && payload.usdtAmount <= 0.01) {
         await this.addUSDT(payload.usdtAmount, userWallet, tx, queryRunner);
       }
 
       let creditWalletTx;
-      if (payload.gameUsdAmount > 0) {
+      if (payload.gameUsdAmount > 0 && payload.gameUsdAmount <= 0.02) {
         creditWalletTx = await this.addCredit(
           payload.gameUsdAmount,
           userWallet.id,
