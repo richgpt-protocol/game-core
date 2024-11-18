@@ -775,6 +775,15 @@ export class UserService {
         return { error: 'invalid phone number', data: null };
       }
 
+      const { error } = await this.validateUserStatus(user);
+      //ignore if user is pending or unverified
+      if (
+        error &&
+        error != UserStatus.PENDING &&
+        error != UserStatus.UNVERIFIED
+      )
+        return { error, data: null };
+
       if (user.loginAttempt >= 3) {
         user.status = UserStatus.SUSPENDED;
         user.updatedBy = UtilConstant.SELF;
