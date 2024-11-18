@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { UserWallet } from '../entities/user-wallet.entity';
@@ -30,7 +35,7 @@ import { Mutex } from 'async-mutex';
 import { ReviewRedeemDto } from '../dto/ReviewRedeem.dto';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { ConfigService } from 'src/config/config.service';
-import { TxStatus } from 'src/shared/enum/status.enum';
+import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { WalletTxType } from 'src/shared/enum/txType.enum';
 
 type RedeemResponse = {
@@ -146,6 +151,10 @@ export class WithdrawService implements OnModuleInit {
           error: 'Minimum withdrawable amount is $1',
           data: null,
         };
+      }
+
+      if (user.status != UserStatus.ACTIVE) {
+        throw new BadRequestException('User is not active');
       }
 
       if (payload.chainId !== Number(this.configService.get('BASE_CHAIN_ID'))) {
