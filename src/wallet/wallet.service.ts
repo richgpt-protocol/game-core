@@ -139,6 +139,7 @@ export class WalletService {
       .createQueryBuilder('gameUsdTx')
       .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
       .leftJoinAndSelect('gameUsdTx.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('walletTxs.internalTransferSender', 'internalTransfer')
       .andWhere(
         new Brackets((qb) => {
           qb.where(
@@ -182,12 +183,18 @@ export class WalletService {
 
       let startingBalance = 0;
       let endingBalance = 0;
+      let isSender = false;
       if (
         gameUsdTx.walletTxs.length > 0 &&
         gameUsdTx.walletTxs[0].txType === 'INTERNAL_TRANSFER'
       ) {
         startingBalance = gameUsdTx.walletTxs[0].startingBalance;
         endingBalance = gameUsdTx.walletTxs[0].endingBalance;
+        const senderInternalTransferTx = gameUsdTx.walletTxs.find(
+          (_tx) => _tx.internalTransferSender,
+        );
+        if (senderInternalTransferTx)
+          isSender = senderInternalTransferTx.userWalletId === wallet.id;
       }
 
       return {
@@ -201,6 +208,7 @@ export class WalletService {
         status: statusText[gameUsdTx.status],
         startingBalance,
         endingBalance,
+        isSender, // for internal transfer
       };
     });
 
