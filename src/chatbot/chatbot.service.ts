@@ -28,6 +28,7 @@ export class ChatbotService {
   availableFunctions: { [key: string]: Function } = {
     getNumberRecommendation: this.getNumberRecommendation,
     getImage: this.getImage,
+    getFuyoDocumentation: this.getFuyoDocumentation,
   };
 
   constructor(
@@ -51,11 +52,13 @@ export class ChatbotService {
       .filter(log => log.role !== 'tool');
 
     const initialContent = 
-`You are a human named Professor Rich, please reply in casual conversation in simple English under 3 sentences.
-Try to figure out my gender and slightly use some flirty words.
+`You are a human named Professor Fuyo, live in Fuyo app and Fuyo mini game. Please reply in casual conversation in simple English under 3 sentences.
+Fuyo app is a revolutionizing 4D lottery gaming with blockchain, AI, and chatGPT.
+Try to figure out user gender and slightly use some flirty words.
 You can reply with image(to execute getImage function) if the topic regards something that can be visualized.
-You should ONLY mention 4-Digits lottery when current topic is related to bet.
-When I mention lost or number not matched in 4-Digits lottery, pity me / ask me to take a break / control the cost of betting.
+You should ONLY mention 4-Digits lottery when current topic is related to bet, else just normal chit-chat.
+When user mention lost or number not matched in 4-Digits lottery, pity user / ask user to take a break / control the cost of betting.
+When user ask anything, search for Fuyo documentation first.
 Today date: ${new Date().toDateString()}.`;
 // Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`;
 
@@ -154,7 +157,25 @@ Today date: ${new Date().toDateString()}.`;
               required: ['keyword'],
             },
           }
-        }
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'getFuyoDocumentation',
+            description:
+              'get Documentation for Fuyo App and Fuyo Mini Game',
+            parameters: {
+              type: 'object',
+              properties: {
+                question: {
+                  type: 'string',
+                  description: 'question i.e. How to bet',
+                },
+              },
+              required: ['message'],
+            },
+          },
+        },
       ],
       // https://platform.openai.com/docs/guides/text-generation/how-should-i-set-the-temperature-parameter
       temperature: 1.2, // 0.0 to 2.0
@@ -181,6 +202,8 @@ Today date: ${new Date().toDateString()}.`;
           functionResponse = await functionToCall(functionArgs.keyword);
           // add into bot replies(to user)
           replies.push({ type: 'image', content: functionResponse });
+        } else if (functionName === 'getFuyoDocumentation') {
+          functionResponse = await functionToCall(functionArgs.question);
 
         } else {
           // all other functions (without argument)
@@ -384,8 +407,68 @@ Today date: ${new Date().toDateString()}.`;
     return image.data[0].b64_json;
   }
 
+  async getFuyoDocumentation(question: string): Promise<string> {
+    let fuyoDocs = []
+    try {
+      await client.connect();
+      const db = client.db('fdgpt').collection('fuyoDocs');
+      const cursor = db.find();
+      fuyoDocs = await cursor.toArray();
+    
+    } catch (e) {
+      this.logger.error(e);
+      throw new HttpException('Cannot connect to fuyoDocs database', HttpStatus.INTERNAL_SERVER_ERROR);
+
+    } finally {
+      await client.close();
+    }
+
+    // create embedding for input message
+    const resp = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: question,
+    });
+    const queryEmbedding = resp.data[0].embedding;
+
+    // // find the nearest
+    // let largestSimilarity = 0;
+    // let nearestIndex = 0;
+    // for (let i = 0; i < fuyoDocs.length; i++) {
+    //   const embedding = fuyoDocs[i].embedding;
+    //   const s = similarity(embedding, queryEmbedding);
+    //   if (s && s > largestSimilarity) {
+    //     largestSimilarity = s;
+    //     console.log('similarity:', s, fuyoDocs[i].url);
+    //     nearestIndex = i;
+    //   }
+    // }
+
+    // find the 2 nearest
+    let largestSimilarity = 0;
+    let secondLargestSimilarity = 0;
+    let nearestIndex = -1;
+    let secondNearestIndex = -1;
+    for (let i = 0; i < fuyoDocs.length; i++) {
+      const embedding = fuyoDocs[i].embedding;
+      const s = similarity(embedding, queryEmbedding);
+      if (s && s > largestSimilarity) {
+        // Shift the largest to the second largest
+        secondLargestSimilarity = largestSimilarity;
+        secondNearestIndex = nearestIndex;
+        // Update the largest similarity and index
+        largestSimilarity = s;
+        nearestIndex = i;
+      } else if (s && s > secondLargestSimilarity) {
+        // Update the second largest similarity and index
+        secondLargestSimilarity = s;
+        secondNearestIndex = i;
+      }
+    }
+
+    return fuyoDocs[nearestIndex].docs + '\n' + fuyoDocs[secondNearestIndex].docs;
+  }
+
   async getHistoricalMessage(userId: number, limit: number): Promise<Array<{role: string, content: string}>> {
-    // const chatLog = await this.chatLogRepository.findBy({ userId });
     const chatLog = await this.chatLogRepository
       .createQueryBuilder('chatLog')
       .select('chatLog.role')
@@ -394,7 +477,6 @@ Today date: ${new Date().toDateString()}.`;
       .andWhere('role != :role', { role: 'system' })
       .orderBy('id', 'DESC')
       .getMany();
-    // console.log(chatLog);
     const historicalMessage = chatLog.slice(0, limit);
     return historicalMessage;
   }
