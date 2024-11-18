@@ -213,6 +213,46 @@ export class UserController {
     };
   }
 
+  @Secure(null, UserRole.ADMIN)
+  @Post('terminate-user/:id')
+  async terminateUser(
+    @Request() req,
+    @Param() params,
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+  ) {
+    try {
+      const result = await this.userService.terminateUser(Number(params.id));
+      if (result.error) {
+        await this.auditLogService.addAuditLog(
+          classInfo,
+          req,
+          ipAddress,
+          'Terminate User Successful: ' + params.id,
+        );
+
+        return {
+          statusCode: HttpStatus.OK,
+          data: {},
+          message: 'Terminate user successful',
+        };
+      } else {
+        return {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          data: {},
+          message: result.error,
+        };
+      }
+    } catch (error) {
+      console.log(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: {},
+        message: 'Failed to terminate user',
+      };
+    }
+  }
+
   // this /verify-otp can be used only if the user is logged in(with access token)
   @Secure(null, UserRole.USER)
   @Post('verify-otp')

@@ -52,6 +52,8 @@ import { PointTxType, ReferralTxType } from 'src/shared/enum/txType.enum';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { CampaignService } from 'src/campaign/campaign.service';
 import { ClaimApproach } from 'src/shared/enum/campaign.enum';
+import { ethers } from 'ethers';
+import { ERC20, ERC20__factory } from 'src/contract';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -897,6 +899,98 @@ export class UserService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async terminateUser(userId: number) {
+    const errors = [];
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['wallet'],
+    });
+    if (!user) {
+      return { error: 'user.NOT_FOUND', data: null };
+    }
+
+    if (user.status === UserStatus.TERMINATED) {
+      return {
+        data: {
+          message: 'Already Terminated',
+        },
+      };
+    }
+
+    user.status = UserStatus.TERMINATED;
+    await this.userRepository.save(user);
+    let signer: ethers.Wallet;
+    try {
+      const chainId = this.configService.get('BASE_CHAIN_ID');
+      const providerUrl = this.configService.get(`PROVIDER_RPC_URL_${chainId}`);
+      const provider = new ethers.JsonRpcProvider(providerUrl);
+      signer = new ethers.Wallet(
+        await MPC.retrievePrivateKey(user.wallet.walletAddress),
+        provider,
+      );
+    } catch (error) {
+      return { error: 'Failed to get private key', data: null };
+    }
+
+    // get gameUsd
+    try {
+      const gameUsdContract = this.getTokenContract(
+        this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
+        signer,
+      );
+      const gameUsdBalance = await gameUsdContract.balanceOf(
+        user.wallet.walletAddress,
+      );
+      await this.transferToken(
+        gameUsdContract,
+        this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
+        gameUsdBalance,
+      );
+    } catch (error) {
+      errors.push('Failed to transfer gameUSD back');
+    }
+
+    //get gas
+    try {
+      const opBnbBalance = await signer.provider.getBalance(signer.address);
+      const gasEstimate = await signer.estimateGas({
+        to: user.wallet.walletAddress,
+        value: '0',
+      });
+      if (opBnbBalance > gasEstimate) {
+        await signer.sendTransaction({
+          to: user.wallet.walletAddress,
+          value: opBnbBalance - gasEstimate,
+        });
+      } else {
+        errors.push('Gas required to transfer back is not enough');
+      }
+    } catch (error) {
+      errors.push('Failed to transfer gas back');
+    }
+
+    if (errors.length > 0) {
+      return { error: errors, data: null };
+    }
+
+    return { error: null, data: user };
+  }
+
+  private getTokenContract(tokenAddress: string, signer: ethers.Wallet) {
+    return ERC20__factory.connect(tokenAddress, signer);
+  }
+
+  private async transferToken(
+    tokenContract: ERC20,
+    to: string,
+    amount: bigint,
+  ) {
+    const gasLimit = await tokenContract.transfer.estimateGas(to, amount);
+    return await tokenContract.transfer(to, amount, {
+      gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
+    });
   }
 
   async getUsers(payload: GetUsersDto) {
