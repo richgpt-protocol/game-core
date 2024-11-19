@@ -223,14 +223,7 @@ export class UserController {
   ) {
     try {
       const result = await this.userService.terminateUser(Number(params.id));
-      if (result.error) {
-        await this.auditLogService.addAuditLog(
-          classInfo,
-          req,
-          ipAddress,
-          'Terminate User Successful: ' + params.id,
-        );
-
+      if (!result.error) {
         return {
           statusCode: HttpStatus.OK,
           data: {},
