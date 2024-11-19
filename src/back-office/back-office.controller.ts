@@ -43,8 +43,12 @@ export class BackOfficeController {
   @Get('users')
   @ApiExcludeEndpoint()
   @Render('user-listing')
-  async users(@Request() req) {
-    const data = await this.backOfficeService.getUsers();
+  async users(
+    @Request() req,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const data = await this.backOfficeService.getUsers(page, limit);
     return {
       data: {
         users: data.data,
@@ -59,8 +63,12 @@ export class BackOfficeController {
   @Get('wallets')
   @ApiExcludeEndpoint()
   @Render('wallet-listing')
-  async wallets(@Request() req) {
-    const data = await this.backOfficeService.getWallets();
+  async wallets(
+    @Request() req,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const data = await this.backOfficeService.getWallets(page, limit);
     return {
       data: {
         user: req.user,
@@ -75,11 +83,15 @@ export class BackOfficeController {
   @Get('staffs')
   @ApiExcludeEndpoint()
   @Render('staff-listing')
-  async staffs(@Request() req) {
+  async staffs(
+    @Request() req,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
     if (req.user.adminType !== 'S') {
       throw new BadRequestException('You are not authorized to view this page');
     }
-    const data = await this.backOfficeService.getStaffs();
+    const data = await this.backOfficeService.getStaffs(page, limit);
     return {
       data: {
         staffs: data.data,
@@ -166,8 +178,12 @@ export class BackOfficeController {
   @Get('transactions')
   @ApiExcludeEndpoint()
   @Render('transactions')
-  async transactions(@Request() req) {
-    const data = await this.backOfficeService.getTransactions();
+  async transactions(
+    @Request() req,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const data = await this.backOfficeService.getTransactions(page, limit);
     return {
       data: {
         user: req.user,

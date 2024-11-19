@@ -244,7 +244,7 @@
             <tbody>
               <% for(var i=0; i<data.wallets.length; i++) {%>
                 <tr>
-                  <td><%= i+1 %></td>
+                  <td><%= data.wallets[i].userId %></td>
                   <td><%= data.wallets[i].walletAddress %></td>
                   <td><%= data.wallets[i].walletBalance %> gameUSD</td>
                   <td><%= data.wallets[i].creditBalance %> </td>
@@ -265,7 +265,7 @@
         <% } %>
       
         <% if (data.currentPage < data.totalPages) { %>
-          <a href="?page=<%= data.currentPage + 1 %>">Next</a>
+          <a href="?page=<%= Number(data.currentPage) + 1 %>">Next</a>
         <% } %>
       </div>
 
