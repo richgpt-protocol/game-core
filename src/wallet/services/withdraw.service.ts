@@ -157,7 +157,7 @@ export class WithdrawService implements OnModuleInit {
         throw new BadRequestException('User is not active');
       }
 
-      if (payload.chainId !== Number(this.configService.get('BASE_CHAIN_ID'))) {
+      if (payload.chainId !== 56) {
         return {
           error: 'Invalid network supported',
           data: null,
