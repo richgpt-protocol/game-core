@@ -362,7 +362,7 @@ Today date: ${new Date().toDateString()}.`;
       await this.userService.setUserNotification(userWallet.id, {
         type: 'getXpNotification',
         title: 'XP Reward Get',
-        message: `You get ${pointAmount} xp reward from daily conversation with Professor Fuyo.`,
+        message: `You get ${pointAmount} XP reward from daily conversation with Professor Fuyo.`,
         walletTxId: null,
       });
     }
