@@ -297,17 +297,18 @@ Today date: ${new Date().toDateString()}.`;
         order: { id: 'DESC' },
       })
       
+      const pointAmount = 10;
       const pointTx = this.pointTxRepository.create({
         txType: PointTxType.CHAT,
-        amount: 1,
+        amount: pointAmount,
         walletId: userWallet.id,
       });
       pointTx.startingBalance = Number(userWallet.pointBalance);
-      pointTx.endingBalance = Number(pointTx.startingBalance) + 1;
+      pointTx.endingBalance = Number(pointTx.startingBalance) + pointAmount;
       await this.pointTxRepository.save(pointTx);
 
       // update userWallet
-      userWallet.pointBalance = Number(userWallet.pointBalance) + 1;
+      userWallet.pointBalance = Number(userWallet.pointBalance) + pointAmount;
       await this.userWalletRepository.save(userWallet);
 
       // inform user
@@ -316,7 +317,7 @@ Today date: ${new Date().toDateString()}.`;
         {
           type: 'getXpNotification',
           title: 'XP Reward Get',
-          message: 'You get 1 xp reward from daily conversation with Professor Rich.',
+          message: `You get ${pointAmount} XP reward from daily conversation with Professor FUYO.`,
           walletTxId: null,
         }
       );
