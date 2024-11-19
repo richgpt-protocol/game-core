@@ -57,7 +57,7 @@ import { PointTxType, ReferralTxType } from 'src/shared/enum/txType.enum';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { CampaignService } from 'src/campaign/campaign.service';
 import { ClaimApproach } from 'src/shared/enum/campaign.enum';
-import { ethers, formatEther } from 'ethers';
+import { ethers, formatEther, parseEther } from 'ethers';
 import { ERC20, ERC20__factory } from 'src/contract';
 import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
@@ -931,7 +931,6 @@ export class UserService implements OnModuleInit {
   }
 
   async terminateUser(userId: number) {
-    const errors = [];
     const user = await this.userRepository.findOne({
       where: { id: userId },
       relations: ['wallet'],
@@ -942,6 +941,12 @@ export class UserService implements OnModuleInit {
 
     user.status = UserStatus.TERMINATED;
     await this.userRepository.save(user);
+
+    const jobId = `terminate-${userId}`;
+    this.queueService.addJob(QueueName.TERMINATE, jobId, {
+      userId,
+      queueType: QueueType.RECALL_GAMEUSD,
+    });
 
     return { error: null, data: user };
   }
@@ -978,6 +983,12 @@ export class UserService implements OnModuleInit {
           gameUsdBalance,
         );
       }
+
+      const jobId = `terminate-recall-gas-${userId}`;
+      this.queueService.addJob(QueueName.TERMINATE, jobId, {
+        userId,
+        queueType: QueueType.RECALL_GAS,
+      });
     } catch (error) {
       this.logger.error('Failed to recall gameUsd', error.stack);
       throw new Error('Failed to recall gameUsd');
@@ -994,31 +1005,67 @@ export class UserService implements OnModuleInit {
       const signer = await this._getSigner(user.wallet.walletAddress);
 
       const opBnbBalance = await signer.provider.getBalance(signer.address);
-      const gasEstimate = await signer.estimateGas({
-        to: user.wallet.walletAddress,
-        value: '0',
-      });
-      if (opBnbBalance > gasEstimate) {
+      if (opBnbBalance > 0n && Number(formatEther(opBnbBalance)) > 0.001) {
+        // const estimate = await signer.populateTransaction({
+        //   to: this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+        //   value: '0',
+        // });
+        // console.log('estimate', estimate);
+        // const gas = await signer.estimateGas({
+        //   to: this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+        //   value: '0',
+        // });
+        // console.log('gas', gas);
+        // const price = estimate.gasPrice;
+        // const gasEstimate =
+        //   gas *
+        //   ethers.toBigInt(estimate.maxPriorityFeePerGas || estimate.gasLimit);
+        // if (opBnbBalance > gasEstimate) {
+        //   await signer.sendTransaction({
+        //     to: this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+        //     value: opBnbBalance - gasEstimate,
+        //     gasLimit: gas,
+        //     gasPrice: estimate.gasPrice,
+        //   });
+        // }
         await signer.sendTransaction({
-          to: user.wallet.walletAddress,
-          value: opBnbBalance - gasEstimate,
+          to: this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+          value: opBnbBalance - ethers.parseEther('0.001'),
         });
       } else {
         await this.adminNotificationService.setAdminNotification(
           `Failed to recall gas for user ${userId}. Amount too low to recover.  
-            \nAvailable ${formatEther(opBnbBalance)} `,
+              \nAvailable ${formatEther(opBnbBalance)} `,
           'recallGasError',
           'Recall Gas Error',
           false,
         );
       }
     } catch (error) {
-      this.logger.error('Failed to recall gas', error.stack);
+      console.log(error);
+      console.log('message', error.message);
+      // this.logger.error('Failed to recall gas', error.stack);
       throw new Error('Failed to recall gas');
     }
   }
 
-  private async _onTerminationFailed() {}
+  private async _onTerminationFailed(
+    job: Job<{ userId: number }>,
+    error: Error,
+  ) {
+    if (job.attemptsMade >= job.opts.attempts) {
+      this.logger.error(
+        `Recalling funds from terminated account ${job.data.userId} failed with error: ${error.message}`,
+        error.stack,
+      );
+      await this.adminNotificationService.setAdminNotification(
+        `Recalling funds from terminated account ${job.data.userId} failed with error: ${error.message}`,
+        'terminationFailed',
+        'Recall funds Failed',
+        false,
+      );
+    }
+  }
 
   private async _getSigner(walletAddress: string): Promise<ethers.Wallet> {
     try {
