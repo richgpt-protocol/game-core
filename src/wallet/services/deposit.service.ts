@@ -273,7 +273,8 @@ export class DepositService implements OnModuleInit {
             usdtTx,
           },
         });
-        if (!gameTx) {
+        // if admin is transferring usdt, gameTx will be null so don't throw error
+        if (!gameTx && usdtTx.txType != 'CAMPAIGN') {
           throw new BadRequestException(
             `game_tx for usdt_tx.id ${payload.usdtTxId} not found`,
           );
