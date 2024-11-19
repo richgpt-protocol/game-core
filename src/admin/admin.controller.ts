@@ -25,6 +25,7 @@ import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { ResponseListVo, ResponseVo } from 'src/shared/vo/response.vo';
 import { UpdateAdminNotificationDto } from './dto/admin-notification.dto';
 import { AdminDto, GetAdminListDto, UpdateAdminDto } from './dto/admin.dto';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 @ApiTags('Admin')
 @Controller('api/v1/admin')
@@ -32,6 +33,7 @@ export class AdminController {
   constructor(
     private adminService: AdminService,
     private auditLogService: AuditLogService,
+    private adminNotificationService: AdminNotificationService,
   ) {}
 
   @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)
@@ -320,6 +322,35 @@ export class AdminController {
         statusCode: HttpStatus.OK,
         data: {},
         message: 'Failed to update admin.',
+      };
+    }
+  }
+
+  @SecureEJS(null, UserRole.ADMIN)
+  @Post('push-notification')
+  @ApiResponse({
+    status: 200,
+    description: 'Successful Response',
+    type: ResponseVo,
+  })
+  async sendNotification(
+    @Body() body: { image: string; title: string; message: string },
+  ) {
+    const { image, title, message } = body;
+
+    const result = await this.adminService.pushNotification(image, title, message);
+  
+    if (result.failureCount > 0) {
+      return {
+        success: false,
+        message: 'Notification push completed with some failures',
+        data: result,
+      };
+    } else {
+      return {
+        success: true,
+        message: 'All notifications pushed successfully',
+        data: result,
       };
     }
   }

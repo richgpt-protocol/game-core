@@ -22,6 +22,7 @@ import { Notification } from '../notification/entities/notification.entity';
 import { DateUtil } from 'src/shared/utils/date.util';
 import { PermissionService } from 'src/permission/permission.service';
 import { UserRole } from 'src/shared/enum/role.enum';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 @Injectable()
 export class AdminService {
@@ -32,6 +33,7 @@ export class AdminService {
     private adminRepository: Repository<Admin>,
     @Inject(forwardRef(() => PermissionService))
     private permissionService: PermissionService,
+    private adminNotificationService: AdminNotificationService,
   ) {}
 
   async findById(id: number): Promise<Admin> {
@@ -305,4 +307,23 @@ export class AdminService {
   //     })
   //     .execute();
   // }
+
+
+  async pushNotification(image: string, title: string, message: string) {
+    const results = await this.adminNotificationService.firebasesendNotification(
+      image,
+      title,
+      message,
+    );
+  
+    const failed = results.filter((result) => result.status === 'failed');
+    const success = results.filter((result) => result.status === 'success');
+  
+    return {
+      successCount: success.length,
+      failureCount: failed.length,
+      failures: failed,
+      successes: success,
+    };
+  }
 }
