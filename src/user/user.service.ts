@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -52,8 +57,11 @@ import { PointTxType, ReferralTxType } from 'src/shared/enum/txType.enum';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { CampaignService } from 'src/campaign/campaign.service';
 import { ClaimApproach } from 'src/shared/enum/campaign.enum';
-import { ethers } from 'ethers';
+import { ethers, formatEther } from 'ethers';
 import { ERC20, ERC20__factory } from 'src/contract';
+import { QueueService } from 'src/queue/queue.service';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { Job } from 'bullmq';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -68,7 +76,7 @@ type GenerateOtpEvent = {
 };
 
 @Injectable()
-export class UserService {
+export class UserService implements OnModuleInit {
   private readonly logger = new Logger(UserService.name);
   telegramOTPBotUserName: string;
   TG_LOGIN_WIDGET_BOT_TOKEN: string;
@@ -93,12 +101,33 @@ export class UserService {
     private configService: ConfigService,
     private creditService: CreditService,
     private campaignService: CampaignService,
+    private queueService: QueueService,
   ) {
     this.telegramOTPBotUserName = this.configService.get(
       'TELEGRAM_OTP_BOT_USERNAME',
     );
     this.TG_LOGIN_WIDGET_BOT_TOKEN = this.configService.get(
       'TG_LOGIN_WIDGET_BOT_TOKEN',
+    );
+  }
+
+  onModuleInit() {
+    this.queueService.registerHandler(
+      QueueName.TERMINATE,
+      QueueType.RECALL_GAMEUSD,
+      {
+        jobHandler: this._recallGameUsd.bind(this),
+        failureHandler: this._onTerminationFailed.bind(this),
+      },
+    );
+
+    this.queueService.registerHandler(
+      QueueName.TERMINATE,
+      QueueType.RECALL_GAS,
+      {
+        jobHandler: this._recallGas.bind(this),
+        failureHandler: this._onTerminationFailed.bind(this),
+      },
     );
   }
 
@@ -911,31 +940,30 @@ export class UserService {
       return { error: 'user.NOT_FOUND', data: null };
     }
 
-    if (user.status === UserStatus.TERMINATED) {
-      return {
-        data: {
-          message: 'Already Terminated',
-        },
-      };
-    }
-
     user.status = UserStatus.TERMINATED;
     await this.userRepository.save(user);
-    let signer: ethers.Wallet;
-    try {
-      const chainId = this.configService.get('BASE_CHAIN_ID');
-      const providerUrl = this.configService.get(`PROVIDER_RPC_URL_${chainId}`);
-      const provider = new ethers.JsonRpcProvider(providerUrl);
-      signer = new ethers.Wallet(
-        await MPC.retrievePrivateKey(user.wallet.walletAddress),
-        provider,
-      );
-    } catch (error) {
-      return { error: 'Failed to get private key', data: null };
-    }
 
-    // get gameUsd
+    return { error: null, data: user };
+  }
+
+  private async _recallGameUsd(job: Job<{ userId: number }>) {
+    const { userId } = job.data;
+
     try {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['wallet'],
+      });
+      if (!user.wallet) {
+        //when the user account is still in pending status, wallet is not created yet
+        return;
+      }
+      const signer = await this._getSigner(user.wallet.walletAddress);
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        user.wallet.walletAddress,
+        this.configService.get('BASE_CHAIN_ID'),
+      );
       const gameUsdContract = this.getTokenContract(
         this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
         signer,
@@ -943,17 +971,28 @@ export class UserService {
       const gameUsdBalance = await gameUsdContract.balanceOf(
         user.wallet.walletAddress,
       );
-      await this.transferToken(
-        gameUsdContract,
-        this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
-        gameUsdBalance,
-      );
+      if (gameUsdBalance > 0n) {
+        await this.transferToken(
+          gameUsdContract,
+          this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
+          gameUsdBalance,
+        );
+      }
     } catch (error) {
-      errors.push('Failed to transfer gameUSD back');
+      this.logger.error('Failed to recall gameUsd', error.stack);
+      throw new Error('Failed to recall gameUsd');
     }
+  }
 
-    //get gas
+  private async _recallGas(job: Job<{ userId: number }>) {
+    const { userId } = job.data;
     try {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['wallet'],
+      });
+      const signer = await this._getSigner(user.wallet.walletAddress);
+
       const opBnbBalance = await signer.provider.getBalance(signer.address);
       const gasEstimate = await signer.estimateGas({
         to: user.wallet.walletAddress,
@@ -965,17 +1004,36 @@ export class UserService {
           value: opBnbBalance - gasEstimate,
         });
       } else {
-        errors.push('Gas required to transfer back is not enough');
+        await this.adminNotificationService.setAdminNotification(
+          `Failed to recall gas for user ${userId}. Amount too low to recover.  
+            \nAvailable ${formatEther(opBnbBalance)} `,
+          'recallGasError',
+          'Recall Gas Error',
+          false,
+        );
       }
     } catch (error) {
-      errors.push('Failed to transfer gas back');
+      this.logger.error('Failed to recall gas', error.stack);
+      throw new Error('Failed to recall gas');
     }
+  }
 
-    if (errors.length > 0) {
-      return { error: errors, data: null };
+  private async _onTerminationFailed() {}
+
+  private async _getSigner(walletAddress: string): Promise<ethers.Wallet> {
+    try {
+      const chainId = this.configService.get('BASE_CHAIN_ID');
+      const providerUrl = this.configService.get(`PROVIDER_RPC_URL_${chainId}`);
+      const provider = new ethers.JsonRpcProvider(providerUrl);
+      const signer = new ethers.Wallet(
+        await MPC.retrievePrivateKey(walletAddress),
+        provider,
+      );
+      return signer;
+    } catch (error) {
+      this.logger.error('Failed to get signer', error.stack);
+      throw new Error('Failed to get signer');
     }
-
-    return { error: null, data: user };
   }
 
   private getTokenContract(tokenAddress: string, signer: ethers.Wallet) {
