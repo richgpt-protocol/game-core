@@ -312,15 +312,12 @@ Today date: ${new Date().toDateString()}.`;
       await this.userWalletRepository.save(userWallet);
 
       // inform user
-      await this.userService.setUserNotification(
-        userWallet.id,
-        {
-          type: 'getXpNotification',
-          title: 'XP Reward Get',
-          message: `You get ${pointAmount} XP reward from daily conversation with Professor FUYO.`,
-          walletTxId: null,
-        }
-      );
+      await this.userService.setUserNotification(userWallet.id, {
+        type: 'getXpNotification',
+        title: 'XP Reward Get',
+        message: `You get ${pointAmount} XP reward from daily conversation with Professor Fuyo.`,
+        walletTxId: null,
+      });
     }
 
     return replies;
