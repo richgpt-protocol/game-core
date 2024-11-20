@@ -1034,6 +1034,10 @@ export class UserService {
           referralUserId: userId,
           referralType: ReferralTxType.PRIZE,
         },
+        {
+          referralUserId: userId,
+          referralType: ReferralTxType.SET_REFERRAL,
+        },
       ],
       relations: { user: true },
       order: { createdDate: 'DESC' },
