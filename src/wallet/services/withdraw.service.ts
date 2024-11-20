@@ -324,6 +324,12 @@ export class WithdrawService implements OnModuleInit {
         walletTxId: walletTx.id,
       });
 
+      await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+        userId,
+        'Redeem Processed Successfully',
+        `Your redeem of $${payload.amount} has been successfully processed and pending for review.`,
+      );
+
       // await this.adminNotificationService.setAdminNotification(
       //   `User ${userId} has requested withdrawl of amount ${payload.amount} USD`,
       //   'WITHDRAWL_REQUEST',
@@ -418,6 +424,12 @@ export class WithdrawService implements OnModuleInit {
           message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
           walletTxId: walletTx.id,
         });
+
+        await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+          walletTx.userWalletId,
+          'Redeem Request Rejected',
+          `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
+        );
       }
       return { error: null, data: redeemTx };
     } catch (error) {
@@ -603,6 +615,12 @@ export class WithdrawService implements OnModuleInit {
             message: `Your payout for amount $${Number(redeemTx.amount)} has been processed successfully.`,
             walletTxId: redeemTx.walletTx.id,
           },
+        );
+
+        await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+          redeemTx.walletTx.userWalletId,
+          'Payout Successfully',
+          `Your payout for amount $${Number(redeemTx.amount)} has been processed successfully.`,
         );
       }
     } catch (error) {

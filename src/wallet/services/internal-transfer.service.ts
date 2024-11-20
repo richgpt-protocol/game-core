@@ -388,6 +388,11 @@ export class InternalTransferService {
             message: 'Your Transfer has been successfully processed',
             walletTxId: senderWalletTx.id,
           });
+          await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+            senderUserWallet.userId,
+            'Transfer Processed Successfully',
+            'Your Transfer has been successfully processed',
+          );
 
           await this.userService.setUserNotification(
             receiverUserWallet.userId,
@@ -397,6 +402,12 @@ export class InternalTransferService {
               message: 'You have received GameUSD',
               walletTxId: receiverWalletTx.id,
             },
+          );
+
+          await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+            receiverUserWallet.userId,
+            'Received GameUSD Transfer',
+            'You have received GameUSD',
           );
 
           this.eventEmitter.emit(

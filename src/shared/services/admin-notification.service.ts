@@ -1,16 +1,23 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
+import { User } from 'src/user/entities/user.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
-import { Connection, Repository } from 'typeorm';
+import { Connection, DataSource, Repository } from 'typeorm';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { ConfigService } from 'src/config/config.service';
 import { WebClient } from '@slack/web-api';
+import * as admin from 'firebase-admin';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class AdminNotificationService {
   private readonly logger = new Logger(AdminNotificationService.name);
+
+  private firebasetokens = new Map<string, string>(); 
 
   private bot: TelegramBot;
   // private tg_admins: Array<string>;
@@ -25,6 +32,9 @@ export class AdminNotificationService {
     private userNotificationRepository: Repository<UserNotification>,
     @InjectRepository(Admin)
     private adminRepository: Repository<Admin>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    private dataSource: DataSource,
     private configService: ConfigService,
     private connection: Connection,
   ) {
@@ -43,6 +53,42 @@ export class AdminNotificationService {
 
     if (this.slackToken) {
       this.slackClient = new WebClient(this.slackToken);
+    }
+
+    this.initializeFirebase();
+  }
+
+  private initializeFirebase() {
+     const serviceAccount =    {
+      projectId: this.configService.get('PROJECT_ID'),
+      clientEmail: this.configService.get('CLIENT_EMAIL'),
+      privateKey: this.configService.get('PRIVATE_KEY').replace(/\\n/g, '\n'),
+      type: this.configService.get('TYPE'),
+      project_id: this.configService.get('PROJECT_ID'),
+      private_key_id: this.configService.get('PRIVATE_KEY_ID'),
+      private_key: this.configService.get('PRIVATE_KEY').replace(/\\n/g, '\n'),
+      client_email: this.configService.get('CLIENT_EMAIL'),
+      client_id: this.configService.get('CLIENT_ID'),
+      auth_uri: this.configService.get('AUTH_URI'),
+      token_uri: this.configService.get('TOKEN_URI'),
+      auth_provider_x509_cert_url: this.configService.get('AUTH_PROVIDER_X509_CERT_URL'),
+      client_x509_cert_url:this.configService.get('CLIENT_X509_CERT_URL'),
+      universe_domain:this.configService.get('UNIVERSE_DOMAIN')
+    }
+
+    if (!admin.apps.length) {
+      try {
+        admin.initializeApp({
+          credential: admin.credential.cert(
+            serviceAccount
+        ),
+          storageBucket: this.configService.get('STORAGE_BUCKET'),
+        });
+        this.logger.log('Firebase initialized successfully');
+      } catch (error) {
+        this.logger.error('Error initializing Firebase:', error.message);
+        throw new Error('Firebase initialization failed');
+      }
     }
   }
 
@@ -139,5 +185,67 @@ export class AdminNotificationService {
         this.logger.error('Error sending message to slack', error);
       }
     }
+  }
+
+  async sendUserFirebase_TelegramNotification(userId: number, title: string, message: string) {
+      try {
+        const queryRunner = this.dataSource.createQueryRunner();
+        const user = await queryRunner.manager.findOne(User, {
+          where: {
+            id: userId,
+          },
+        });
+        //telegram
+        this.bot.sendMessage(user.tgId, message);
+        //firebase
+        const payload: admin.messaging.Message = {
+          token: user.fcm,
+          notification: {
+            title,
+            body: message,
+          },
+        };
+        await admin.messaging().send(payload);
+        this.logger.log(`Sending notification Success for User`);
+
+      } catch (error) {
+        this.logger.error(`Error sending notification: `, error.message);
+      }
+  }
+
+  async firebaseSendAllUserNotification(image: string, title: string, message: string) {
+    const data = await this.userRepository
+      .createQueryBuilder('user')
+      .select([
+        'user.fcm',
+        'user.id',
+        'wallet.walletAddress',
+      ])
+      .leftJoin('user.wallet', 'wallet')
+      .getManyAndCount();
+    const users = data[0];
+    const results = [];
+
+    for (const user of users) {
+      try {
+        const payload: admin.messaging.Message = {
+          token: user.fcm,
+          notification: {
+            title,
+            body: message,
+            imageUrl: image,
+          },
+        };
+  
+        const response = await admin.messaging().send(payload);
+        this.logger.log(`Notification Success for User ${user.id}: ${JSON.stringify(response)}`);
+        results.push({ userId: user.id, status: 'success', response });
+      } catch (error) {
+        this.logger.error(`Notification Failed for User ${user.id}:`, error.message);
+        results.push({ userId: user.id, status: 'failed', error: error.message });
+      }
+    }
+
+    return results;
   }
 }

@@ -879,6 +879,11 @@ export class DepositService implements OnModuleInit {
         message: 'Your Deposit has been successfully processed',
         walletTxId: walletTx.id,
       });
+      await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+        walletTx.userWallet.userId,
+        'Deposit Processed Successfully',
+        'Your Deposit has been successfully processed',
+      );
     } catch (error) {
       this.logger.error(
         'handleGameUsdTxHash() error within queryRunner, error:',

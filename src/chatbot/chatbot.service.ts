@@ -320,6 +320,12 @@ Today date: ${new Date().toDateString()}.`;
           walletTxId: null,
         }
       );
+
+      await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+        userId,
+        'XP Reward Get',
+        'You get 1 xp reward from daily conversation with Professor Rich.',
+      );
     }
 
     return replies;

@@ -635,7 +635,7 @@ export class UserService {
       });
 
       const tgUrl = `https://t.me/${this.telegramOTPBotUserName}?start=${user.uid}`;
-
+      await this.updateFcmToken(user, payload.fcm);
       return { error: null, data: { tgUrl, ...user } };
     } else {
       // pass to handleGenerateOtpEvent() to generate and send otp
@@ -643,9 +643,22 @@ export class UserService {
         userId: user.id,
         phoneNumber: user.phoneNumber,
       });
+      await this.updateFcmToken(user, payload.fcm);
     }
 
     return { error: null, data: user };
+  }
+
+  async updateFcmToken(user: User, fcmToken: string): Promise<void> {
+
+    if (!fcmToken || fcmToken.trim().length === 0) {
+      return;
+    }
+    if (!user.fcm || user.fcm !== fcmToken) {
+        console.log(`Updating FCM token for user ID: ${user.id}`);
+        user.fcm = fcmToken;
+        await this.userRepository.save(user);
+    } 
   }
 
   @OnEvent('user.service.otp', { async: true })
