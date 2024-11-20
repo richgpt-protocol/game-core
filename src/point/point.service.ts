@@ -576,7 +576,7 @@ export class PointService {
     let leaderboard = [];
 
     if (lastAvailableSnapshot) {
-      if (endDate.getTime() > lastAvailableSnapshot.snapshotDate.getTime()) {
+      if (endDate.getDate() > lastAvailableSnapshot.snapshotDate.getDate()) {
         //don't have this snapshot. calculate from userWallet table
 
         //get current top users. Subtract last snapshot points from current points
