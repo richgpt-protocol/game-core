@@ -686,9 +686,10 @@ export class PointService {
 
   /// Takes snapshot for 1 week
   /// if startDate is not provided, it will take snapshot for the current week
+  /// i.e The cron that's supposed to run this Monday (Last week Monday to this week)
   async snapshotPoints(startDate?: Date) {
     /**
-     * If startDate is given get the startOfWeek(Monday 00:00) of that date. If not use previous weeks's Monday. //TODO
+     * If startDate is given get the startOfWeek(Monday 00:00) of that date. If not use previous weeks's Monday.
      * Get all the wallets in userwallet table
      * Find the latest entry of userWallet in pointTx table during the week.
      * If there are no entries during the week, use the latest value from any of the previous week.
