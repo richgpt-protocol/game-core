@@ -13,6 +13,7 @@ import { Admin } from 'src/admin/entities/admin.entity';
 import { UserModule } from 'src/user/user.module';
 import { ConfigService } from 'src/config/config.service';
 import { User } from 'src/user/entities/user.entity';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 @Module({
   imports: [
@@ -29,7 +30,7 @@ import { User } from 'src/user/entities/user.entity';
     UserModule,
     CacheModule.register()
   ],
-  providers: [ChatbotService, ConfigService],
+  providers: [ChatbotService, AdminNotificationService, ConfigService],
   controllers: [ChatbotController],
   exports: [],
 })
