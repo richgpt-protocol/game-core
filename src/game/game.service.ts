@@ -94,10 +94,20 @@ export class GameService implements OnModuleInit {
       // clear cache for handleLiveDrawResult() to return empty array
       this.cacheSettingService.clear();
 
-      // set bet close in game record for current epoch
+      // set bet close in game record for last hour epoch (add 10 seconds just in case)
+      const lastHour = new Date(Date.now() - 60 * 60 * 1000 + (10*1000));
+      const lastHourUTC = new Date(
+        lastHour.getUTCFullYear(),
+        lastHour.getUTCMonth(),
+        lastHour.getUTCDate(),
+        lastHour.getUTCHours(),
+        lastHour.getUTCMinutes(),
+        lastHour.getUTCSeconds(),
+      );
       const game = await queryRunner.manager
         .createQueryBuilder(Game, 'game')
-        .where('game.isClosed = :isClosed', { isClosed: false })
+        .where('game.startDate < :lastHourUTC', { lastHourUTC })
+        .andWhere('game.endDate > :lastHourUTC', { lastHourUTC })
         .getOne();
       game.isClosed = true;
       await queryRunner.manager.save(game);
@@ -935,6 +945,54 @@ export class GameService implements OnModuleInit {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, prizeIndex, ...rest } = result;
       return rest;
+    });
+  }
+
+  async setFallbackDrawResults(gameId: number): Promise<Array<DrawResult>> {
+    // generate 33 unique random numbers between 0 and 9999
+    const winningNumbers: number[] = [];
+    while (winningNumbers.length < 33) {
+      let randomNumber: number;
+      do {
+        randomNumber = Math.floor(Math.random() * 10000);
+      } while (winningNumbers.includes(randomNumber)); // generate another random number if already exists
+      winningNumbers.push(randomNumber);
+    }
+
+    // convert winningNumbers to string(i.e. 1 to '0001')
+    let winningNumberPairs = winningNumbers.map((number) => {
+      let numberString = number.toString();
+      if (numberString.length < 4) {
+        numberString = '0'.repeat(4 - numberString.length) + numberString;
+      }
+      return numberString;
+    });
+
+    // create draw_result record and save into database
+    const drawResult = this.drawResultRepository;
+    for (let index = 0; index < winningNumberPairs.length; index++) {
+      const numberPair = winningNumberPairs[index];
+      await drawResult.save(
+        drawResult.create({
+          prizeCategory:
+            index === 0
+              ? '1' // first
+              : index === 1
+                ? '2' // second
+                : index === 2
+                  ? '3' // third
+                  : index >= 3 && index <= 12
+                    ? 'S' // special
+                    : 'C', // consolation
+          prizeIndex: index, // for smart contract
+          numberPair: numberPair,
+          gameId,
+        }),
+      );
+    }
+
+    return this.drawResultRepository.find({
+      where: { gameId },
     });
   }
 }

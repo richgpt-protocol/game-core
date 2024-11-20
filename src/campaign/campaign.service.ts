@@ -8,7 +8,7 @@ import {
   QueryRunner,
   Repository,
 } from 'typeorm';
-import { CreateCampaignDto } from './dto/campaign.dto';
+import { CreateCampaignDto, ExecuteClaimDto } from './dto/campaign.dto';
 import { ClaimApproach } from 'src/shared/enum/campaign.enum';
 import { User } from 'src/user/entities/user.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
@@ -101,10 +101,45 @@ export class CampaignService {
     }
   }
 
+  async manualExecuteClaim(params: ExecuteClaimDto) {
+    const queryRunner = this.datasource.createQueryRunner();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const creditWalletTx = await this.executeClaim(
+        params.claimApproach,
+        params.userId,
+        queryRunner,
+      );
+
+      if (creditWalletTx) {
+        await queryRunner.commitTransaction();
+
+        await this.creditService.addToQueue(creditWalletTx.id);
+      } else {
+        throw new BadRequestException(
+          'Claim not executed. Might have claimed already',
+        );
+      }
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      this.logger.error('failed to execute claim', error.stack);
+
+      throw new BadRequestException('Failed to execute claim');
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  // IF this method is modified in future, please check and update the manualExecuteClaim() method too
   async executeClaim(
     claimApproach: ClaimApproach,
     userId: number,
-    queryRunner?: QueryRunner,
+    queryRunner: QueryRunner,
   ): Promise<CreditWalletTx> {
     try {
       const userInfo = await queryRunner.manager.findOne(User, {
@@ -153,8 +188,7 @@ export class CampaignService {
       for (const campaign of campaigns) {
         const hasUserClaimed = campaign.creditWalletTx.some(
           (tx) =>
-            tx.walletId === userInfo.wallet.id &&
-            tx.campaign.id === campaign.id,
+            tx.walletId === userInfo.wallet.id && tx.campaignId === campaign.id,
         );
 
         if (hasUserClaimed) continue;
@@ -242,7 +276,7 @@ export class CampaignService {
       const hasUserClaimed = defaultCampaign.creditWalletTx.some(
         (tx) =>
           tx.walletId === userInfo.wallet.id &&
-          tx.campaign.id === defaultCampaign.id,
+          tx.campaignId === defaultCampaign.id,
       );
 
       if (hasUserClaimed) return;
@@ -290,7 +324,7 @@ export class CampaignService {
       (tx) => tx.status === TxStatus.SUCCESS,
     );
 
-    return successfulClaims.length < campaign.maxNumberOfClaims;
+    return successfulClaims.length <= campaign.maxNumberOfClaims;
   }
 
   async findActiveCampaigns() {
