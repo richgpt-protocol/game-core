@@ -551,6 +551,7 @@ export class PointService {
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay());
+    startOfWeek.setDate(startOfWeek.getDate() + 1); //monday
     startOfWeek.setHours(0, 0, 0, 0); // Set to the start of the day
 
     const endOfWeek = new Date(startOfWeek);
@@ -741,7 +742,6 @@ export class PointService {
         return { error: 'Snapshot already present' };
       }
 
-      console.log('startOfWeek', startOfWeek, endOfWeek);
       const allWallets = await queryRunner.manager.find(UserWallet, {
         relations: ['user'],
       });
