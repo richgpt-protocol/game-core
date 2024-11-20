@@ -522,6 +522,7 @@ export class PointService {
       .select('user.uid', 'uid')
       .leftJoinAndSelect('user.wallet', 'wallet')
       .addSelect('wallet.pointBalance', 'pointBalance')
+      .where('user.status = :status', { status: UserStatus.ACTIVE })
       .orderBy('wallet.pointBalance', 'DESC')
       .limit(limit)
       .getRawMany();
@@ -587,6 +588,7 @@ export class PointService {
           .addSelect('wallet.pointBalance', 'pointBalance')
           .from(User, 'user')
           .leftJoin('user.wallet', 'wallet')
+          .where('user.status = :status', { status: UserStatus.ACTIVE })
           .orderBy('wallet.pointBalance', 'DESC')
           .limit(limit)
           .getRawMany();
@@ -612,6 +614,7 @@ export class PointService {
               .getQuery();
             return `leaderboard.snapshotDate = (${subQuery})`;
           })
+          .andWhere('user.status = :status', { status: UserStatus.ACTIVE })
           .andWhere('user.uid IN (:...uids)', { uids })
           .groupBy('leaderboard.walletId')
           .addGroupBy('user.uid')
@@ -664,6 +667,7 @@ export class PointService {
       .leftJoin('user.wallet', 'wallet', 'wallet.id = leaderboard.walletId')
       .where('leaderboard.snapshotDate >= :startDate', { startDate })
       .andWhere('leaderboard.snapshotDate <= :endDate', { endDate })
+      .andWhere('user.status = :status', { status: UserStatus.ACTIVE })
       .groupBy('leaderboard.walletId')
       .addGroupBy('user.uid')
       .orderBy('totalXp', 'DESC')
