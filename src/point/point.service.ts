@@ -4,7 +4,7 @@ import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { User } from 'src/user/entities/user.entity';
-import { DataSource, Repository, Like, Brackets } from 'typeorm';
+import { DataSource, Repository, Like, Brackets, Between, In } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { PointTx } from './entities/point-tx.entity';
@@ -684,16 +684,22 @@ export class PointService {
     return result;
   }
 
-  @Cron(CronExpression.EVERY_HOUR)
-  async updateLeaderBoard() {
-    const today = new Date();
-    const oneWeek = 7 * 24 * 60 * 60 * 1000;
-
+  /// Takes snapshot for 1 week
+  /// if startDate is not provided, it will take snapshot for the current week
+  async snapshotPoints(startDate?: Date) {
+    /**
+     * If startDate is given get the startOfWeek(Monday 00:00) of that date. If not use previous weeks's Monday. //TODO
+     * Get all the wallets in userwallet table
+     * Find the latest entry of userWallet in pointTx table during the week.
+     * If there are no entries during the week, use the latest value from any of the previous week.
+     * If there are no entries for the specific walletId, use 0
+     *
+     */
     const queryRunner = this.dataSource.createQueryRunner();
-
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
+
       const lastSnapshot = await queryRunner.manager.findOne(PointSnapshot, {
         where: {},
         order: {
@@ -701,48 +707,156 @@ export class PointService {
         },
       });
 
-      if (
-        lastSnapshot &&
-        today.getTime() - lastSnapshot.snapshotDate.getTime() < oneWeek
-      ) {
-        return;
+      const startOfWeek = startDate ? new Date(startDate) : new Date();
+      if (!startDate) {
+        //startDate is not given so use previous week's Monday.
+        //This block is executed when the cron runs every Monday
+
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const daysToSubtract = dayOfWeek == 0 ? 6 : dayOfWeek - 1;
+        startOfWeek.setDate(today.getDate() - daysToSubtract - 7); // Set to the previous Monday
+        startOfWeek.setHours(0, 0, 0, 0); // Set to the start of the day
+      } else {
+        startOfWeek.setDate(startDate.getDate() - startDate.getDay()); //sunday
+        startOfWeek.setDate(startOfWeek.getDate() + 1); //monday
+        startOfWeek.setHours(0, 0, 0, 0); // Set to the start of the day
       }
-      const userWallets = await queryRunner.manager.find(UserWallet, {
-        where: {
-          user: {
-            status: UserStatus.ACTIVE,
-          },
-        },
-        order: {
-          pointBalance: 'DESC',
-        },
+
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999); // Set to the end of the day
+
+      //skip if the snapshot is taken for the future date (i.e endDate is in the future)
+      if (endOfWeek > new Date()) {
+        return { error: 'Snapshot for future date is not allowed' };
+      }
+
+      if (lastSnapshot && startDate && startDate <= lastSnapshot.snapshotDate) {
+        return { error: 'Snapshot already present for given date' };
+      }
+
+      if (lastSnapshot && startOfWeek <= lastSnapshot.snapshotDate) {
+        return { error: 'Snapshot already present' };
+      }
+
+      console.log('startOfWeek', startOfWeek, endOfWeek);
+      const allWallets = await queryRunner.manager.find(UserWallet, {
         relations: ['user'],
       });
-      const snapshotDate = new Date();
-      const leaderboard = userWallets.map((userWallet) => {
+      const walletIds = allWallets.map((wallet) => wallet.id);
+
+      //PointTxn during the given week
+      const pointTxns = await queryRunner.manager
+        .createQueryBuilder(PointTx, 'pointTx')
+        .innerJoin(
+          (qb) => {
+            return qb
+              .subQuery()
+              .select('MAX(pt.createdDate)', 'latestDate')
+              .addSelect('pt.walletId', 'walletId')
+              .from(PointTx, 'pt')
+              .where('pt.walletId IN (:...walletIds)', { walletIds })
+              .andWhere('pt.createdDate BETWEEN :startOfWeek AND :endOfWeek', {
+                startOfWeek,
+                endOfWeek,
+              })
+              .groupBy('pt.walletId');
+          },
+          'latestPointTx',
+          'pointTx.walletId = latestPointTx.walletId AND pointTx.createdDate = latestPointTx.latestDate',
+        )
+        .getMany();
+
+      const snapshotDate = endOfWeek;
+      const xpFromPointTable = pointTxns.reduce((acc, pointTxn) => {
+        if (!acc[pointTxn.walletId]) {
+          acc[pointTxn.walletId] = {
+            walletId: pointTxn.walletId,
+            xp: pointTxn.endingBalance,
+          };
+        }
+        return acc;
+      }, {});
+
+      //Wallets that doesn't have any records in the given week.
+      const walletsWithoutPointTxRecord = allWallets.filter(
+        (wallet) => !xpFromPointTable[wallet.id],
+      );
+
+      //fetch the latest pointTx record for each wallet before the startOfWeek
+      const latestPointTxsBeforeStartOfWeek = await queryRunner.manager
+        .createQueryBuilder(PointTx, 'pointTx')
+        .innerJoin(
+          (qb) => {
+            return qb
+              .subQuery()
+              .select('MAX(pt.createdDate)', 'latestDate')
+              .addSelect('pt.walletId', 'walletId')
+              .from(PointTx, 'pt')
+              .where('pt.walletId IN (:...walletIds)', {
+                walletIds: walletsWithoutPointTxRecord.map(
+                  (wallet) => wallet.id,
+                ),
+              })
+              .andWhere('pt.createdDate < :startOfWeek', { startOfWeek })
+              .groupBy('pt.walletId');
+          },
+          'latestPointTx',
+          'pointTx.walletId = latestPointTx.walletId AND pointTx.createdDate = latestPointTx.latestDate',
+        )
+        .getMany();
+
+      const previousPointTxRecord = latestPointTxsBeforeStartOfWeek.reduce(
+        (acc, tx) => {
+          if (!acc[tx.walletId]) {
+            acc[tx.walletId] = {
+              xp: tx.endingBalance,
+            };
+          }
+          return acc;
+        },
+        {},
+      );
+
+      const leaderBoard = allWallets.map((wallet) => {
         const leaderBoard = new PointSnapshot();
-        leaderBoard.walletId = userWallet.id;
-        leaderBoard.xp = userWallet.pointBalance;
+        leaderBoard.walletId = wallet.id;
+        leaderBoard.xp = xpFromPointTable[wallet.id]
+          ? xpFromPointTable[wallet.id].xp
+          : previousPointTxRecord[wallet.id]
+            ? previousPointTxRecord[wallet.id].xp
+            : 0;
         leaderBoard.snapshotDate = snapshotDate;
-        leaderBoard.user = userWallet.user;
+        leaderBoard.user = wallet.user;
         return leaderBoard;
       });
 
-      // console.log(leaderboard);
-
-      await queryRunner.manager.save(leaderboard);
+      await queryRunner.manager.save(leaderBoard);
       await queryRunner.commitTransaction();
     } catch (error) {
       console.error(error);
       await queryRunner.rollbackTransaction();
-      await this.adminNotificationService.setAdminNotification(
-        `Leaderboard snapshot cron failed with error ${error}`,
-        'leaderboardSnapshotError',
-        'Leaderboard Snapshot Error',
-        true,
-      );
+
+      throw new Error(error.message);
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
+  @Cron('0 * * * 1') // every hour on monday
+  async updateLeaderBoard() {
+    try {
+      //returns if there is a record for this week
+      await this.snapshotPoints();
+    } catch (error) {
+      console.error(error.message);
+      this.adminNotificationService.setAdminNotification(
+        `Leaderboard snapshot cron failed with error ${error.message}`,
+        'LeaderboardSnapshotCronError',
+        'Leaderboard Snapshot Cron error',
+        true,
+      );
     }
   }
 }
