@@ -4,7 +4,7 @@ import { Admin } from 'src/admin/entities/admin.entity';
 import { User } from 'src/user/entities/user.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
-import { Connection, Repository } from 'typeorm';
+import { Connection, DataSource, Repository } from 'typeorm';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { ConfigService } from 'src/config/config.service';
 import { WebClient } from '@slack/web-api';
@@ -34,6 +34,7 @@ export class AdminNotificationService {
     private adminRepository: Repository<Admin>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private dataSource: DataSource,
     private configService: ConfigService,
     private connection: Connection,
   ) {
@@ -186,7 +187,33 @@ export class AdminNotificationService {
     }
   }
 
-  async firebasesendNotification(image: string, title: string, message: string) {
+  async sendUserFirebase_TelegramNotification(userId: number, title: string, message: string) {
+      try {
+        const queryRunner = this.dataSource.createQueryRunner();
+        const user = await queryRunner.manager.findOne(User, {
+          where: {
+            id: userId,
+          },
+        });
+        //telegram
+        this.bot.sendMessage(user.tgId, message);
+        //firebase
+        const payload: admin.messaging.Message = {
+          token: user.fcm,
+          notification: {
+            title,
+            body: message,
+          },
+        };
+        await admin.messaging().send(payload);
+        this.logger.log(`Sending notification Success for User`);
+
+      } catch (error) {
+        this.logger.error(`Error sending notification: `, error.message);
+      }
+  }
+
+  async firebaseSendAllUserNotification(image: string, title: string, message: string) {
     const data = await this.userRepository
       .createQueryBuilder('user')
       .select([

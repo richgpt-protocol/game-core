@@ -510,6 +510,7 @@ export class PointService {
         'Transaction Rollbacked',
         true,
       );
+      
     } finally {
       await queryRunner.release();
     }

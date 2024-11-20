@@ -650,12 +650,15 @@ export class UserService {
   }
 
   async updateFcmToken(user: User, fcmToken: string): Promise<void> {
-    if (!fcmToken) return;
-  
-    if (!user.fcm || user.fcm !== fcmToken) {
-      user.fcm = fcmToken;
-      await this.userRepository.save(user);
+
+    if (!fcmToken || fcmToken.trim().length === 0) {
+      return;
     }
+    if (!user.fcm || user.fcm !== fcmToken) {
+        console.log(`Updating FCM token for user ID: ${user.id}`);
+        user.fcm = fcmToken;
+        await this.userRepository.save(user);
+    } 
   }
 
   @OnEvent('user.service.otp', { async: true })

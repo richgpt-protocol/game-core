@@ -524,6 +524,11 @@ export class CreditService {
             walletTxId: creditWalletTx.id,
           },
         );
+        await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+          creditWalletTx.userWallet.userId,
+          'Credit Added Successfully',
+          'Your Credit has been added successfully',
+        );
       }
     } catch (error) {
       this.logger.error(error);

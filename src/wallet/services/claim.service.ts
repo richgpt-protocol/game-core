@@ -453,6 +453,11 @@ export class ClaimService {
         message: 'Your claim has been successfully processed',
         walletTxId: walletTx.id,
       });
+      await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+        payload.userId,
+       'Claim Processed Successfully',
+       'Your claim has been successfully processed',
+      );
     }
   }
 

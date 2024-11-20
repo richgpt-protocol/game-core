@@ -49,6 +49,7 @@ import { randomUUID } from 'crypto';
 import { PointTxType } from 'src/shared/enum/txType.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 interface SubmitBetJobDTO {
   userWalletId: number;
@@ -81,6 +82,7 @@ export class BetService implements OnModuleInit {
     private readonly pointService: PointService,
     private readonly userService: UserService,
     private readonly queueService: QueueService,
+    private adminNotificationService: AdminNotificationService,
   ) {}
   onModuleInit() {
     // Executed when distributing referral rewards for betting
@@ -1164,6 +1166,12 @@ export class BetService implements OnModuleInit {
         message: 'Your Buy has been successfully processed',
         gameUsdTxId: gameUsdTx.id,
       });
+
+      await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+        user.id,
+        'Buy Order Processed Successfully',
+        'Your Buy has been successfully processed',
+      );
     } catch (error) {
       this.logger.error(error);
       await queryRunner.rollbackTransaction();

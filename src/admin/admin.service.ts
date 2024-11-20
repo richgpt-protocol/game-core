@@ -310,7 +310,7 @@ export class AdminService {
 
 
   async pushNotification(image: string, title: string, message: string) {
-    const results = await this.adminNotificationService.firebasesendNotification(
+    const results = await this.adminNotificationService.firebaseSendAllUserNotification(
       image,
       title,
       message,
