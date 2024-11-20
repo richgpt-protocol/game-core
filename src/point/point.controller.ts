@@ -1,4 +1,12 @@
-import { Body, Controller, Get, HttpStatus, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpStatus,
+  InternalServerErrorException,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PointService } from './point.service';
 import { SetReferralPrizeBonusDto } from './points.dto';
@@ -23,6 +31,35 @@ export class PointController {
       message: 'Referral prize bonus has been set successfully',
       data: {},
     };
+  }
+
+  @Secure(null, UserRole.ADMIN)
+  @Post('leaderboard-snapshot')
+  async manualSnapshot(
+    @Body('startDate') startDate?: Date,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const result = await this.pointService.snapshotPoints(
+        startDate ? new Date(startDate) : null,
+      );
+
+      if (result && result.error) {
+        return {
+          statusCode: HttpStatus.BAD_REQUEST,
+          message: result.error,
+          data: {},
+        };
+      }
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Leaderboard snapshot has been taken successfully',
+        data: {},
+      };
+    } catch (error) {
+      console.error(error);
+      throw new InternalServerErrorException('Failed to take snapshot');
+    }
   }
 
   @Secure(null, UserRole.USER)
