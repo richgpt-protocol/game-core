@@ -31,8 +31,6 @@ export class AdminNotificationService {
     private userNotificationRepository: Repository<UserNotification>,
     @InjectRepository(Admin)
     private adminRepository: Repository<Admin>,
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
     private configService: ConfigService,
     private connection: Connection,
   ) {
