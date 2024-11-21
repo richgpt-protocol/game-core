@@ -61,10 +61,10 @@ export class AdminNotificationService {
   private initializeFirebase() {
      const serviceAccount =    {
       projectId: this.configService.get('PROJECT_ID'),
-      clientEmail: this.configService.get('CLIENT_EMAIL'),
-      privateKey: this.configService.get('PRIVATE_KEY').replace(/\\n/g, '\n'),
+      // clientEmail: this.configService.get('CLIENT_EMAIL'),
+      // privateKey: this.configService.get('PRIVATE_KEY').replace(/\\n/g, '\n'),
       type: this.configService.get('TYPE'),
-      project_id: this.configService.get('PROJECT_ID'),
+      // project_id: this.configService.get('PROJECT_ID'),
       private_key_id: this.configService.get('PRIVATE_KEY_ID'),
       private_key: this.configService.get('PRIVATE_KEY').replace(/\\n/g, '\n'),
       client_email: this.configService.get('CLIENT_EMAIL'),
