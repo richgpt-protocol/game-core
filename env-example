@@ -107,6 +107,7 @@ TG_API_ID=
 TG_API_HASH=
 
 TG_ADMIN_NOTIFIER_BOT_TOKEN= # Bot token for tg notifier bot
+TG_USER_NOTIFICATION_BOT_TOKEN= # Bot token for messages from back-office
 ADMIN_TG_CHAT_ID= # Chat id of admin group where notification will be sent
 
 TELEGRAM_OTP_BOT_TOKEN= #token of Bot that sends telegram OTP
@@ -127,3 +128,8 @@ MINI_GAME_USDT_SENDER= #address of USDT sender.
 # SLACK
 SLACK_TOKEN=
 SLACK_CHANNEL_ID=
+
+#env from rich-game-bot repo
+FUYO_BOT_WEBHOOK_SECRET=
+FUYO_BOT_TOKEN=
+FUYO_BOT_WEBHOOK_URL=

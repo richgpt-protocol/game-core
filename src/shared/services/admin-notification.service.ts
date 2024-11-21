@@ -3,16 +3,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
-import { Connection, Repository } from 'typeorm';
+import { Connection, In, Repository } from 'typeorm';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { ConfigService } from 'src/config/config.service';
 import { WebClient } from '@slack/web-api';
+import { User } from 'src/user/entities/user.entity';
+import {
+  NotificationType,
+  UserMessageDto,
+} from '../dto/admin-notification.dto';
 
 @Injectable()
 export class AdminNotificationService {
   private readonly logger = new Logger(AdminNotificationService.name);
 
   private bot: TelegramBot;
+  private userNotificationBot: TelegramBot;
   // private tg_admins: Array<string>;
   private TG_ADMIN_GROUP;
   private slackToken: string;
@@ -31,6 +37,12 @@ export class AdminNotificationService {
     this.TG_ADMIN_GROUP = this.configService.get('ADMIN_TG_CHAT_ID');
 
     // this.tg_admins = this.configService.get('ADMIN_TG_USERNAMES').split(',');
+    this.userNotificationBot = new TelegramBot(
+      this.configService.get('TG_USER_NOTIFICATION_BOT_TOKEN'),
+      {
+        polling: false,
+      },
+    );
     this.bot = new TelegramBot(
       this.configService.get('TG_ADMIN_NOTIFIER_BOT_TOKEN'),
       {
@@ -115,6 +127,101 @@ export class AdminNotificationService {
       throw new BadRequestException(err.message);
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  async sendUserMessage(payload: UserMessageDto) {
+    const { title, message, userIds, channels } = payload;
+    const queryRunner = this.connection.createQueryRunner();
+
+    //remove duplicate user ids
+    const uids = [...new Set(userIds)];
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      const users = await queryRunner.manager.find(User, {
+        where: {
+          uid: In(uids),
+        },
+      });
+
+      if (channels.includes(NotificationType.TELEGRAM)) {
+        const chatIds = users.filter((u) => !u.tgId);
+        if (chatIds.length > 0) {
+          throw new BadRequestException(
+            `User ${chatIds.map((u) => u.uid).join(', ')} does not have telegram id`,
+          );
+        }
+      }
+
+      const createQueries = [];
+      const tgErrors = [];
+
+      for (const u of users) {
+        if (channels.includes(NotificationType.INBOX)) {
+          const notification = this.notificationRepository.create({
+            title,
+            message,
+          });
+          await queryRunner.manager.save(notification);
+
+          const userNotification = queryRunner.manager.create(
+            UserNotification,
+            {
+              isRead: false,
+              user: u,
+              notification,
+            },
+          );
+          createQueries.push(userNotification);
+        }
+
+        if (channels.includes(NotificationType.TELEGRAM)) {
+          try {
+            const msg = `*${title}*\n \n ${message}`;
+            await this.userNotificationBot.sendMessage(u.tgId, msg, {
+              parse_mode: 'Markdown',
+            });
+          } catch (error) {
+            this.logger.error('Error sending message to telegram', error);
+            tgErrors.push(u.tgId);
+          }
+        }
+      }
+
+      if (createQueries.length > 0) {
+        await queryRunner.manager.save(UserNotification, createQueries);
+        await queryRunner.commitTransaction();
+      }
+
+      if (tgErrors.length > 0) {
+        const errorMsg = `Error sending Telegram message to ${tgErrors.join(', ')}`;
+        const message = channels.includes(NotificationType.INBOX)
+          ? `Inbox Message Sent successfully. ${errorMsg}`
+          : errorMsg;
+
+        return {
+          isError: true,
+          message,
+        };
+      } else {
+        return {
+          isError: false,
+          message: 'Message sent successfully',
+        };
+      }
+    } catch (error) {
+      this.logger.error('Error sending message to user', error);
+      await queryRunner.rollbackTransaction();
+      if (error instanceof BadRequestException) {
+        throw error;
+      } else {
+        throw new BadRequestException('Error sending message to user');
+      }
+    } finally {
+      if (!queryRunner.isReleased) {
+        await queryRunner.release();
+      }
     }
   }
 
