@@ -308,22 +308,4 @@ export class AdminService {
   //     .execute();
   // }
 
-
-  async pushNotification(image: string, title: string, message: string) {
-    const results = await this.adminNotificationService.firebaseSendAllUserNotification(
-      image,
-      title,
-      message,
-    );
-  
-    const failed = results.filter((result) => result.status === 'failed');
-    const success = results.filter((result) => result.status === 'success');
-  
-    return {
-      successCount: success.length,
-      failureCount: failed.length,
-      failures: failed,
-      successes: success,
-    };
-  }
 }

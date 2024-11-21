@@ -326,32 +326,4 @@ export class AdminController {
     }
   }
 
-  @SecureEJS(null, UserRole.ADMIN)
-  @Post('push-notification')
-  @ApiResponse({
-    status: 200,
-    description: 'Successful Response',
-    type: ResponseVo,
-  })
-  async sendNotification(
-    @Body() body: { image: string; title: string; message: string },
-  ) {
-    const { image, title, message } = body;
-
-    const result = await this.adminService.pushNotification(image, title, message);
-  
-    if (result.failureCount > 0) {
-      return {
-        success: false,
-        message: 'Notification push completed with some failures',
-        data: result,
-      };
-    } else {
-      return {
-        success: true,
-        message: 'All notifications pushed successfully',
-        data: result,
-      };
-    }
-  }
 }
