@@ -578,7 +578,7 @@ export class PointService {
     let leaderboard = [];
 
     if (lastAvailableSnapshot) {
-      if (endDate.getDate() > lastAvailableSnapshot.snapshotDate.getDate()) {
+      if (endDate.getTime() > lastAvailableSnapshot.snapshotDate.getTime()) {
         //don't have this snapshot. calculate from userWallet table
 
         //get current top users. Subtract last snapshot points from current points
@@ -631,7 +631,7 @@ export class PointService {
             uid: item.uid,
             pointBalance: item.pointBalance,
             totalXp: lastSnapshotMap[item.uid]
-              ? item.pointBalance - lastSnapshotMap[item.uid]
+              ? Number(item.pointBalance) - lastSnapshotMap[item.uid]
               : item.pointBalance,
             level: this.walletService.calculateLevel(item.pointBalance),
           };
@@ -644,7 +644,12 @@ export class PointService {
         leaderboard.sort((a, b) => b.totalXp - a.totalXp);
       } else {
         //we have this snapshot
-        leaderboard = await this.getLeaderBoard(startDate, endDate, limit);
+
+        // the snapshot is taken on the next monday after endDate (i.e next week)
+        const followingDay = new Date(endDate);
+        followingDay.setDate(endDate.getDate() + 1);
+
+        leaderboard = await this.getLeaderBoard(endDate, followingDay, limit);
         return leaderboard;
       }
     } else {
@@ -738,11 +743,11 @@ export class PointService {
         return { error: 'Snapshot for future date is not allowed' };
       }
 
-      if (lastSnapshot && startDate && startDate <= lastSnapshot.snapshotDate) {
+      if (lastSnapshot && startDate && startDate < lastSnapshot.snapshotDate) {
         return { error: 'Snapshot already present for given date' };
       }
 
-      if (lastSnapshot && startOfWeek <= lastSnapshot.snapshotDate) {
+      if (lastSnapshot && startOfWeek < lastSnapshot.snapshotDate) {
         return { error: 'Snapshot already present' };
       }
 
