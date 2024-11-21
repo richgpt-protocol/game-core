@@ -81,7 +81,7 @@ export class TelegramService {
   private async sendPostRequest(senderId: number) {
     try {
       const response = await axios.post(
-        this.configService.get('TELEGRAM_BOT_WEBHOOK_URL'),
+        this.configService.get('FUYO_BOT_WEBHOOK_URL'),
         {
           tgId: senderId,
         },
