@@ -5,12 +5,16 @@ import { User } from 'src/user/entities/user.entity';
 import { Telegraf } from 'telegraf';
 import { Repository } from 'typeorm';
 import { AdminNotificationService } from './admin-notification.service';
+import * as TelegramBot from 'node-telegram-bot-api';
 import { UserStatus } from '../enum/status.enum';
+import axios from 'axios';
 
 @Injectable()
 export class TelegramService {
   telegramOTPBot: Telegraf;
+  fuyoBot: TelegramBot;
   telegramOTPBotUserName: string;
+  fuyoBotWebhookSecret: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -29,6 +33,73 @@ export class TelegramService {
     this.telegramOTPBot.start((ctx) => this.handleStartCommand(ctx));
     this.telegramOTPBot.on('contact', (ctx) => this.handleContactSharing(ctx));
     this.telegramOTPBot.launch();
+
+    this.fuyoBotWebhookSecret = this.configService.get(
+      'FUYO_BOT_WEBHOOK_SECRET',
+    );
+    this.fuyoBot = new TelegramBot(this.configService.get('FUYO_BOT_TOKEN'), {
+      polling: true,
+    });
+
+    this.fuyoBot.onText(/\/start/, (msg) => this.handleStartFuyoBot(msg));
+  }
+
+  private handleStartFuyoBot(msg) {
+    const senderId = msg.from?.id || 0;
+    const chatId = msg.chat.id;
+    const photoUrl =
+      'https://storage.googleapis.com/fuyo-assets/Beta%20Mainnet.jpg';
+
+    // Define the inline keyboard
+    const inlineKeyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🎮 Play Now', web_app: { url: 'https://game.fuyo.lol/' } }],
+          [{ text: '📲 Download FUYO', url: 'https://app.fuyo.lol/' }],
+          [{ text: '🐦 Follow us on X', url: 'https://x.com/fuyoapp' }],
+          [{ text: '💬 Join the Community', url: 'https://t.me/fuyoapp' }],
+          [
+            {
+              text: '📖 Win a Share of 50k USDT',
+              url: 'https://medium.com/@fuyoapp/fuyo-beta-mainnet-launch-the-4d-lottery-game-you-didnt-know-you-needed-until-now-50-000-usdt-60f10d4dad64',
+            },
+          ],
+        ],
+      },
+    };
+
+    this.fuyoBot.sendPhoto(chatId, photoUrl, {
+      caption:
+        "<b>Fuyo Beta Mainnet  Launch: Bet Smarter, Win BIGGER!</b> 🚨\n\n<b>Win like you've NEVER won before</b>💥 Top players, top losers, referrals—<b>EVERYONE WINS</b>. Play smarter, bet crazier, and watch your bank balance EXPLODE. 💰\n\n<b>Sign up NOW to unlock  your $5 free credit and start winning!</b>  💸🔥\n\n<b>Tap. Play. Win.</b>\n<b>Get rich. Get Fuyo today.</b>",
+      parse_mode: 'HTML',
+      ...inlineKeyboard,
+    });
+
+    this.sendPostRequest(senderId);
+  }
+
+  private async sendPostRequest(senderId: number) {
+    try {
+      const response = await axios.post(
+        this.configService.get('TELEGRAM_BOT_WEBHOOK_URL'),
+        {
+          tgId: senderId,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.fuyoBotWebhookSecret}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      console.log('Response:', response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        console.error('Error response:', error.response.data);
+      } else {
+        console.error('Error message:', (error as any).message);
+      }
+    }
   }
 
   private async handleStartCommand(ctx) {
