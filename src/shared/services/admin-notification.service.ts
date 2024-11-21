@@ -195,19 +195,44 @@ export class AdminNotificationService {
             id: userId,
           },
         });
+        if (!user) {
+          this.logger.warn(`User with ID ${userId} not found.`);
+          return;
+        }    
         //telegram
-        this.bot.sendMessage(user.tgId, message);
-        //firebase
-        const payload: admin.messaging.Message = {
-          token: user.fcm,
-          notification: {
-            title,
-            body: message,
-          },
-        };
-        await admin.messaging().send(payload);
-        this.logger.log(`Sending notification Success for User`);
-
+        if (user.tgId && user.tgId.trim().length > 0) {
+          try {
+            await this.bot.sendMessage(user.tgId, message);
+            this.logger.log(`Telegram notification sent to tgId: ${user.tgId}`);
+          } catch (telegramError) {
+            this.logger.error(
+              `Error sending Telegram notification to tgId: ${user.tgId}`,
+              telegramError.message,
+            );
+          }
+        } else {
+          this.logger.warn(`Telegram ID is empty for user ID: ${userId}`);
+        }
+        if (user.fcm && user.fcm.trim().length > 0) {
+          try {
+              const payload: admin.messaging.Message = {
+                token: user.fcm,
+                notification: {
+                  title,
+                  body: message,
+                },
+              };
+              await admin.messaging().send(payload);
+              this.logger.log(`Firebase notification sent to FCM token: ${user.fcm}`);
+            } catch (firebaseError) {
+              this.logger.error(
+                `Error sending Firebase notification to FCM token: ${user.fcm}`,
+                firebaseError.message,
+              );
+            }
+        } else {
+          this.logger.warn(`FCM token is empty for user ID: ${userId}`);
+        }
       } catch (error) {
         this.logger.error(`Error sending notification: `, error.message);
       }
