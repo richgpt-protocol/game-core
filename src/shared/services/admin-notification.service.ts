@@ -178,7 +178,7 @@ export class AdminNotificationService {
 
         if (channels.includes(NotificationType.TELEGRAM)) {
           try {
-            const msg = `${title}\n ${message}`;
+            const msg = `${title}\n${message}`;
             await this.userNotificationBot.sendMessage(u.tgId, msg);
           } catch (error) {
             this.logger.error('Error sending message to telegram', error);
