@@ -810,8 +810,8 @@ export class UserService implements OnModuleInit {
       //ignore if user is pending or unverified
       if (
         error &&
-        error != UserStatus.PENDING &&
-        error != UserStatus.UNVERIFIED
+        user.status != UserStatus.PENDING &&
+        user.status != UserStatus.UNVERIFIED
       )
         return { error, data: null };
 
