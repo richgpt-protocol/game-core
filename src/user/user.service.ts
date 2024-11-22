@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -52,6 +57,11 @@ import { PointTxType, ReferralTxType } from 'src/shared/enum/txType.enum';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { CampaignService } from 'src/campaign/campaign.service';
 import { ClaimApproach } from 'src/shared/enum/campaign.enum';
+import { ethers, formatEther, parseEther } from 'ethers';
+import { ERC20, ERC20__factory } from 'src/contract';
+import { QueueService } from 'src/queue/queue.service';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { Job } from 'bullmq';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -66,7 +76,7 @@ type GenerateOtpEvent = {
 };
 
 @Injectable()
-export class UserService {
+export class UserService implements OnModuleInit {
   private readonly logger = new Logger(UserService.name);
   telegramOTPBotUserName: string;
   TG_LOGIN_WIDGET_BOT_TOKEN: string;
@@ -91,12 +101,33 @@ export class UserService {
     private configService: ConfigService,
     private creditService: CreditService,
     private campaignService: CampaignService,
+    private queueService: QueueService,
   ) {
     this.telegramOTPBotUserName = this.configService.get(
       'TELEGRAM_OTP_BOT_USERNAME',
     );
     this.TG_LOGIN_WIDGET_BOT_TOKEN = this.configService.get(
       'TG_LOGIN_WIDGET_BOT_TOKEN',
+    );
+  }
+
+  onModuleInit() {
+    this.queueService.registerHandler(
+      QueueName.TERMINATE,
+      QueueType.RECALL_GAMEUSD,
+      {
+        jobHandler: this._recallGameUsd.bind(this),
+        failureHandler: this._onTerminationFailed.bind(this),
+      },
+    );
+
+    this.queueService.registerHandler(
+      QueueName.TERMINATE,
+      QueueType.RECALL_GAS,
+      {
+        jobHandler: this._recallGas.bind(this),
+        failureHandler: this._onTerminationFailed.bind(this),
+      },
     );
   }
 
@@ -775,6 +806,15 @@ export class UserService {
         return { error: 'invalid phone number', data: null };
       }
 
+      const { error } = await this.validateUserStatus(user);
+      //ignore if user is pending or unverified
+      if (
+        error &&
+        error != UserStatus.PENDING &&
+        error != UserStatus.UNVERIFIED
+      )
+        return { error, data: null };
+
       if (user.loginAttempt >= 3) {
         user.status = UserStatus.SUSPENDED;
         user.updatedBy = UtilConstant.SELF;
@@ -888,6 +928,174 @@ export class UserService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async terminateUser(userId: number) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['wallet'],
+    });
+    if (!user) {
+      return { error: 'user.NOT_FOUND', data: null };
+    }
+
+    user.status = UserStatus.TERMINATED;
+    await this.userRepository.save(user);
+
+    const jobId = `terminate-${userId}`;
+    this.queueService.addJob(QueueName.TERMINATE, jobId, {
+      userId,
+      queueType: QueueType.RECALL_GAMEUSD,
+    });
+
+    return { error: null, data: user };
+  }
+
+  private async _recallGameUsd(job: Job<{ userId: number }>) {
+    const { userId } = job.data;
+
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['wallet'],
+      });
+      if (!user.wallet) {
+        //when the user account is still in pending status, wallet is not created yet
+        return;
+      }
+      const signer = await this._getSigner(user.wallet.walletAddress);
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        user.wallet.walletAddress,
+        this.configService.get('BASE_CHAIN_ID'),
+      );
+      const gameUsdContract = this.getTokenContract(
+        this.configService.get('GAMEUSD_CONTRACT_ADDRESS'),
+        signer,
+      );
+      const gameUsdBalance = await gameUsdContract.balanceOf(
+        user.wallet.walletAddress,
+      );
+      if (gameUsdBalance > 0n) {
+        await this.transferToken(
+          gameUsdContract,
+          this.configService.get('GAMEUSD_POOL_CONTRACT_ADDRESS'),
+          gameUsdBalance,
+        );
+      }
+
+      const jobId = `terminate-recall-gas-${userId}`;
+      this.queueService.addJob(QueueName.TERMINATE, jobId, {
+        userId,
+        queueType: QueueType.RECALL_GAS,
+      });
+    } catch (error) {
+      this.logger.error('Failed to recall gameUsd', error.stack);
+      throw new Error('Failed to recall gameUsd');
+    }
+  }
+
+  private async _recallGas(job: Job<{ userId: number }>) {
+    const { userId } = job.data;
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['wallet'],
+      });
+      const signer = await this._getSigner(user.wallet.walletAddress);
+
+      const opBnbBalance = await signer.provider.getBalance(signer.address);
+      if (opBnbBalance > 0n && Number(formatEther(opBnbBalance)) > 0.001) {
+        // const estimate = await signer.populateTransaction({
+        //   to: this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+        //   value: '0',
+        // });
+        // console.log('estimate', estimate);
+        // const gas = await signer.estimateGas({
+        //   to: this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+        //   value: '0',
+        // });
+        // console.log('gas', gas);
+        // const price = estimate.gasPrice;
+        // const gasEstimate =
+        //   gas *
+        //   ethers.toBigInt(estimate.maxPriorityFeePerGas || estimate.gasLimit);
+        // if (opBnbBalance > gasEstimate) {
+        //   await signer.sendTransaction({
+        //     to: this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+        //     value: opBnbBalance - gasEstimate,
+        //     gasLimit: gas,
+        //     gasPrice: estimate.gasPrice,
+        //   });
+        // }
+        await signer.sendTransaction({
+          to: this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+          value: opBnbBalance - ethers.parseEther('0.001'),
+        });
+      } else {
+        await this.adminNotificationService.setAdminNotification(
+          `Failed to recall gas for user ${userId}. Amount too low to recover.  
+              \nAvailable ${formatEther(opBnbBalance)} `,
+          'recallGasError',
+          'Recall Gas Error',
+          false,
+        );
+      }
+    } catch (error) {
+      console.log(error);
+      console.log('message', error.message);
+      // this.logger.error('Failed to recall gas', error.stack);
+      throw new Error('Failed to recall gas');
+    }
+  }
+
+  private async _onTerminationFailed(
+    job: Job<{ userId: number }>,
+    error: Error,
+  ) {
+    if (job.attemptsMade >= job.opts.attempts) {
+      this.logger.error(
+        `Recalling funds from terminated account ${job.data.userId} failed with error: ${error.message}`,
+        error.stack,
+      );
+      await this.adminNotificationService.setAdminNotification(
+        `Recalling funds from terminated account ${job.data.userId} failed with error: ${error.message}`,
+        'terminationFailed',
+        'Recall funds Failed',
+        false,
+      );
+    }
+  }
+
+  private async _getSigner(walletAddress: string): Promise<ethers.Wallet> {
+    try {
+      const chainId = this.configService.get('BASE_CHAIN_ID');
+      const providerUrl = this.configService.get(`PROVIDER_RPC_URL_${chainId}`);
+      const provider = new ethers.JsonRpcProvider(providerUrl);
+      const signer = new ethers.Wallet(
+        await MPC.retrievePrivateKey(walletAddress),
+        provider,
+      );
+      return signer;
+    } catch (error) {
+      this.logger.error('Failed to get signer', error.stack);
+      throw new Error('Failed to get signer');
+    }
+  }
+
+  private getTokenContract(tokenAddress: string, signer: ethers.Wallet) {
+    return ERC20__factory.connect(tokenAddress, signer);
+  }
+
+  private async transferToken(
+    tokenContract: ERC20,
+    to: string,
+    amount: bigint,
+  ) {
+    const gasLimit = await tokenContract.transfer.estimateGas(to, amount);
+    return await tokenContract.transfer(to, amount, {
+      gasLimit: gasLimit + (gasLimit * BigInt(30)) / BigInt(100),
+    });
   }
 
   async getUsers(payload: GetUsersDto) {
@@ -1033,6 +1241,10 @@ export class UserService {
         {
           referralUserId: userId,
           referralType: ReferralTxType.PRIZE,
+        },
+        {
+          referralUserId: userId,
+          referralType: ReferralTxType.SET_REFERRAL,
         },
       ],
       relations: { user: true },
