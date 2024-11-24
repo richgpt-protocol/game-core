@@ -865,7 +865,12 @@ export class DepositService implements OnModuleInit {
       walletTx.userWallet.pointBalance = pointTxEndingBalance;
       await queryRunner.manager.save(walletTx.userWallet);
 
-      await this.handleReferralFlow(user.id, walletTx.txAmount, queryRunner);
+      await this.handleReferralFlow(
+        user.id,
+        walletTx.txAmount,
+        walletTx.id,
+        queryRunner,
+      );
 
       await queryRunner.commitTransaction();
       if (!queryRunner.isReleased) await queryRunner.release();
@@ -954,6 +959,7 @@ export class DepositService implements OnModuleInit {
   private async handleReferralFlow(
     userId: number,
     depositAmount: number,
+    walletTxId: number,
     queryRunner: QueryRunner,
   ) {
     try {
@@ -1000,6 +1006,7 @@ export class DepositService implements OnModuleInit {
       pointTx.startingBalance = userInfo.referralUser.wallet.pointBalance;
       pointTx.endingBalance =
         Number(pointTx.startingBalance) + Number(pointTx.amount);
+      pointTx.walletTxId = walletTxId;
       pointTx.walletId = userInfo.referralUser.wallet.id;
       pointTx.userWallet = userInfo.referralUser.wallet;
       await queryRunner.manager.save(pointTx);
