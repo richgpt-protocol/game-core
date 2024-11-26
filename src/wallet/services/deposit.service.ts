@@ -7,7 +7,15 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryRunner, Repository } from 'typeorm';
+import {
+  DataSource,
+  IsNull,
+  LessThan,
+  MoreThanOrEqual,
+  Not,
+  QueryRunner,
+  Repository,
+} from 'typeorm';
 import { ConfigService } from 'src/config/config.service';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
@@ -32,6 +40,7 @@ import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import { Campaign } from 'src/campaign/entities/campaign.entity';
 
 /**
  * How deposit works
@@ -979,19 +988,27 @@ export class DepositService implements OnModuleInit {
         return;
       }
 
-      const ignoredReferrersSetting = await queryRunner.manager.findOne(
-        Setting,
-        {
-          where: {
-            key: SettingEnum.FILTERED_REFERRAL_CODES,
-          },
+      const currentTime = new Date().getTime() / 1000;
+      const activeCampaigns = await queryRunner.manager.find(Campaign, {
+        where: {
+          startTime: LessThan(currentTime),
+          endTime: MoreThanOrEqual(currentTime),
+          validationParams: Not(IsNull()),
         },
-      );
+      });
 
-      const ignoredRefferers: Array<string> | null =
-        ignoredReferrersSetting.value
-          ? JSON.parse(ignoredReferrersSetting.value)
-          : null;
+      const ignoredRefferers = [];
+      for (const campaign of activeCampaigns) {
+        if (campaign.validationParams) {
+          const validationParams = JSON.parse(campaign.validationParams);
+          if (validationParams.ignoredRefferers) {
+            ignoredRefferers.push(...validationParams.ignoredReferralCodes);
+          }
+          if (validationParams.referralCode) {
+            ignoredRefferers.push(validationParams.referralCode);
+          }
+        }
+      }
 
       if (
         ignoredRefferers &&
