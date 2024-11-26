@@ -843,38 +843,62 @@ export class DepositService implements OnModuleInit {
       walletTx.userWallet.walletBalance = walletTx.endingBalance;
 
       // create user pointTx
-      const pointInfo = this.pointService.getDepositPoints(
-        Number(walletTx.txAmount),
-      );
-      const lastValidPointTx = await this.lastValidPointTx(
-        walletTx.userWallet.id,
-      );
-      const pointTxAmount =
-        pointInfo.xp + (walletTx.txAmount * pointInfo.bonusPerc) / 100;
-      const pointTxStartingBalance = walletTx.userWallet.pointBalance;
-      const pointTxEndingBalance =
-        Number(pointTxStartingBalance) + Number(pointTxAmount);
-      const pointTx = new PointTx();
-      pointTx.txType = walletTx.txType as unknown as PointTxType; //'DEPOSIT';
-      pointTx.amount = pointTxAmount;
-      pointTx.startingBalance = pointTxStartingBalance;
-      pointTx.endingBalance = pointTxEndingBalance;
-      pointTx.walletId = walletTx.userWallet.id;
-      pointTx.userWallet = walletTx.userWallet;
-      pointTx.walletTxId = walletTx.id;
-      pointTx.walletTx = walletTx;
-      await queryRunner.manager.save(pointTx);
+      const depositTx = await queryRunner.manager.findOne(DepositTx, {
+        where: {
+          status: TxStatus.SUCCESS,
+          walletTxId: walletTx.id,
+        },
+      });
 
-      // update userWallet pointBalance
-      walletTx.userWallet.pointBalance = pointTxEndingBalance;
+      const miniGameUSDTSenderSetting = await queryRunner.manager.findOne(
+        Setting,
+        {
+          where: {
+            key: SettingEnum.MINI_GAME_USDT_SENDER_ADDRESS,
+          },
+        },
+      );
+      const miniGameUSDTSender =
+        miniGameUSDTSenderSetting?.value.toLowerCase() || '';
+
+      if (depositTx.senderAddress !== miniGameUSDTSender) {
+        const pointInfo = this.pointService.getDepositPoints(
+          Number(walletTx.txAmount),
+        );
+        const lastValidPointTx = await this.lastValidPointTx(
+          walletTx.userWallet.id,
+        );
+
+        const pointTxAmount =
+          pointInfo.xp + (walletTx.txAmount * pointInfo.bonusPerc) / 100;
+        const pointTxStartingBalance = walletTx.userWallet.pointBalance;
+        const pointTxEndingBalance =
+          Number(pointTxStartingBalance) + Number(pointTxAmount);
+        const pointTx = new PointTx();
+        pointTx.txType = walletTx.txType as unknown as PointTxType; //'DEPOSIT';
+        pointTx.amount = pointTxAmount;
+        pointTx.startingBalance = pointTxStartingBalance;
+        pointTx.endingBalance = pointTxEndingBalance;
+        pointTx.walletId = walletTx.userWallet.id;
+        pointTx.userWallet = walletTx.userWallet;
+        pointTx.walletTxId = walletTx.id;
+        pointTx.walletTx = walletTx;
+        await queryRunner.manager.save(pointTx);
+
+        // update userWallet pointBalance
+        walletTx.userWallet.pointBalance = pointTxEndingBalance;
+      }
+
       await queryRunner.manager.save(walletTx.userWallet);
 
-      await this.handleReferralFlow(
-        user.id,
-        walletTx.txAmount,
-        walletTx.id,
-        queryRunner,
-      );
+      if (depositTx.senderAddress !== miniGameUSDTSender) {
+        await this.handleReferralFlow(
+          user.id,
+          walletTx.txAmount,
+          walletTx.id,
+          queryRunner,
+        );
+      }
 
       await queryRunner.commitTransaction();
       if (!queryRunner.isReleased) await queryRunner.release();

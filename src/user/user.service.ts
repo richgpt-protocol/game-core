@@ -554,6 +554,8 @@ export class UserService implements OnModuleInit {
           referralTx.userId = newUser.id;
           referralTx.referralUserId = newUser.referralUserId;
           await queryRunner.manager.save(referralTx);
+
+          await this.addReferralXp(newUser, queryRunner);
         }
 
         // validate if user eligible for point carry forward from alpha testnet to mainnet
@@ -874,6 +876,8 @@ export class UserService implements OnModuleInit {
           referralTx.userId = user.id;
           referralTx.referralUserId = user.referralUserId;
           await queryRunner.manager.save(referralTx);
+
+          await this.addReferralXp(user, queryRunner);
         }
 
         // validate if user eligible for point carry forward from alpha testnet to mainnet
@@ -949,6 +953,27 @@ export class UserService implements OnModuleInit {
     });
 
     return { error: null, data: user };
+  }
+
+  private async addReferralXp(user: User, queryRunner: QueryRunner) {
+    // Add 500 points to referrer
+    const referrer = await queryRunner.manager.findOne(User, {
+      where: { id: user.referralUserId },
+      relations: ['wallet'],
+    });
+
+    const pointTx = new PointTx();
+    pointTx.amount = 500; // 500 points for referral
+    pointTx.walletId = referrer.wallet.id;
+    pointTx.startingBalance = referrer.wallet.pointBalance;
+    pointTx.endingBalance = Number(pointTx.startingBalance) + Number(500);
+    pointTx.userWallet = referrer.wallet;
+    pointTx.txType = PointTxType.QUEST;
+    pointTx.taskId = 4;
+
+    referrer.wallet.pointBalance = pointTx.endingBalance;
+    await queryRunner.manager.save(pointTx);
+    await queryRunner.manager.save(referrer.wallet);
   }
 
   private async _recallGameUsd(job: Job<{ userId: number }>) {

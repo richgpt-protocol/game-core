@@ -1223,6 +1223,11 @@ export class BetService implements OnModuleInit {
         betAmount *
         this.referralCommissionByRank(userInfo.referralUser.referralRank);
 
+      // Used credit balance no need pay commission
+      if (commissionAmount === 0) {
+        return;
+      }
+
       const walletTxInserted = new WalletTx();
       walletTxInserted.txType = WalletTxType.REFERRAL;
       walletTxInserted.txAmount = commissionAmount;
@@ -1391,6 +1396,10 @@ export class BetService implements OnModuleInit {
 
       const commissionAmount =
         betAmount * this.referralCommissionByRank(userInfo.referralRank);
+
+      if (commissionAmount === 0) {
+        return;
+      }
 
       const walletTxInserted = new WalletTx();
       walletTxInserted.txType = WalletTxType.REFERRAL;
