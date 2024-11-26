@@ -62,6 +62,7 @@ import { ERC20, ERC20__factory } from 'src/contract';
 import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { Job } from 'bullmq';
+import { NotificationType } from 'src/shared/dto/admin-notification.dto';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -1202,7 +1203,10 @@ export class UserService implements OnModuleInit {
 
   async getUserNotification(userId: number): Promise<UserNotification[]> {
     const user = await this.userRepository.findOne({
-      where: { id: userId },
+      where: [
+        { id: userId },
+        { userNotifications: { channel: NotificationType.INBOX } },
+      ],
       relations: { userNotifications: true },
     });
     return user.userNotifications.reverse();
