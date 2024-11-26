@@ -10,6 +10,8 @@ import {
   Between,
   Brackets,
   DataSource,
+  In,
+  IsNull,
   QueryRunner,
   Repository,
 } from 'typeorm';
@@ -1202,14 +1204,19 @@ export class UserService implements OnModuleInit {
   }
 
   async getUserNotification(userId: number): Promise<UserNotification[]> {
-    const user = await this.userRepository.findOne({
+    const notifications = await this.userNotificationRepository.find({
       where: [
-        { id: userId },
-        { userNotifications: { channel: NotificationType.INBOX } },
+        {
+          user: {
+            id: userId,
+          },
+        },
+        { channel: In([NotificationType.INBOX, null]) },
       ],
-      relations: { userNotifications: true },
+      order: { id: 'DESC' },
     });
-    return user.userNotifications.reverse();
+
+    return notifications;
   }
 
   async setUserNotification(userId: number, _notification: NotificationDto) {
