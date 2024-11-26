@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Admin } from 'src/admin/entities/admin.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
@@ -12,9 +17,12 @@ import {
   NotificationType,
   UserMessageDto,
 } from '../dto/admin-notification.dto';
+import { delay, Job } from 'bullmq';
+import { QueueService } from 'src/queue/queue.service';
+import { QueueName, QueueType } from '../enum/queue.enum';
 
 @Injectable()
-export class AdminNotificationService {
+export class AdminNotificationService implements OnModuleInit {
   private readonly logger = new Logger(AdminNotificationService.name);
 
   private bot: TelegramBot;
@@ -33,6 +41,7 @@ export class AdminNotificationService {
     private adminRepository: Repository<Admin>,
     private configService: ConfigService,
     private connection: Connection,
+    private queueService: QueueService,
   ) {
     this.TG_ADMIN_GROUP = this.configService.get('ADMIN_TG_CHAT_ID');
 
@@ -56,6 +65,17 @@ export class AdminNotificationService {
     if (this.slackToken) {
       this.slackClient = new WebClient(this.slackToken);
     }
+  }
+
+  onModuleInit() {
+    this.queueService.registerHandler(
+      QueueName.MESSAGE,
+      QueueType.SEND_TELEGRAM_MESSAGE,
+      {
+        jobHandler: this.sendTelegramMessage.bind(this),
+        failureHandler: this.failedTelegramMessage.bind(this),
+      },
+    );
   }
 
   async setAdminNotification(
@@ -137,7 +157,9 @@ export class AdminNotificationService {
     const queryRunner = this.connection.createQueryRunner();
 
     //remove duplicate user ids
-    const uids = [...new Set(userIds)];
+    const trimmedUserIds = userIds.map((str) => str.trim()); // trim all user ids
+
+    const uids = [...new Set(trimmedUserIds)];
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
@@ -147,45 +169,64 @@ export class AdminNotificationService {
         },
       });
 
-      if (channels.includes(NotificationType.TELEGRAM)) {
-        const chatIds = users.filter((u) => !u.tgId);
-        if (chatIds.length > 0) {
-          throw new BadRequestException(
-            `User ${chatIds.map((u) => u.uid).join(', ')} does not have telegram id`,
-          );
-        }
+      if (users.length === 0) {
+        throw new BadRequestException('No users found');
       }
 
       const createQueries = [];
       const tgErrors = [];
 
+      const notification = new Notification();
+      notification.title = title;
+      notification.message = message;
+      await queryRunner.manager.save(notification);
+
       for (const u of users) {
         if (channels.includes(NotificationType.INBOX)) {
-          const notification = this.notificationRepository.create({
-            title,
-            message,
-          });
-          await queryRunner.manager.save(notification);
-
           const userNotification = queryRunner.manager.create(
             UserNotification,
             {
               isRead: false,
               user: u,
               notification,
+              channel: NotificationType.INBOX,
             },
           );
           createQueries.push(userNotification);
         }
 
-        if (channels.includes(NotificationType.TELEGRAM)) {
+        if (channels.includes(NotificationType.TELEGRAM) && u.tgId) {
+          const messageId = new Date().getTime().toString();
+          const jobId = `message-${messageId}`;
+          const msg = `${title}\n\n${message}`;
+
           try {
-            const msg = `${title}\n\n${message}`;
-            await this.userNotificationBot.sendMessage(u.tgId, msg);
+            await this.queueService.addJob(QueueName.MESSAGE, jobId, {
+              tgId: u.tgId,
+              message: msg,
+              messageId,
+              queueType: QueueType.SEND_TELEGRAM_MESSAGE,
+            });
+
+            const userNotification = queryRunner.manager.create(
+              UserNotification,
+              {
+                isRead: false,
+                user: u,
+                notification,
+                channel: NotificationType.TELEGRAM,
+                status: 'PENDING',
+                messageId,
+              },
+            );
+            createQueries.push(userNotification);
           } catch (error) {
             this.logger.error('Error sending message to telegram', error);
-            tgErrors.push(u.tgId);
+            tgErrors.push(u.uid);
+            continue;
           }
+        } else {
+          tgErrors.push(u.uid);
         }
       }
 
@@ -195,7 +236,7 @@ export class AdminNotificationService {
       }
 
       if (tgErrors.length > 0) {
-        const errorMsg = `Error sending Telegram message to ${tgErrors.join(', ')}`;
+        const errorMsg = `Failed sending Telegram message to ${tgErrors.join(',')}`;
         const message = channels.includes(NotificationType.INBOX)
           ? `Inbox Message Sent successfully. ${errorMsg}`
           : errorMsg;
@@ -245,6 +286,44 @@ export class AdminNotificationService {
       } catch (error) {
         this.logger.error('Error sending message to slack', error);
       }
+    }
+  }
+
+  private async sendTelegramMessage(job: Job) {
+    console.log(job.data);
+    const { message, tgId, messageId } = job.data;
+    await this.userNotificationBot.sendMessage(tgId, message);
+
+    const userNotification = await this.userNotificationRepository.findOneBy({
+      messageId,
+    });
+
+    if (userNotification) {
+      await this.userNotificationRepository.update(userNotification.id, {
+        status: 'SENT',
+      });
+    }
+
+    await delay(1000);
+  }
+
+  private async failedTelegramMessage(job: Job, error: Error) {
+    const { messageId } = job.data;
+
+    this.logger.error(
+      `Job ${job.id} failed with error: ${error.message}. Attempts ${job.attemptsMade}`,
+    );
+    this.logger.error(error);
+
+    const userNotification = await this.userNotificationRepository.findOneBy({
+      messageId,
+    });
+
+    if (userNotification) {
+      await this.userNotificationRepository.update(userNotification.id, {
+        status: 'FAILED',
+        remarks: error.message,
+      });
     }
   }
 }

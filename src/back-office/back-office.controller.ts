@@ -51,6 +51,9 @@ export class BackOfficeController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const data = await this.backOfficeService.getUsers(page, limit);
     return {
       data: {
@@ -71,6 +74,9 @@ export class BackOfficeController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const data = await this.backOfficeService.getWallets(page, limit);
     return {
       data: {
@@ -110,6 +116,9 @@ export class BackOfficeController {
   @ApiExcludeEndpoint()
   @Render('campaign-listing')
   async campaigns(@Request() req, @Query('page') page: number) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const data = await this.campaignService.findAll(page);
     return {
       data: {
@@ -126,6 +135,9 @@ export class BackOfficeController {
   @ApiExcludeEndpoint()
   @Render('point-listing')
   async points(@Request() req, @Query('page') page: number) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const data = await this.backOfficeService.getUserPoints(page);
     return {
       data: {
@@ -175,6 +187,9 @@ export class BackOfficeController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const data = await this.backOfficeService.getPendingWithdraw(page, limit);
     return {
       data: {
@@ -195,6 +210,9 @@ export class BackOfficeController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const data = await this.backOfficeService.getPendingDeposits(page, limit);
     return {
       data: {
@@ -215,6 +233,9 @@ export class BackOfficeController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const data = await this.backOfficeService.getTransactions(page, limit);
     return {
       data: {
@@ -235,6 +256,9 @@ export class BackOfficeController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     // if (!page) page = 1;
     // if (!limit) limit = 10;
     const data = await this.backOfficeService.getPastDrawResults(page, limit);
@@ -275,6 +299,10 @@ export class BackOfficeController {
   @ApiExcludeEndpoint()
   @Render('create-campaign')
   async createCampaign(@Request() req) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
+
     return {
       data: {
         user: req.user,
@@ -298,6 +326,9 @@ export class BackOfficeController {
   @SecureEJS(null, UserRole.ADMIN)
   @Get('referralListing')
   async referralListing(@Request() req) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const result = await this.backOfficeService.getReferralListing();
     return {
       data: {
@@ -318,6 +349,9 @@ export class BackOfficeController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const result = await this.backOfficeService.bettingListing(
       new Date(startDate),
       new Date(endDate),
@@ -342,6 +376,9 @@ export class BackOfficeController {
     @Query('startDate') _startDate: string,
     @Query('endDate') _endDate: string,
   ) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const result = await this.backOfficeService.salesReport(
       _startDate + ' 00:00:00',
       _endDate + ' 23:59:59',
@@ -358,6 +395,9 @@ export class BackOfficeController {
   @Get('sales-report-epoch')
   @Render('sales-report-epoch')
   async salesReportByEpoch(@Request() req, @Query('epoch') epoch: number) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const result = await this.backOfficeService.salesReportByEpoch(epoch);
     return {
       data: {
@@ -376,6 +416,9 @@ export class BackOfficeController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const { data, currentPage, total } =
       await this.creditService.getAllCreditWalletTxList(page, limit);
     return {
@@ -393,6 +436,9 @@ export class BackOfficeController {
   @ApiExcludeEndpoint()
   @Render('pa')
   async getCurrentPrizeAlgo(@Request() req) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const res = await this.backOfficeService.getCurrentPrizeAlgo();
     return {
       data: {
@@ -447,6 +493,9 @@ export class BackOfficeController {
   @ApiExcludeEndpoint()
   @Render('pa')
   async updatePrizeAlgo(@Request() req, @Body() payload) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const onlyNumber = (name: string, value: any): number => {
       if (isNaN(Number(value)))
         throw new BadRequestException(`${name} must be a number`);
@@ -665,6 +714,9 @@ export class BackOfficeController {
   @Get('add-credit')
   @Render('add-credit')
   async addCredit(@Request() req) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     try {
       const campaigns = await this.campaignService.findActiveCampaigns();
       return {
@@ -687,6 +739,9 @@ export class BackOfficeController {
   @Get('set-referral-prize-bonus')
   @Render('set-referral-prize-bonus')
   async setReferralPrizeBonus(@Request() req) {
+    if (req.user.adminType === 'M') {
+      throw new BadRequestException('You are not authorized to view this page');
+    }
     const data = await this.pointService.getAllReferralPrizeBonus();
     return {
       data: {

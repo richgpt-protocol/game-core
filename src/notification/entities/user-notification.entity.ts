@@ -24,6 +24,26 @@ export class UserNotification {
   })
   readDateTime: Date;
 
+  @Column({
+    nullable: true,
+  })
+  channel: string;
+
+  @Column({
+    nullable: true,
+  })
+  status: string;
+
+  @Column({
+    nullable: true,
+  })
+  messageId: string;
+
+  @Column({
+    nullable: true,
+  })
+  remarks: string;
+
   @DeleteDateColumn()
   deletedDate: Date;
 

@@ -67,24 +67,29 @@
         <!-- {{!-- <p class="content">Pre<a href="#" onclick="window.history.back();">Go back</a>, or head over to <a href="{{data.appUrl}}">Dashboard</a> to choose a new direction.</p> --}} -->
       </div>
       <div class="header-menu">
-        <div class="h-btn"><a href="/back-office/users">USER</a></div>
-        <div class="h-btn"><a href="/back-office/wallets">WALLET</a></div>
+        <% if (user?.adminType !== 'M') { %>
+          <div class="h-btn"><a href="/back-office/users">USER</a></div>
+          <div class="h-btn"><a href="/back-office/wallets">WALLET</a></div>
+        <% } %>
         <% if (user?.adminType === 'S') { %>
           <div class="h-btn"><a href="/back-office/staffs">STAFF</a></div>
           <div class="h-btn"><a href="/back-office/pa">PA</a></div>
-
         <% } %>
-        <div class="h-btn"><a href="/back-office/campaigns">CAMPAIGN</a></div>
-        <div class="h-btn"><a href="/back-office/set-referral-prize-bonus">REFERRAL COMMISION BONUS</a></div>
-        <div class="h-btn"><a href="/back-office/points">POINTS</a></div>
-        <div class="h-btn"><a href="/back-office/sales-report">SALES REPORT</a></div>
-        <div class="h-btn"><a href="/back-office/sales-report-epoch">SALES REPORT (EPOCH)</a></div>
+        <% if (user?.adminType !== 'M') { %>
+          <div class="h-btn"><a href="/back-office/campaigns">CAMPAIGN</a></div>
+          <div class="h-btn"><a href="/back-office/set-referral-prize-bonus">REFERRAL COMMISION BONUS</a></div>
+          <div class="h-btn"><a href="/back-office/points">POINTS</a></div>
+          <div class="h-btn"><a href="/back-office/sales-report">SALES REPORT</a></div>
+          <div class="h-btn"><a href="/back-office/sales-report-epoch">SALES REPORT (EPOCH)</a></div>
+        <% } %>
         <div class="h-btn"><a href="/back-office/messages">MESSAGES</a></div>
-        <div class="h-btn"><a href="/back-office/pending-deposit">PENDING DEPOSITS</a></div>
-        <div class="h-btn"><a href="/back-office/pending-withdraw">PENDING WITHDRAW</a></div>
-        <div class="h-btn"><a href="/back-office/credit-txns-listing">CREDIT TRANSACTIONS</a></div>
-        <div class="h-btn"><a href="/back-office/transactions">TRANSACTIONS</a></div>
-        <div class="h-btn"><a href="/back-office/past-draw-results">RESULT & HISTORY</a></div>
+        <% if (user?.adminType !== 'M') { %>
+          <div class="h-btn"><a href="/back-office/pending-deposit">PENDING DEPOSITS</a></div>
+          <div class="h-btn"><a href="/back-office/pending-withdraw">PENDING WITHDRAW</a></div>
+          <div class="h-btn"><a href="/back-office/credit-txns-listing">CREDIT TRANSACTIONS</a></div>
+          <div class="h-btn"><a href="/back-office/transactions">TRANSACTIONS</a></div>
+          <div class="h-btn"><a href="/back-office/past-draw-results">RESULT & HISTORY</a></div>
+        <% } %>
         <div id="logout" class="h-btn"><a href="#">LOG OUT</a></div>
       </div>
     </div>

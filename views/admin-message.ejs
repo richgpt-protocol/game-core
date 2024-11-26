@@ -271,6 +271,7 @@
 
       console.log(jsonData)
 
+      document.getElementById('responseMessage').innerHTML = null; // Clear previous response message
       if (jsonData.channels.length == 0) {
         document.getElementById('responseMessage').innerHTML = `<p style="color: red;">Please select a message type</p>`;
         return
@@ -289,12 +290,15 @@
         const responseMessage = document.getElementById('responseMessage');
 
         if (response.ok) {
-          responseMessage.innerHTML = `<p style="color: green;">${result.message}</p>`;
+          // responseMessage.innerHTML = `<p style="color: green;">${result.message}</p>`;
+          alert(result.message);
         } else {
           responseMessage.innerHTML = `<p style="color: red;">${result.message}</p>`;
         }
       } catch (error) {
         document.getElementById('responseMessage').innerHTML = `<p style="color: red;">An error occurred: ${error.message}</p>`;
+      } finally {
+        form.reset();
       }
     });
   </script>

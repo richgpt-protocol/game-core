@@ -90,10 +90,14 @@
                 }),
             })
             .then(response => response.json())
-            .then(data => {
+            .then(data => { 
                 // console.log(data)
                 if (data.statusCode == 200) {
+                  if (data.data.user.adminType === 'M') {
+                    window.location.href = '/back-office/messages';
+                  } else {
                     window.location.href = '/back-office/users';
+                  }
                 } else {
                     alert(data.message);
                 }
