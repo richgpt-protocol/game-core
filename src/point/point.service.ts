@@ -581,7 +581,7 @@ export class PointService {
       if (endDate.getTime() > lastAvailableSnapshot.snapshotDate.getTime()) {
         //don't have this snapshot. calculate from userWallet table
 
-        //get current top users. Subtract last snapshot points from current points
+        //get All users. Subtract last snapshot points from current points
         //to get the points earned after the last snapshot
         const currentLeaderboard = await this.dataSource
           .createQueryBuilder()
@@ -591,7 +591,7 @@ export class PointService {
           .leftJoin('user.wallet', 'wallet')
           .where('user.status = :status', { status: UserStatus.ACTIVE })
           .orderBy('wallet.pointBalance', 'DESC')
-          .limit(limit)
+          // .limit(limit)
           .getRawMany();
 
         const uids = currentLeaderboard.map((item) => item.uid);
@@ -642,6 +642,7 @@ export class PointService {
 
         //sort by totalXp
         leaderboard.sort((a, b) => b.totalXp - a.totalXp);
+        leaderboard = leaderboard.slice(0, limit);
       } else {
         //we have this snapshot
 
