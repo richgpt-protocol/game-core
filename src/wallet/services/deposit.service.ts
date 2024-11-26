@@ -1020,6 +1020,11 @@ export class DepositService implements OnModuleInit {
       ) {
         return;
       }
+      const walletTx = await queryRunner.manager.findOne(WalletTx, {
+        where: {
+          id: walletTxId,
+        },
+      });
       // create pointTx
       const referrerXp = this.pointService.getReferralDepositXp(
         Number(depositAmount),
@@ -1030,7 +1035,10 @@ export class DepositService implements OnModuleInit {
       pointTx.startingBalance = userInfo.referralUser.wallet.pointBalance;
       pointTx.endingBalance =
         Number(pointTx.startingBalance) + Number(pointTx.amount);
-      pointTx.walletTxId = walletTxId;
+      // pointTx.walletTxId = walletTxId;
+      if (walletTx && walletTx.txType == WalletTxType.GAME_TRANSACTION) {
+        pointTx.taskId = 5;
+      }
       pointTx.walletId = userInfo.referralUser.wallet.id;
       pointTx.userWallet = userInfo.referralUser.wallet;
       await queryRunner.manager.save(pointTx);
@@ -1042,7 +1050,7 @@ export class DepositService implements OnModuleInit {
       // queryRunner
       this.logger.error(
         'handleReferralFlow() error within queryRunner, error:',
-        error,
+        error.stack,
       );
 
       throw new Error(`Error processing referral flow ${error}`);
