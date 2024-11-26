@@ -857,7 +857,7 @@ export class DepositService implements OnModuleInit {
       const miniGameUSDTSender =
         miniGameUSDTSenderSetting?.value.toLowerCase() || '';
 
-      if (depositTx.senderAddress !== miniGameUSDTSender) {
+      if (depositTx.senderAddress.toLowerCase() !== miniGameUSDTSender) {
         const pointInfo = this.pointService.getDepositPoints(
           Number(walletTx.txAmount),
         );
@@ -887,7 +887,7 @@ export class DepositService implements OnModuleInit {
 
       await queryRunner.manager.save(walletTx.userWallet);
 
-      if (depositTx.senderAddress !== miniGameUSDTSender) {
+      if (depositTx.senderAddress.toLowerCase() !== miniGameUSDTSender) {
         await this.handleReferralFlow(
           user.id,
           walletTx.txAmount,
