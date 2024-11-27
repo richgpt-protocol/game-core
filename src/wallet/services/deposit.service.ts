@@ -1039,10 +1039,7 @@ export class DepositService implements OnModuleInit {
       pointTx.startingBalance = userInfo.referralUser.wallet.pointBalance;
       pointTx.endingBalance =
         Number(pointTx.startingBalance) + Number(pointTx.amount);
-      // pointTx.walletTxId = walletTxId;
-      if (walletTx && walletTx.txType == WalletTxType.GAME_TRANSACTION) {
-        pointTx.taskId = 5;
-      }
+      pointTx.taskId = 5;
       pointTx.walletId = userInfo.referralUser.wallet.id;
       pointTx.userWallet = userInfo.referralUser.wallet;
       await queryRunner.manager.save(pointTx);
