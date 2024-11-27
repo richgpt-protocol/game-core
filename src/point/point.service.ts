@@ -581,7 +581,7 @@ export class PointService {
       if (endDate.getTime() > lastAvailableSnapshot.snapshotDate.getTime()) {
         //don't have this snapshot. calculate from userWallet table
 
-        //get current top users. Subtract last snapshot points from current points
+        //get All users. Subtract last snapshot points from current points
         //to get the points earned after the last snapshot
         const currentLeaderboard = await this.dataSource
           .createQueryBuilder()
@@ -591,7 +591,7 @@ export class PointService {
           .leftJoin('user.wallet', 'wallet')
           .where('user.status = :status', { status: UserStatus.ACTIVE })
           .orderBy('wallet.pointBalance', 'DESC')
-          .limit(limit)
+          // .limit(limit)
           .getRawMany();
 
         const uids = currentLeaderboard.map((item) => item.uid);
@@ -642,6 +642,7 @@ export class PointService {
 
         //sort by totalXp
         leaderboard.sort((a, b) => b.totalXp - a.totalXp);
+        leaderboard = leaderboard.slice(0, limit);
       } else {
         //we have this snapshot
 
@@ -682,14 +683,42 @@ export class PointService {
 
     // console.log(leaderboard);
 
+    //points before the startDate
+    const earlierPoints = await this.dataSource
+      .createQueryBuilder()
+      .select('leaderboard.walletId', 'walletId')
+      .addSelect('MAX(leaderboard.xp)', 'totalXp')
+      .addSelect('user.uid', 'uid')
+      .from(PointSnapshot, 'leaderboard')
+      .leftJoin('leaderboard.user', 'user')
+      .leftJoin('user.wallet', 'wallet', 'wallet.id = leaderboard.walletId')
+      .where('leaderboard.snapshotDate < :startDate', { startDate })
+      .andWhere('user.status = :status', { status: UserStatus.ACTIVE })
+      .andWhere('user.uid IN (:...uids)', {
+        uids: leaderboard.map((item) => item.uid),
+      })
+      .groupBy('leaderboard.walletId')
+      .addGroupBy('user.uid')
+      .getRawMany();
+
+    const earlierPointsMap = Object.assign(
+      {},
+      ...earlierPoints.map((item) => ({ [item.uid]: item.totalXp })),
+    );
+
     const result = leaderboard.map((item) => {
       return {
         uid: item.uid,
         pointBalance: item.pointBalance,
-        totalXp: item.totalXp,
+        totalXp: earlierPointsMap[item.uid] //(pointBalance in the given week - pointBalance before the givenWeek)
+          ? item.totalXp - earlierPointsMap[item.uid]
+          : item.totalXp,
+        // totalXp: item.totalXp ,
         level: this.walletService.calculateLevel(item.pointBalance),
       };
     });
+
+    result.sort((a, b) => b.totalXp - a.totalXp);
 
     return result;
   }
