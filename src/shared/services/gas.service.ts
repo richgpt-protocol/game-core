@@ -173,8 +173,10 @@ export class GasService {
       // no new record created so it's safe not to rollback
 
       // inform admin
+      const truncatedMessage = `Error: ${error.message?.slice(0, 1000)}`;
+
       await this.adminNotificationService.setAdminNotification(
-        `Error occur in gas.service.handlePendingReloadTx, error: ${error}`,
+        `Error occur in gas.service.handlePendingReloadTx, error: ${truncatedMessage}`,
         'CRITICAL_FAILURE',
         `Critical failure in handlePendingReloadTx${chainId.toString()}()`,
         true,
