@@ -678,7 +678,7 @@ export class PointService {
       .groupBy('leaderboard.walletId')
       .addGroupBy('user.uid')
       .orderBy('totalXp', 'DESC')
-      .limit(limit)
+      // .limit(limit)
       .getRawMany();
 
     // console.log(leaderboard);
@@ -720,7 +720,7 @@ export class PointService {
 
     result.sort((a, b) => b.totalXp - a.totalXp);
 
-    return result;
+    return result.slice(0, limit);
   }
 
   /// Takes snapshot for 1 week
