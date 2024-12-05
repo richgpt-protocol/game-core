@@ -197,7 +197,11 @@ export class PointService {
     return betPoints;
   }
 
-  async getBetPoints(betAmount: number, gameUsdTxId: number): Promise<number> {
+  async getBetPoints(
+    betAmount: number,
+    gameUsdTxId: number,
+    userWalletId: number,
+  ): Promise<number> {
     const baseBetPointsPerUSD = 1000;
     const pointPer10s = 10_000;
     const pointPer100s = 100_000;
@@ -216,6 +220,8 @@ export class PointService {
     const currentDate = new Date();
     const pastBets = await this.betOrderRepository
       .createQueryBuilder('betOrder')
+      .leftJoin('betOrder.walletTx', 'walletTx')
+      .where('walletTx.userWalletId = :userWalletId', { userWalletId })
       .innerJoin('betOrder.gameUsdTx', 'gameUsdTx')
       .andWhere('gameUsdTx.status = :status', { status: TxStatus.SUCCESS })
       .andWhere('betOrder.createdDate >= :date', {
@@ -225,7 +231,7 @@ export class PointService {
           1,
         ),
       })
-      .andWhere('gameUsdTxId != :gameUsdTxId', {
+      .andWhere('gameUsdTx.id != :gameUsdTxId', {
         gameUsdTxId,
       })
       .getMany();
