@@ -268,7 +268,12 @@ export class BetService implements OnModuleInit {
 
       // eslint-disable-next-line prefer-const
       let { betOrders, totalWalletBalanceUsed, creditWalletTxns, totalAmount } =
-        await this.createBetOrders(actualWalletBalance, userInfo, payload, queryRunner);
+        await this.createBetOrders(
+          actualWalletBalance,
+          userInfo,
+          payload,
+          queryRunner,
+        );
 
       const gameUsdTx = new GameUsdTx();
       gameUsdTx.amount = totalAmount;
@@ -1126,6 +1131,7 @@ export class BetService implements OnModuleInit {
       const xpPoints = await this.pointService.getBetPoints(
         gameUsdTx.amount, // total amount of betting
         gameUsdTx.id,
+        userWallet.id,
       );
 
       const pointTxStartingBalance = userWallet.pointBalance || 0;
@@ -1264,8 +1270,8 @@ export class BetService implements OnModuleInit {
         await MPC.retrievePrivateKey(
           this.configService.get('DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS'),
         ),
-        provider
-      )
+        provider,
+      );
       const depositContract = Deposit__factory.connect(
         this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
         distributeReferralFeeBot,
