@@ -8,7 +8,16 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, QueryRunner, Not } from 'typeorm';
+import {
+  Repository,
+  DataSource,
+  QueryRunner,
+  Not,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  IsNull,
+  LessThan,
+} from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { BetDto, EstimateBetResponseDTO } from 'src/game/dto/Bet.dto';
 import { Game } from './entities/game.entity';
@@ -47,8 +56,7 @@ import {
 } from 'src/shared/enum/txType.enum';
 import { randomUUID } from 'crypto';
 import { PointTxType } from 'src/shared/enum/txType.enum';
-import { Setting } from 'src/setting/entities/setting.entity';
-import { SettingEnum } from 'src/shared/enum/setting.enum';
+import { Campaign } from 'src/campaign/entities/campaign.entity';
 
 interface SubmitBetJobDTO {
   userWalletId: number;
@@ -1196,19 +1204,27 @@ export class BetService implements OnModuleInit {
 
       if (!userInfo || userInfo.referralUserId == null) return;
 
-      const ignoredReferrersSetting = await queryRunner.manager.findOne(
-        Setting,
-        {
-          where: {
-            key: SettingEnum.FILTERED_REFERRAL_CODES,
-          },
+      const currentTime = new Date().getTime() / 1000;
+      const activeCampaigns = await queryRunner.manager.find(Campaign, {
+        where: {
+          startTime: LessThan(currentTime),
+          endTime: MoreThanOrEqual(currentTime),
+          validationParams: Not(IsNull()),
         },
-      );
+      });
 
-      const ignoredRefferers: Array<string> | null =
-        ignoredReferrersSetting.value
-          ? JSON.parse(ignoredReferrersSetting.value)
-          : null;
+      const ignoredRefferers = [];
+      for (const campaign of activeCampaigns) {
+        if (campaign.validationParams) {
+          const validationParams = JSON.parse(campaign.validationParams);
+          if (validationParams.ignoredRefferers) {
+            ignoredRefferers.push(...validationParams.ignoredReferralCodes);
+          }
+          if (validationParams.referralCode) {
+            ignoredRefferers.push(validationParams.referralCode);
+          }
+        }
+      }
 
       if (
         ignoredRefferers &&

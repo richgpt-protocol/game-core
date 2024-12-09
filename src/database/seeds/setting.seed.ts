@@ -128,10 +128,6 @@ export default class CreateSettings implements Seeder {
           key: SettingEnum.CREDIT_EXPIRY_DAYS,
           value: 90,
         },
-        {
-          key: SettingEnum.FILTERED_REFERRAL_CODES,
-          value: JSON.stringify([]),
-        },
       ])
       .execute();
   }
