@@ -18,6 +18,7 @@ import { UserService } from 'src/user/user.service';
 import { MPC } from 'src/shared/mpc';
 import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 import { TxStatus } from 'src/shared/enum/status.enum';
+import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 
 type ClaimResponse = {
   error: string;
@@ -47,6 +48,8 @@ export class ClaimService {
     private claimDetailRepository: Repository<ClaimDetail>,
     @InjectRepository(WalletTx)
     private walletTxRepository: Repository<WalletTx>,
+    @InjectRepository(CreditWalletTx)
+    private creditWalletTxRepository: Repository<CreditWalletTx>,
     @InjectRepository(DrawResult)
     private drawResultRepository: Repository<DrawResult>,
     @InjectRepository(PointTx)
@@ -513,18 +516,41 @@ export class ClaimService {
       },
     });
 
-    // fetch all betOrders that available for claim
+    // fetch user creditWalletTxs for query, where the creditWalletTx is with betOrder(txType PLAY), and status success
+    const creditWalletTxs = await this.creditWalletTxRepository
+      .createQueryBuilder('creditWalletTx')
+      .where('creditWalletTx.userWalletId = :userWalletId', {
+        userWalletId: userWallet.id,
+      })
+      .andWhere('creditWalletTx.txType = :txType', {
+        txType: WalletTxType.PLAY,
+      })
+      .andWhere('creditWalletTx.status = :status', {
+        status: TxStatus.SUCCESS,
+      })
+      .getMany();
+
+    const allWalletTxs = [...walletTxs, ...creditWalletTxs];
+
     let betOrders: BetOrder[] = [];
-    for (const walletTx of walletTxs) {
-      const _betOrders = await this.betOrderRepository.find({
-        where: {
-          walletTxId: walletTx.id,
-          // availableClaim=true only after live results end
-          // so this function won't return matched numberPair within live results
+    for (const walletTx of allWalletTxs) {
+      const _betOrders = await this.betOrderRepository
+        .createQueryBuilder('betOrder')
+        .where(
+          '(betOrder.walletTxId = :walletTxId OR betOrder.creditWalletTxId = :creditTxId)',
+          {
+            walletTxId: walletTx instanceof WalletTx ? walletTx.id : null,
+            creditTxId: walletTx instanceof CreditWalletTx ? walletTx.id : null,
+          },
+        )
+        .andWhere('betOrder.availableClaim = :availableClaim', {
           availableClaim: true,
+        })
+        .andWhere('betOrder.isClaimed = :isClaimed', {
           isClaimed: false,
-        },
-      });
+        })
+        .getMany();
+
       betOrders = [...betOrders, ..._betOrders];
     }
 
