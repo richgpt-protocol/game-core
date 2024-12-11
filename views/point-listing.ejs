@@ -286,7 +286,7 @@
                                 <% } %>
                         </tbody>
                     </table>
-                    <div class="pagination">
+                    <!-- <div class="pagination">
                         <% if (data.currentPage> 1) { %>
                             <a href="?page=<%= data.currentPage - 1 %>">Previous</a>
                             <% } %>
@@ -300,7 +300,43 @@
                                         <% if (data.currentPage < data.totalPages) { %>
                                             <a href="?page=<%= Number(data.currentPage) + 1 %>">Next</a>
                                             <% } %>
-                    </div>
+                    </div> -->
+                    <div class="pagination">
+                        <% if (data.currentPage > 1) { %>
+                          <a href="?page=<%= data.currentPage - 1 %>">Previous</a>
+                        <% } %>
+                        
+                        <% 
+                          let startPage = Math.max(data.currentPage - 5, 1);
+                          let endPage = Math.min(startPage + 9, data.totalPages);
+                          if (endPage - startPage < 9) {
+                            startPage = Math.max(endPage - 9, 1);
+                          }
+                        %>
+                        
+                        <% if (startPage > 1) { %>
+                          <a href="?page=1">1</a>
+                          <% if (startPage > 2) { %>
+                            <span>...</span>
+                          <% } %>
+                        <% } %>
+                        
+                        <% for (let i = startPage; i <= endPage; i++) { %>
+                          <a href="?page=<%= i %>" class="<%= data.currentPage == i ? 'active' : '' %>"><%= i %></a>
+                        <% } %>
+                        
+                        <% if (endPage < data.totalPages) { %>
+                          <% if (endPage < data.totalPages - 1) { %>
+                            <span>...</span>
+                          <% } %>
+                          <a href="?page=<%= data.totalPages %>"><%= data.totalPages %></a>
+                        <% } %>
+                        
+                        <% if (data.currentPage < data.totalPages) { %>
+                          <a href="?page=<%= Number(data.currentPage) + 1 %>">Next</a>
+                        <% } %>
+                      </div>
+
                 </div>
             </div>
     </div>
