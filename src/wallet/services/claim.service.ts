@@ -162,14 +162,14 @@ export class ClaimService {
         const prize = drawResult.prizeCategory;
         const calculatePointAmount = (amount: number): number => {
           return prize === '1'
-            ? amount * 50000
+            ? amount * 50_000_000
             : prize === '2'
-              ? amount * 20000
+              ? amount * 20_000_000
               : prize === '3'
-                ? amount * 10000
+                ? amount * 10_000_000
                 : prize === 'S'
-                  ? amount * 3000
-                  : amount * 1000; // prize === 'C'
+                  ? amount * 3_000_000
+                  : amount * 1_000_000; // prize === 'C'
         };
         let pointAmount = 0;
         // it is possible that one numberPair has both big and small forecast(thus win both)
@@ -278,7 +278,7 @@ export class ClaimService {
         txType: PointTxType.CLAIM,
         amount: totalPointAmount,
         startingBalance: userWallet.pointBalance,
-        endingBalance: userWallet.pointBalance + totalPointAmount,
+        endingBalance: Number(userWallet.pointBalance) + totalPointAmount,
         walletId: userWallet.id,
         userWallet,
         walletTxId: walletTx.id,
