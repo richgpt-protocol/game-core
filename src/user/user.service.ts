@@ -1204,17 +1204,17 @@ export class UserService implements OnModuleInit {
   }
 
   async getUserNotification(userId: number): Promise<UserNotification[]> {
-    const notifications = await this.userNotificationRepository.find({
-      where: [
+    const notifications = await this.userNotificationRepository
+      .createQueryBuilder('notification')
+      .where('notification.userId = :userId', { userId })
+      .andWhere(
+        'notification.channel = :inbox OR notification.channel IS NULL',
         {
-          user: {
-            id: userId,
-          },
+          inbox: NotificationType.INBOX,
         },
-        { channel: In([NotificationType.INBOX, null]) },
-      ],
-      order: { id: 'DESC' },
-    });
+      )
+      .orderBy('notification.id', 'DESC')
+      .getMany();
 
     return notifications;
   }
