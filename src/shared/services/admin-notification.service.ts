@@ -175,6 +175,7 @@ export class AdminNotificationService implements OnModuleInit {
       const tgErrors = [];
 
       const notification = new Notification();
+      notification.type = 'admin_broadcast';
       notification.title = title;
       notification.message = message;
       await queryRunner.manager.save(notification);
@@ -193,38 +194,40 @@ export class AdminNotificationService implements OnModuleInit {
           createQueries.push(userNotification);
         }
 
-        if (channels.includes(NotificationType.TELEGRAM) && u.tgId) {
-          const messageId = new Date().getTime().toString();
-          const jobId = `message-${messageId}`;
-          const msg = `${title}\n\n${message}`;
-
-          try {
-            await this.queueService.addJob(QueueName.MESSAGE, jobId, {
-              tgId: u.tgId,
-              message: msg,
-              messageId,
-              queueType: QueueType.SEND_TELEGRAM_MESSAGE,
-            });
-
-            const userNotification = queryRunner.manager.create(
-              UserNotification,
-              {
-                isRead: false,
-                user: u,
-                notification,
-                channel: NotificationType.TELEGRAM,
-                status: 'PENDING',
-                messageId,
-              },
-            );
-            createQueries.push(userNotification);
-          } catch (error) {
-            this.logger.error('Error sending message to telegram', error);
+        if (channels.includes(NotificationType.TELEGRAM)) {
+          if (!u.tgId) {
             tgErrors.push(u.uid);
-            continue;
+          } else {
+            const messageId = new Date().getTime().toString();
+            const jobId = `message-${messageId}`;
+            const msg = `${title}\n\n${message}`;
+
+            try {
+              await this.queueService.addJob(QueueName.MESSAGE, jobId, {
+                tgId: u.tgId,
+                message: msg,
+                messageId,
+                queueType: QueueType.SEND_TELEGRAM_MESSAGE,
+              });
+
+              const userNotification = queryRunner.manager.create(
+                UserNotification,
+                {
+                  isRead: false,
+                  user: u,
+                  notification,
+                  channel: NotificationType.TELEGRAM,
+                  status: 'PENDING',
+                  messageId,
+                },
+              );
+              createQueries.push(userNotification);
+            } catch (error) {
+              this.logger.error('Error sending message to telegram', error);
+              tgErrors.push(u.uid);
+              continue;
+            }
           }
-        } else {
-          tgErrors.push(u.uid);
         }
       }
 
@@ -288,7 +291,6 @@ export class AdminNotificationService implements OnModuleInit {
   }
 
   private async sendTelegramMessage(job: Job) {
-    console.log(job.data);
     const { message, tgId, messageId } = job.data;
     await this.userNotificationBot.sendMessage(tgId, message);
 
