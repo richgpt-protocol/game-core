@@ -1205,15 +1205,20 @@ export class UserService implements OnModuleInit {
 
   async getUserNotification(userId: number): Promise<UserNotification[]> {
     const notifications = await this.userNotificationRepository
-      .createQueryBuilder('notification')
-      .where('notification.userId = :userId', { userId })
+      .createQueryBuilder('userNotification')
+      .leftJoinAndSelect('userNotification.user', 'user')
+      .leftJoinAndSelect('userNotification.notification', 'notification')
+      .where('user.id = :userId', { userId })
       .andWhere(
-        'notification.channel = :inbox OR notification.channel IS NULL',
-        {
-          inbox: NotificationType.INBOX,
-        },
+        new Brackets((qb) => {
+          qb.where('userNotification.channel = :inbox', {
+            inbox: NotificationType.INBOX,
+          }).orWhere('userNotification.channel IS NULL');
+        }),
       )
-      .orderBy('notification.id', 'DESC')
+      .select('userNotification')
+      .addSelect('notification')
+      .orderBy('userNotification.id', 'DESC')
       .getMany();
 
     return notifications;
