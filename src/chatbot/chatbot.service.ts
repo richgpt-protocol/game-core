@@ -15,7 +15,7 @@ import { PointTxType } from 'src/shared/enum/txType.enum';
 import axios from 'axios';
 import { ConfigService } from 'src/config/config.service';
 import * as dotenv from 'dotenv';
-import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
+
 dotenv.config();
 
 const client = new MongoClient(process.env.MONGODB_URI); // for number recommendation based on input
@@ -45,7 +45,6 @@ export class ChatbotService {
     private pointTxRepository: Repository<PointTx>,
     private userService: UserService,
     private configService: ConfigService,
-    private adminNotificationService: AdminNotificationService,
   ) {}
 
   async sendMessage(
@@ -370,12 +369,6 @@ Today date: ${new Date().toDateString()}.`;
           message: 'You get 1 xp reward from daily conversation with Professor Rich.',
           walletTxId: null,
         }
-      );
-
-      await this.adminNotificationService.sendUserFirebase_TelegramNotification(
-        userId,
-        'XP Reward Get',
-        'You get 1 xp reward from daily conversation with Professor Rich.',
       );
 
       await this.userService.setUserNotification(userWallet.id, {

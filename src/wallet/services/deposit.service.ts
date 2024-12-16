@@ -32,6 +32,7 @@ import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import { FCMService } from 'src/shared/services/fcm.service';
 
 /**
  * How deposit works
@@ -60,6 +61,7 @@ export class DepositService implements OnModuleInit {
     private readonly userService: UserService,
     private eventEmitter: EventEmitter2,
     private queueService: QueueService,
+    private fcmService: FCMService,
   ) {}
   onModuleInit() {
     this.queueService.registerHandler(
@@ -880,10 +882,10 @@ export class DepositService implements OnModuleInit {
         message: 'Your Deposit has been successfully processed',
         walletTxId: walletTx.id,
       });
-      await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+      await this.fcmService.sendUserFirebase_TelegramNotification(
         walletTx.userWallet.userId,
-        'Deposit Processed Successfully',
-        'Your Deposit has been successfully processed',
+        'Deposit Successful',
+        `You have received ${pointTxAmount} USDT in your wallet. Check your app wallet to view your updated balance.`,
       );
     } catch (error) {
       this.logger.error(

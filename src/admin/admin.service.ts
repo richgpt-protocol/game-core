@@ -22,7 +22,6 @@ import { Notification } from '../notification/entities/notification.entity';
 import { DateUtil } from 'src/shared/utils/date.util';
 import { PermissionService } from 'src/permission/permission.service';
 import { UserRole } from 'src/shared/enum/role.enum';
-import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 @Injectable()
 export class AdminService {
@@ -33,7 +32,6 @@ export class AdminService {
     private adminRepository: Repository<Admin>,
     @Inject(forwardRef(() => PermissionService))
     private permissionService: PermissionService,
-    private adminNotificationService: AdminNotificationService,
   ) {}
 
   async findById(id: number): Promise<Admin> {

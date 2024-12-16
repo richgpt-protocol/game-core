@@ -37,6 +37,7 @@ import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { CreditWalletTxType } from 'src/shared/enum/txType.enum';
 import { TxStatus } from 'src/shared/enum/status.enum';
+import { FCMService } from 'src/shared/services/fcm.service';
 @Injectable()
 export class CreditService {
   private readonly logger = new Logger(CreditService.name);
@@ -58,6 +59,7 @@ export class CreditService {
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
     private readonly queueService: QueueService,
+    private fcmService: FCMService,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR =
       this.configService.get('CREDIT_BOT_ADDRESS');
@@ -524,7 +526,7 @@ export class CreditService {
             walletTxId: creditWalletTx.id,
           },
         );
-        await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+        await this.fcmService.sendUserFirebase_TelegramNotification(
           creditWalletTx.userWallet.userId,
           'Credit Added Successfully',
           'Your Credit has been added successfully',

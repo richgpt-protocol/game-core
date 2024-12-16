@@ -37,6 +37,7 @@ import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { ConfigService } from 'src/config/config.service';
 import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { WalletTxType } from 'src/shared/enum/txType.enum';
+import { FCMService } from 'src/shared/services/fcm.service';
 
 type RedeemResponse = {
   error: string;
@@ -77,6 +78,7 @@ export class WithdrawService implements OnModuleInit {
     private settingRepository: Repository<Setting>,
     private dataSource: DataSource,
     private adminNotificationService: AdminNotificationService,
+    private fcmService: FCMService,
     private walletService: WalletService,
     private eventEmitter: EventEmitter2,
     private userService: UserService,
@@ -340,12 +342,6 @@ export class WithdrawService implements OnModuleInit {
         walletTxId: walletTx.id,
       });
 
-      await this.adminNotificationService.sendUserFirebase_TelegramNotification(
-        userId,
-        'Redeem Processed Successfully',
-        `Your redeem of $${payload.amount} has been successfully processed and pending for review.`,
-      );
-
       // await this.adminNotificationService.setAdminNotification(
       //   `User ${userId} has requested withdrawl of amount ${payload.amount} USD`,
       //   'WITHDRAWL_REQUEST',
@@ -441,11 +437,6 @@ export class WithdrawService implements OnModuleInit {
           walletTxId: walletTx.id,
         });
 
-        await this.adminNotificationService.sendUserFirebase_TelegramNotification(
-          walletTx.userWalletId,
-          'Redeem Request Rejected',
-          `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
-        );
       }
       return { error: null, data: redeemTx };
     } catch (error) {
@@ -633,10 +624,10 @@ export class WithdrawService implements OnModuleInit {
           },
         );
 
-        await this.adminNotificationService.sendUserFirebase_TelegramNotification(
+        await this.fcmService.sendUserFirebase_TelegramNotification(
           redeemTx.walletTx.userWalletId,
-          'Payout Successfully',
-          `Your payout for amount $${Number(redeemTx.amount)} has been processed successfully.`,
+          'Withdrawal Successful',
+          `You have withdrawn $${Number(redeemTx.amount)} USDT to ${redeemTx.walletTx.userWallet}`,
         );
       }
     } catch (error) {

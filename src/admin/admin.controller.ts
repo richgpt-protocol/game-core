@@ -25,7 +25,6 @@ import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { ResponseListVo, ResponseVo } from 'src/shared/vo/response.vo';
 import { UpdateAdminNotificationDto } from './dto/admin-notification.dto';
 import { AdminDto, GetAdminListDto, UpdateAdminDto } from './dto/admin.dto';
-import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 @ApiTags('Admin')
 @Controller('api/v1/admin')
@@ -33,7 +32,6 @@ export class AdminController {
   constructor(
     private adminService: AdminService,
     private auditLogService: AuditLogService,
-    private adminNotificationService: AdminNotificationService,
   ) {}
 
   @Secure(PermissionEnum.GET_ADMIN, UserRole.ADMIN)

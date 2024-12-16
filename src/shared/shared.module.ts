@@ -17,6 +17,7 @@ import { GasService } from './services/gas.service';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { User } from 'src/user/entities/user.entity';
+import { FCMService } from './services/fcm.service';
 
 @Module({
   imports: [
@@ -46,12 +47,14 @@ import { User } from 'src/user/entities/user.entity';
     SMSService,
     CacheSettingService,
     AdminNotificationService,
+    FCMService,
     TelegramService,
   ],
   exports: [
     SMSService,
     CacheSettingService,
     AdminNotificationService,
+    FCMService,
     TelegramService,
     GasService,
   ],
