@@ -136,6 +136,7 @@ export class GameGateway {
         lastGame.id,
       );
     } catch (err) {
+      console.log(err);
       // inform admin
       await this.adminNotificationService.setAdminNotification(
         `Error occur in game.gateway.emitDrawResult, error: ${err}`,
