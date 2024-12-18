@@ -390,11 +390,7 @@ export class InternalTransferService {
             message: 'Your Transfer has been successfully processed',
             walletTxId: senderWalletTx.id,
           });
-          await this.fcmService.sendUserFirebase_TelegramNotification(
-            senderUserWallet.userId,
-            'Transfer Processed Successfully',
-            'Your Transfer has been successfully processed',
-          );
+
 
           await this.userService.setUserNotification(
             receiverUserWallet.userId,
@@ -409,7 +405,7 @@ export class InternalTransferService {
           await this.fcmService.sendUserFirebase_TelegramNotification(
             receiverUserWallet.userId,
             'Internal Transfer Received',
-            `You have received 10 USDT from ${senderWalletTx.id}.`,
+            `You have received ${senderWalletTx.txAmount} USDT from ${senderWalletTx.id}.`,
           );
 
           this.eventEmitter.emit(

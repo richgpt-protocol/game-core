@@ -18,6 +18,8 @@ import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { User } from 'src/user/entities/user.entity';
 import { FCMService } from './services/fcm.service';
+import { AiResponseService } from './services/ai-response.service';
+import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { FCMService } from './services/fcm.service';
       SmsLogs,
       ReloadTx,
       UserWallet,
+      ChatLog,
     ]),
     TwilioModule.forRootAsync({
       imports: [ConfigModule],
@@ -48,6 +51,7 @@ import { FCMService } from './services/fcm.service';
     CacheSettingService,
     AdminNotificationService,
     FCMService,
+    AiResponseService,
     TelegramService,
   ],
   exports: [
@@ -55,6 +59,7 @@ import { FCMService } from './services/fcm.service';
     CacheSettingService,
     AdminNotificationService,
     FCMService,
+    AiResponseService,
     TelegramService,
     GasService,
   ],

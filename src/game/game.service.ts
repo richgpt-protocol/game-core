@@ -30,6 +30,9 @@ import { ClaimService } from 'src/wallet/services/claim.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { ReferralTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import { FCMService } from 'src/shared/services/fcm.service';
+import { ChatbotService } from 'src/chatbot/chatbot.service';
+import { AiResponseService } from 'src/shared/services/ai-response.service';
 
 interface SubmitDrawResultDTO {
   drawResults: DrawResult[];
@@ -64,6 +67,8 @@ export class GameService implements OnModuleInit {
     private readonly claimService: ClaimService,
     @InjectRepository(BetOrder)
     private betOrderRepository: Repository<BetOrder>,
+    private fcmService: FCMService,
+    private aiesponseService: AiResponseService,
   ) {}
 
   // process of closing bet for current epoch, set draw result, announce draw result, set available claim and process referral bonus
@@ -95,7 +100,7 @@ export class GameService implements OnModuleInit {
       this.cacheSettingService.clear();
 
       // set bet close in game record for last hour epoch (add 10 seconds just in case)
-      const lastHour = new Date(Date.now() - 60 * 60 * 1000 + (10*1000));
+      const lastHour = new Date(Date.now() - 60 * 60 * 1000 + 10 * 1000);
       const lastHourUTC = new Date(
         lastHour.getUTCFullYear(),
         lastHour.getUTCMonth(),
@@ -994,5 +999,99 @@ export class GameService implements OnModuleInit {
     return this.drawResultRepository.find({
       where: { gameId },
     });
+  }
+
+  @Cron('58 * * * *') 
+  async notifyUsersBeforeResult(): Promise<void> {
+    this.logger.log('notifyUsersBeforeResult started');
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      const currentGame = await queryRunner.manager
+        .createQueryBuilder(Game, 'game')
+        .where('game.isClosed = false')
+        .orderBy('game.startDate', 'DESC')
+        .getOne();
+
+      if (!currentGame) {
+        this.logger.warn('No active game found');
+        return;
+      }
+
+      const timeLeft = currentGame.endDate.getTime() - Date.now();
+      if (timeLeft > 60000 || timeLeft <= 0) {
+        return;
+      }
+
+      const betOrders = await queryRunner.manager
+        .createQueryBuilder(BetOrder, 'betOrder')
+        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .where('betOrder.gameId = :gameId', { gameId: currentGame.id })
+        .getMany();
+
+      for (const betOrder of betOrders) {
+        const user = betOrder.walletTx.userWallet.user;
+        const message = `Only 1 minute left until the results are announced! ⏳ Check it out now and see if you're a winner! 🏆`;
+        await this.fcmService.sendUserFirebase_TelegramNotification(
+          user.id,
+          'Result Announcement Reminder 🕒',
+          message,
+        );
+        this.logger.log(`Notification sent to user ID: ${user.id}`);
+      }
+    } catch (error) {
+      this.logger.error('Error in notifyUsersBeforeResult:', error.message);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  @Cron('0 0 0 * * *')
+  async notifyUsersWithoutBet(): Promise<void> {
+    this.logger.log('notifyUsersWithoutBet started');
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      const usersWithBalance = await queryRunner.manager
+        .createQueryBuilder(UserWallet, 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .where('userWallet.balance > 0')
+        .getMany();
+
+      for (const userWallet of usersWithBalance) {
+        const recentBet = await queryRunner.manager
+          .createQueryBuilder(BetOrder, 'betOrder')
+          .where('betOrder.userId = :userId', { userId: userWallet.user.id })
+          .andWhere('betOrder.createdDate > :yesterday', {
+            yesterday: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          })
+          .getOne();
+
+        if (!recentBet) {
+          const content = "Help me create a short, clear, polite, and funny message with emojis to encourage inactive users to return and join a bet.";
+          const aiMessage = await this.aiesponseService.generateInactiveUserNotification(userWallet.user.id,content);
+
+          // const message = `You still have balance in your account 💰, but you haven't placed a bet! Don't miss out, join the action now! 🚀`;
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            userWallet.user.id,
+            'Bet Reminder 🕹️',
+            aiMessage,
+          );
+          this.logger.log(
+            `Notification sent to user ID: ${userWallet.user.id}`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error in notifyUsersWithoutBet:', error.message);
+    } finally {
+      await queryRunner.release();
+    }
   }
 }
