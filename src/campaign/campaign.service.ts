@@ -3,8 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Campaign } from './entities/campaign.entity';
 import {
   DataSource,
-  LessThan,
-  MoreThan,
+  IsNull,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Not,
   QueryRunner,
   Repository,
 } from 'typeorm';
@@ -332,8 +334,22 @@ export class CampaignService {
 
     const campaigns = await this.campaignRepository.find({
       where: {
-        startTime: LessThan(currentTime),
-        endTime: MoreThan(currentTime),
+        startTime: LessThanOrEqual(currentTime),
+        endTime: MoreThanOrEqual(currentTime),
+      },
+    });
+
+    return campaigns;
+  }
+
+  async findActiveWithBannerCampaigns() {
+    const currentTime = new Date().getTime() / 1000;
+
+    const campaigns = await this.campaignRepository.find({
+      where: {
+        startTime: LessThanOrEqual(currentTime),
+        endTime: MoreThanOrEqual(currentTime),
+        banner: Not(IsNull()),
       },
     });
 

@@ -152,4 +152,52 @@ export class PublicController {
       message: 'Success',
     };
   }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-draw-info')
+  @ApiResponse({
+    status: 200,
+    description: 'Get draw info',
+    type: ResponseVo,
+  })
+  async getDrawInfo(): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getDrawInfo();
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-recent-transactions')
+  @ApiResponse({
+    status: 200,
+    description: 'Get recent transactions',
+    type: ResponseVo,
+  })
+  async getRecentTransactions(): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getRecentTransactions();
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-active-campaign-with-banners')
+  @ApiResponse({
+    status: 200,
+    description: 'Get active campaign with banners',
+    type: ResponseVo,
+  })
+  async getActiveCampaignWithBanners(): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getCampaigbnInfo();
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
 }
