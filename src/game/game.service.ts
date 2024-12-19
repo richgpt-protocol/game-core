@@ -5,7 +5,15 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Brackets, DataSource, In, LessThan, Repository } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  In,
+  LessThan,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -943,5 +951,65 @@ export class GameService implements OnModuleInit {
       const { id, prizeIndex, ...rest } = result;
       return rest;
     });
+  }
+
+  async getCurrentGame(): Promise<Game> {
+    const currentTime = new Date();
+
+    const currentGame = await this.gameRepository.findOne({
+      where: {
+        startDate: LessThanOrEqual(currentTime),
+        endDate: MoreThanOrEqual(currentTime),
+        isClosed: false,
+      },
+    });
+
+    if (!currentGame) {
+      return await this.gameRepository.findOne({
+        where: {
+          isClosed: false,
+        },
+      });
+    }
+
+    return currentGame;
+  }
+
+  async getDrawResultByEpoch(epoch: string): Promise<DrawResult[]> {
+    const game = await this.gameRepository.findOne({
+      where: { epoch },
+    });
+
+    if (!game) {
+      return [];
+    }
+
+    return this.drawResultRepository.find({
+      where: { gameId: game.id },
+    });
+  }
+
+  async getWinningAmountByEpoch(epoch: string): Promise<any> {
+    const drawResults = await this.getDrawResultByEpoch(epoch);
+    let total = 0;
+
+    for (const drawResult of drawResults) {
+      const betOrders = await this.betOrderRepository
+        .createQueryBuilder('betOrder')
+        .leftJoinAndSelect('betOrder.game', 'game')
+        .where('game.epoch = :epoch', { epoch })
+        .andWhere('betOrder.numberPair = :numberPair', {
+          numberPair: drawResult.numberPair,
+        })
+        .getMany();
+
+      for (const betOrder of betOrders) {
+        const { bigForecastWinAmount, smallForecastWinAmount } =
+          this.claimService.calculateWinningAmount(betOrder, drawResult);
+        total += Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
+      }
+    }
+
+    return total;
   }
 }
