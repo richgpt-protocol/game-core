@@ -1,0 +1,465 @@
+[
+  {
+    "type": "function",
+    "name": "UPGRADE_INTERFACE_VERSION",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "string", "internalType": "string" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "claim",
+    "inputs": [
+      { "name": "projectName", "type": "string", "internalType": "string" },
+      {
+        "name": "participantAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      { "name": "winningRound", "type": "uint256", "internalType": "uint256" },
+      {
+        "name": "jackpotHashToClaim",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "drawJackpotHash",
+    "inputs": [
+      { "name": "projectName", "type": "string", "internalType": "string" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "initialize",
+    "inputs": [
+      { "name": "owner", "type": "address", "internalType": "address" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "owner",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "participate",
+    "inputs": [
+      { "name": "projectName", "type": "string", "internalType": "string" },
+      {
+        "name": "participantAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "participantUid",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "participantTicketId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "feeTokenAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      { "name": "feeAmount", "type": "uint256", "internalType": "uint256" },
+      { "name": "signature", "type": "bytes", "internalType": "bytes" }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "projects",
+    "inputs": [{ "name": "", "type": "string", "internalType": "string" }],
+    "outputs": [
+      { "name": "ownerAddress", "type": "address", "internalType": "address" },
+      { "name": "signerAddress", "type": "address", "internalType": "address" },
+      {
+        "name": "rewardTokenAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "feeAndRewardContractAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      { "name": "currentRound", "type": "uint256", "internalType": "uint256" },
+      {
+        "name": "currentRoundStartTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      { "name": "roundDuration", "type": "uint256", "internalType": "uint256" },
+      { "name": "isPaused", "type": "bool", "internalType": "bool" }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "proxiableUUID",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "bytes32", "internalType": "bytes32" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "renounceOwnership",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setJackpotHash",
+    "inputs": [
+      { "name": "projectName", "type": "string", "internalType": "string" },
+      { "name": "jackpotHash", "type": "bytes32", "internalType": "bytes32" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setProject",
+    "inputs": [
+      { "name": "projectName", "type": "string", "internalType": "string" },
+      { "name": "ownerAddress", "type": "address", "internalType": "address" },
+      { "name": "signerAddress", "type": "address", "internalType": "address" },
+      {
+        "name": "rewardTokenAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "feeAndRewardContractAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "currentRoundStartTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      { "name": "roundDuration", "type": "uint256", "internalType": "uint256" },
+      { "name": "isPaused", "type": "bool", "internalType": "bool" },
+      {
+        "name": "charMatched",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "rewardAmount",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "transferOwnership",
+    "inputs": [
+      { "name": "newOwner", "type": "address", "internalType": "address" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "upgradeToAndCall",
+    "inputs": [
+      {
+        "name": "newImplementation",
+        "type": "address",
+        "internalType": "address"
+      },
+      { "name": "data", "type": "bytes", "internalType": "bytes" }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "event",
+    "name": "Claimed",
+    "inputs": [
+      {
+        "name": "projectName",
+        "type": "string",
+        "indexed": true,
+        "internalType": "string"
+      },
+      {
+        "name": "participantAddress",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "winningRound",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "jackpotHash",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "charMatched",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "rewardTokenAddress",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "rewardAmount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Initialized",
+    "inputs": [
+      {
+        "name": "version",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "JackpotContractSet",
+    "inputs": [
+      {
+        "name": "jackpotContract",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "JackpotHashDrawn",
+    "inputs": [
+      {
+        "name": "projectName",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "drawCount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "JackpotHashSet",
+    "inputs": [
+      {
+        "name": "projectName",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "jackpotHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OwnershipTransferred",
+    "inputs": [
+      {
+        "name": "previousOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Participated",
+    "inputs": [
+      {
+        "name": "projectName",
+        "type": "string",
+        "indexed": true,
+        "internalType": "string"
+      },
+      {
+        "name": "participantAddress",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "participantUid",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "participantTicketId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "feeTokenAddress",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "feeAmount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "randomHash",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ProjectSet",
+    "inputs": [
+      {
+        "name": "projectName",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Upgraded",
+    "inputs": [
+      {
+        "name": "implementation",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AddressEmptyCode",
+    "inputs": [
+      { "name": "target", "type": "address", "internalType": "address" }
+    ]
+  },
+  { "type": "error", "name": "ECDSAInvalidSignature", "inputs": [] },
+  {
+    "type": "error",
+    "name": "ECDSAInvalidSignatureLength",
+    "inputs": [
+      { "name": "length", "type": "uint256", "internalType": "uint256" }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ECDSAInvalidSignatureS",
+    "inputs": [{ "name": "s", "type": "bytes32", "internalType": "bytes32" }]
+  },
+  {
+    "type": "error",
+    "name": "ERC1967InvalidImplementation",
+    "inputs": [
+      { "name": "implementation", "type": "address", "internalType": "address" }
+    ]
+  },
+  { "type": "error", "name": "ERC1967NonPayable", "inputs": [] },
+  { "type": "error", "name": "FailedInnerCall", "inputs": [] },
+  { "type": "error", "name": "INVALID_SIGNATURE", "inputs": [] },
+  { "type": "error", "name": "InvalidInitialization", "inputs": [] },
+  { "type": "error", "name": "JACKPOT_CLAIMED", "inputs": [] },
+  { "type": "error", "name": "JACKPOT_HASH_NOT_CLAIMABLE", "inputs": [] },
+  { "type": "error", "name": "JACKPOT_HASH_NOT_FOUND", "inputs": [] },
+  { "type": "error", "name": "MAX_DRAW_REACHED", "inputs": [] },
+  { "type": "error", "name": "NOT_AUTHORIZED", "inputs": [] },
+  { "type": "error", "name": "NotInitializing", "inputs": [] },
+  {
+    "type": "error",
+    "name": "OwnableInvalidOwner",
+    "inputs": [
+      { "name": "owner", "type": "address", "internalType": "address" }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OwnableUnauthorizedAccount",
+    "inputs": [
+      { "name": "account", "type": "address", "internalType": "address" }
+    ]
+  },
+  { "type": "error", "name": "PROJECT_IS_PAUSED", "inputs": [] },
+  { "type": "error", "name": "ROUND_NOT_ENDED", "inputs": [] },
+  { "type": "error", "name": "TRANSFER_NATIVE_FAILED", "inputs": [] },
+  { "type": "error", "name": "UUPSUnauthorizedCallContext", "inputs": [] },
+  {
+    "type": "error",
+    "name": "UUPSUnsupportedProxiableUUID",
+    "inputs": [{ "name": "slot", "type": "bytes32", "internalType": "bytes32" }]
+  }
+]
