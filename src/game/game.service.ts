@@ -33,6 +33,7 @@ import { ReferralTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 import { FCMService } from 'src/shared/services/fcm.service';
 import { ChatbotService } from 'src/chatbot/chatbot.service';
 import { AiResponseService } from 'src/shared/services/ai-response.service';
+import { PointTx } from 'src/point/entities/point-tx.entity';
 
 interface SubmitDrawResultDTO {
   drawResults: DrawResult[];
@@ -1001,7 +1002,7 @@ export class GameService implements OnModuleInit {
     });
   }
 
-  @Cron('58 * * * *') 
+  @Cron('58 * * * *')
   async notifyUsersBeforeResult(): Promise<void> {
     this.logger.log('notifyUsersBeforeResult started');
 
@@ -1058,6 +1059,8 @@ export class GameService implements OnModuleInit {
     await queryRunner.connect();
 
     try {
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+
       const usersWithBalance = await queryRunner.manager
         .createQueryBuilder(UserWallet, 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
@@ -1065,24 +1068,27 @@ export class GameService implements OnModuleInit {
         .getMany();
 
       for (const userWallet of usersWithBalance) {
-        const recentBet = await queryRunner.manager
-          .createQueryBuilder(BetOrder, 'betOrder')
-          .where('betOrder.userId = :userId', { userId: userWallet.user.id })
-          .andWhere('betOrder.createdDate > :yesterday', {
-            yesterday: new Date(Date.now() - 24 * 60 * 60 * 1000),
-          })
+        const recentPointTx = await queryRunner.manager
+          .createQueryBuilder(PointTx, 'pointTx')
+          .where('pointTx.walletId = :walletId', { walletId: userWallet.id })
+          .andWhere('pointTx.updatedDate > :threeDaysAgo', { threeDaysAgo })
           .getOne();
 
-        if (!recentBet) {
-          const content = "Help me create a short, clear, polite, and funny message with emojis to encourage inactive users to return and join a bet.";
-          const aiMessage = await this.aiesponseService.generateInactiveUserNotification(userWallet.user.id,content);
+        if (!recentPointTx) {
+          const content =
+            'Help me create a short, clear, polite, and funny message with emojis to encourage inactive users to return and join a bet.';
+          const aiMessage =
+            await this.aiesponseService.generateInactiveUserNotification(
+              userWallet.user.id,
+              content,
+            );
 
-          // const message = `You still have balance in your account 💰, but you haven't placed a bet! Don't miss out, join the action now! 🚀`;
           await this.fcmService.sendUserFirebase_TelegramNotification(
             userWallet.user.id,
             'Bet Reminder 🕹️',
             aiMessage,
           );
+
           this.logger.log(
             `Notification sent to user ID: ${userWallet.user.id}`,
           );
