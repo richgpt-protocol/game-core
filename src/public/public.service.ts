@@ -45,6 +45,9 @@ import {
   WalletTxType,
   PointTxType,
 } from 'src/shared/enum/txType.enum';
+import { GameService } from 'src/game/game.service';
+import { BetService } from 'src/game/bet.service';
+import { CampaignService } from 'src/campaign/campaign.service';
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -69,6 +72,9 @@ export class PublicService {
     private adminNotificationService: AdminNotificationService,
     private eventEmitter: EventEmitter2,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private gameService: GameService,
+    private betService: BetService,
+    private campaignService: CampaignService,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
       'DEPOSIT_BOT_ADDRESS',
@@ -320,6 +326,68 @@ export class PublicService {
     const ott = crypto.randomBytes(32).toString('hex');
     await this.cacheManager.set(`ott_${user.uid}`, ott, 30000);
     return ott;
+  }
+
+  async getDrawInfo() {
+    const currentGame = await this.gameService.getCurrentGame();
+
+    const previousGameEpoch = Number(currentGame.epoch) - 1;
+    console.log('previousGameEpoch', previousGameEpoch);
+    const previousDraw = await this.gameService.getDrawResultByEpoch(
+      previousGameEpoch.toString(),
+    );
+    const previousWinningAmount =
+      await this.gameService.getWinningAmountByEpoch(
+        previousGameEpoch.toString(),
+      );
+
+    return {
+      currentGame,
+      previousDraw,
+      previousWinningAmount,
+    };
+  }
+
+  async getRecentTransactions() {
+    const deposits = await this.walletService.getDepositTransactions(10);
+    const withdrawals = await this.walletService.getWithdrawTransactions(10);
+    const bets = await this.betService.getRecentBets(10);
+
+    const formattedDeposits = deposits.map((deposit) => {
+      return {
+        ...deposit,
+        uid:
+          deposit.uid.slice(0, 3) +
+          '****' +
+          deposit.uid.slice(deposit.uid.length - 3),
+        url:
+          this.configService.get('EXPLORER_BASE_URL') + '/tx/' + deposit.txHash,
+      };
+    });
+
+    const formattedWithdrawals = withdrawals.map((withdrawal) => {
+      return {
+        ...withdrawal,
+        uid:
+          withdrawal.uid.slice(0, 3) +
+          '****' +
+          withdrawal.uid.slice(withdrawal.uid.length - 3),
+        url:
+          this.configService.get('EXPLORER_BASE_URL') +
+          '/tx/' +
+          withdrawal.txHash,
+      };
+    });
+
+    return {
+      deposits: formattedDeposits,
+      withdrawals: formattedWithdrawals,
+      bets,
+    };
+  }
+
+  async getCampaigbnInfo() {
+    return await this.campaignService.findActiveWithBannerCampaigns();
   }
 
   private async addXP(

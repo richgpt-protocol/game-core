@@ -64,6 +64,6 @@ import { WalletModule } from 'src/wallet/wallet.module';
     // CreditService,
   ],
   controllers: [GameController],
-  exports: [GameService],
+  exports: [GameService, BetService],
 })
 export class GameModule {}

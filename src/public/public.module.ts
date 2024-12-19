@@ -10,6 +10,8 @@ import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { NotificationModule } from 'src/notification/notification.module';
 import { SharedModule } from 'src/shared/shared.module';
 import { CacheModule } from '@nestjs/cache-manager';
+import { GameModule } from 'src/game/game.module';
+import { CampaignModule } from 'src/campaign/campaign.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { CacheModule } from '@nestjs/cache-manager';
     WalletModule,
     ConfigModule,
     SharedModule,
+    GameModule,
+    CampaignModule,
     CacheModule.register(),
   ],
   providers: [PublicService],
