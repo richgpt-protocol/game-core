@@ -1365,4 +1365,36 @@ export class UserService implements OnModuleInit {
       await queryRunner.manager.save(userWallet);
     }
   }
+
+  async updateWithdrawPin(userId: number, withdrawPin: string) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      await queryRunner.startTransaction();
+      const user = await queryRunner.manager.findOne(User, {
+        where: { id: userId },
+      });
+
+      if (!user) {
+        throw new BadRequestException('User not found');
+      }
+
+      const hash = await bcrypt.hash(withdrawPin, 10);
+      await queryRunner.manager.update(
+        User,
+        { id: userId },
+        {
+          withdrawPin: hash,
+        },
+      );
+      await queryRunner.commitTransaction();
+    } catch (ex) {
+      this.logger.error(ex);
+      await queryRunner.rollbackTransaction();
+      throw ex;
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
 }
