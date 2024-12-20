@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -17,6 +18,7 @@ import { UpdateUserGameDto } from './dtos/update-user-game.dto';
 import { UpdateTaskXpDto } from './dtos/update-task-xp.dto';
 import { UpdateUserTelegramDto } from './dtos/update-user-telegram.dto';
 import { GetOttDto } from './dtos/get-ott.dto';
+import { LiteBetDto } from './dtos/lite-bet.dto';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
@@ -199,5 +201,26 @@ export class PublicController {
       data,
       message: 'Success',
     };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('lite-bet')
+  @ApiResponse({
+    status: 201,
+    description: 'Get lite bet',
+    type: ResponseVo,
+  })
+  async liteBet(@Body() payload: LiteBetDto): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.bet(payload.uid, payload.bets);
+      return {
+        statusCode: HttpStatus.CREATED,
+        data,
+        message: 'Success',
+      };
+    } catch (ex) {
+      console.log(ex);
+      throw new BadRequestException(ex.message);
+    }
   }
 }
