@@ -48,6 +48,7 @@ import {
 import { GameService } from 'src/game/game.service';
 import { BetService } from 'src/game/bet.service';
 import { CampaignService } from 'src/campaign/campaign.service';
+import { BetDto } from 'src/game/dto/Bet.dto';
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -332,7 +333,6 @@ export class PublicService {
     const currentGame = await this.gameService.getCurrentGame();
 
     const previousGameEpoch = Number(currentGame.epoch) - 1;
-    console.log('previousGameEpoch', previousGameEpoch);
     const previousDraw = await this.gameService.getDrawResultByEpoch(
       previousGameEpoch.toString(),
     );
@@ -388,6 +388,15 @@ export class PublicService {
 
   async getCampaigbnInfo() {
     return await this.campaignService.findActiveWithBannerCampaigns();
+  }
+
+  async bet(uid: string, payload: BetDto[]) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    await this.betService.bet(user.id, payload);
   }
 
   private async addXP(
