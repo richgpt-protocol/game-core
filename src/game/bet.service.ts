@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, QueryRunner, Not } from 'typeorm';
+import { Repository, DataSource, QueryRunner, Not, Brackets } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { BetDto, EstimateBetResponseDTO } from 'src/game/dto/Bet.dto';
 import { Game } from './entities/game.entity';
@@ -148,9 +148,16 @@ export class BetService implements OnModuleInit {
         .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
         .leftJoinAndSelect('walletUserWallet.user', 'walletUser')
         .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
-        .orderBy('gameUsdTx.id', 'DESC')
         .where('gameUsdTx.status = :status', { status: TxStatus.SUCCESS })
-        .andWhere('walletTx.txType = :txType', { txType: WalletTxType.PLAY })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('walletTx.txType = :txType', {
+              txType: WalletTxType.PLAY,
+            }).orWhere('creditWalletTx.txType = :txType', {
+              txType: CreditWalletTxType.PLAY,
+            });
+          }),
+        )
         .limit(count)
         .orderBy('betOrder.createdDate', 'DESC')
         .getMany();
@@ -172,6 +179,7 @@ export class BetService implements OnModuleInit {
           txHash: bet.txHash,
           url:
             this.configService.get('EXPLORER_BASE_URL') + '/tx/' + bet.txHash,
+          createdDate: bet.betOrders[0].createdDate,
         };
       });
 

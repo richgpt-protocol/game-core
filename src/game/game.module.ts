@@ -65,6 +65,6 @@ import { Setting } from 'src/setting/entities/setting.entity';
     // CreditService,
   ],
   controllers: [GameController],
-  exports: [GameService],
+  exports: [GameService, BetService],
 })
 export class GameModule {}
