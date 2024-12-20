@@ -80,7 +80,13 @@ import { UserService } from 'src/user/user.service';
     // UserService,
   ],
   controllers: [WalletController],
-  exports: [WalletService, CreditService, ClaimService, DepositService],
+  exports: [
+    WalletService,
+    CreditService,
+    ClaimService,
+    DepositService,
+    WithdrawService,
+  ],
 })
 export class WalletModule {
   configure(consumer: MiddlewareConsumer) {
