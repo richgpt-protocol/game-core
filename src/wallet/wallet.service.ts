@@ -312,4 +312,47 @@ export class WalletService {
       if (!runner && !queryRunner.isReleased) await queryRunner.release();
     }
   }
+
+  async getDepositTransactions(count: number) {
+    const walletTxs = await this.walletTxRepository
+      .createQueryBuilder('walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('userWallet.user', 'user')
+      .where('walletTx.txType = :txType', { txType: WalletTxType.DEPOSIT })
+      .andWhere('walletTx.status = :status', { status: TxStatus.SUCCESS })
+      .orderBy('walletTx.id', 'DESC')
+      .limit(count)
+      .getMany();
+
+    return walletTxs.map((walletTx) => {
+      return {
+        uid: walletTx.userWallet.user.uid,
+        amount: parseFloat(Number(walletTx.txAmount).toFixed(2)),
+        txHash: walletTx.txHash,
+        createdDate: walletTx.createdDate,
+      };
+    });
+  }
+
+  async getWithdrawTransactions(count: number) {
+    const walletTxs = await this.walletTxRepository
+      .createQueryBuilder('walletTx')
+      .leftJoinAndSelect('walletTx.redeemTx', 'redeemTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('userWallet.user', 'user')
+      .where('walletTx.txType = :txType', { txType: WalletTxType.REDEEM })
+      .andWhere('walletTx.status = :status', { status: TxStatus.SUCCESS })
+      .orderBy('walletTx.id', 'DESC')
+      .limit(count)
+      .getMany();
+
+    return walletTxs.map((walletTx) => {
+      return {
+        uid: walletTx.userWallet.user.uid,
+        amount: parseFloat(Number(walletTx.txAmount).toFixed(2)),
+        txHash: walletTx.redeemTx.payoutTxHash,
+        createdDate: walletTx.createdDate,
+      };
+    });
+  }
 }

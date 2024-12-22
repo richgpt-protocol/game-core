@@ -67,6 +67,6 @@ import { JackpotTx } from './entities/jackpot-tx.entity';
     // CreditService,
   ],
   controllers: [GameController],
-  exports: [GameService],
+  exports: [GameService, BetService],
 })
 export class GameModule {}

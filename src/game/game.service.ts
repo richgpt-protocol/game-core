@@ -5,7 +5,15 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, DataSource, In, LessThan, Repository } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  In,
+  LessThan,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -996,136 +1004,63 @@ export class GameService implements OnModuleInit {
     });
   }
 
-  @Cron('0 55 * * * *') // 5 minutes before every hour
-  async pushBettingStatistic(): Promise<void> {
-    // get current epoch
-    const now = new Date();
-    const utcNow = new Date(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate(),
-      now.getUTCHours(),
-      now.getUTCMinutes(),
-      now.getUTCSeconds(),
-    );
-    const game = await this.gameRepository
-      .createQueryBuilder('game')
-      .where('game.startDate < :utcNow', { utcNow })
-      .orderBy('game.startDate', 'DESC')
-      .getOne();
+  async getCurrentGame(): Promise<Game> {
+    const currentTime = new Date();
+
+    const currentGame = await this.gameRepository.findOne({
+      where: {
+        startDate: LessThanOrEqual(currentTime),
+        endDate: MoreThanOrEqual(currentTime),
+        isClosed: false,
+      },
+    });
+
+    if (!currentGame) {
+      return await this.gameRepository.findOne({
+        where: {
+          isClosed: false,
+        },
+      });
+    }
+
+    return currentGame;
+  }
+
+  async getDrawResultByEpoch(epoch: string): Promise<DrawResult[]> {
+    const game = await this.gameRepository.findOne({
+      where: { epoch },
+    });
+
     if (!game) {
-      this.logger.error('No game found for current epoch');
-      return;
+      return [];
     }
 
-    // get bot account user ids
-    const setting = await this.settingRepository
-      .createQueryBuilder('setting')
-      .where('setting.key = :key', { key: SettingEnum.BOT_ACCOUNT_USER_IDS })
-      .getOne();
-    if (!setting) {
-      this.logger.error('No setting found for bot account user ids');
-      return;
-    }
-    const botAccountUserIds = JSON.parse(setting.value);
+    return this.drawResultRepository.find({
+      where: { gameId: game.id },
+    });
+  }
 
-    // get user that won before
-    const availableClaimBetOrders = await this.betOrderRepository
-      .createQueryBuilder('betOrder')
-      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
-      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
-      .where('betOrder.availableClaim = :availableClaim', {
-        availableClaim: true,
-      })
-      .getMany();
-    const winUserWalletIds = availableClaimBetOrders.map((betOrder) =>
-      betOrder.walletTx
-        ? betOrder.walletTx.userWalletId
-        : betOrder.creditWalletTx.walletId,
-    );
+  async getWinningAmountByEpoch(epoch: string): Promise<any> {
+    const drawResults = await this.getDrawResultByEpoch(epoch);
+    let total = 0;
 
-    let query = this.betOrderRepository
-      .createQueryBuilder('betOrder')
-      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
-      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-      .leftJoinAndSelect('userWallet.user', 'user')
-      .where('betOrder.gameId = :gameId', { gameId: game.id })
-      // filter out not real USDT bet
-      .andWhere('betOrder.walletTxId IS NOT NULL')
-      // filter out not $1 big forecast at max
-      .andWhere('betOrder.bigForecastAmount > 0')
-      .andWhere('betOrder.bigForecastAmount <= 1');
-    if (botAccountUserIds?.length > 0) {
-      // filter out bot account
-      query = query.andWhere('user.id NOT IN (:...botAccountUserIds)', {
-        botAccountUserIds,
-      });
-    }
-    if (winUserWalletIds?.length > 0) {
-      // filter out user that won before
-      query = query.andWhere('userWallet.id NOT IN (:...winUserWalletIds)', {
-        winUserWalletIds,
-      });
-    }
-    const betOrders = await query.getMany();
+    for (const drawResult of drawResults) {
+      const betOrders = await this.betOrderRepository
+        .createQueryBuilder('betOrder')
+        .leftJoinAndSelect('betOrder.game', 'game')
+        .where('game.epoch = :epoch', { epoch })
+        .andWhere('betOrder.numberPair = :numberPair', {
+          numberPair: drawResult.numberPair,
+        })
+        .getMany();
 
-    if (betOrders.length === 0) {
-      this.logger.log(
-        `pushBettingStatictic(): No bet orders found/criteria met for current epoch - ${game.epoch}`,
-      );
-      return;
-    }
-
-    const userBetDetail = {};
-    for (const betOrder of betOrders) {
-      const userWalletId = betOrder.walletTx.userWalletId;
-      const user = betOrder.walletTx.userWallet.user;
-      const numberPair = betOrder.numberPair;
-
-      if (!userBetDetail[userWalletId]) {
-        userBetDetail[userWalletId] = {
-          // to include the user's telegram username and phone number
-          tgUsername: user.tgUsername || null,
-          phoneNumber: user.phoneNumber || null,
-          bets: {},
-        };
+      for (const betOrder of betOrders) {
+        const { bigForecastWinAmount, smallForecastWinAmount } =
+          this.claimService.calculateWinningAmount(betOrder, drawResult);
+        total += Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
       }
-
-      if (!userBetDetail[userWalletId].bets[numberPair]) {
-        userBetDetail[userWalletId].bets[numberPair] = {
-          big: 0,
-          small: 0,
-        };
-      }
-
-      userBetDetail[userWalletId].bets[numberPair].big += Number(
-        betOrder.bigForecastAmount,
-      );
-      userBetDetail[userWalletId].bets[numberPair].small += Number(
-        betOrder.smallForecastAmount,
-      );
     }
 
-    let formattedContent = '';
-    for (const userWalletId in userBetDetail) {
-      const user = userBetDetail[userWalletId];
-      formattedContent += `Telegram Username: ${user.tgUsername || 'N/A'}, Phone Number: ${user.phoneNumber || 'N/A'}\n`;
-      formattedContent += '| Number | Big | Small |\n';
-      formattedContent += '|---------|-----|------|\n';
-
-      for (const numberPair in user.bets) {
-        const bet = user.bets[numberPair];
-        formattedContent += `| ${numberPair}      | ${bet.big.toFixed(2)} | ${bet.small.toFixed(2)} |\n`;
-      }
-      formattedContent += '\n';
-    }
-
-    this.adminNotificationService.setAdminNotification(
-      `Current epoch: ${game.epoch}\n\n${formattedContent}`,
-      'BETTING_STATISTIC',
-      'Betting Statistic For Current Epoch',
-      true,
-      true,
-    );
+    return total;
   }
 }
