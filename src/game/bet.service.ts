@@ -26,6 +26,7 @@ import {
   Core__factory,
   Deposit__factory,
   GameUSD__factory,
+  Jackpot__factory,
 } from 'src/contract';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
@@ -49,6 +50,8 @@ import { randomUUID } from 'crypto';
 import { PointTxType } from 'src/shared/enum/txType.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
+import { JackpotTx } from './entities/jackpot-tx.entity';
+import { Jackpot } from './entities/jackpot.entity';
 
 interface SubmitBetJobDTO {
   userWalletId: number;
@@ -59,6 +62,17 @@ interface HandleReferralFlowDTO {
   userId: number;
   betAmount: number;
   gameUsdTxId: number;
+}
+
+interface ParticipateJackpotDTO {
+  walletAddress: string;
+  uid: string;
+  ticketId: number;
+  feeTokenAddress: string;
+  feeAmount: string;
+  jackpotId: number;
+  jackpotTxId: number;
+  queueType: QueueType;
 }
 
 @Injectable()
@@ -81,6 +95,8 @@ export class BetService implements OnModuleInit {
     private readonly pointService: PointService,
     private readonly userService: UserService,
     private readonly queueService: QueueService,
+    @InjectRepository(JackpotTx)
+    private jackpotTxRepository: Repository<JackpotTx>,
   ) {}
   onModuleInit() {
     // Executed when distributing referral rewards for betting
@@ -985,6 +1001,52 @@ export class BetService implements OnModuleInit {
         },
         0, // no delay
       );
+
+      // jackpot
+      await queryRunner.startTransaction();
+      // get current jackpot record
+      const currentTime = new Date(Date.now());
+      const jackpot = await queryRunner.manager
+        .createQueryBuilder(Jackpot, 'jackpot')
+        .where('jackpot.startTime <= :currentTime', {
+          currentTime: currentTime,
+        })
+        .andWhere('jackpot.endTime >= :currentTime', {
+          currentTime: currentTime,
+        })
+        .getOne();
+
+      if (jackpot && gameUsdTx.amount >= jackpot.minimumBetAmount) {
+        // create jackpotTx record with status pending
+        const jackpotTx = new JackpotTx();
+        jackpotTx.status = TxStatus.PENDING;
+        jackpotTx.walletTxId = gameUsdTx.walletTxs[0].id;
+        jackpotTx.jackpotId = jackpot.id;
+        await queryRunner.manager.save(jackpotTx);
+        await queryRunner.commitTransaction();
+
+        // add job to participate jackpot
+        await this.queueService.addDynamicQueueJob(
+          `${QueueName.BET}_${userWallet.walletAddress}`,
+          `participateJackpot-${gameUsdTx.id}`,
+          {
+            jobHandler: this.handleParticipateJackpot.bind(this),
+            failureHandler: this.onParticipateJackpotFailed.bind(this),
+          },
+          {
+            walletAddress: userWallet.walletAddress,
+            uid: userWallet.user.uid,
+            ticketId: gameUsdTx.id,
+            feeTokenAddress: jackpot.feeTokenAddress,
+            feeAmount: ethers
+              .parseEther(jackpot.feeAmount.toString())
+              .toString(),
+            jackpotId: jackpot.id,
+            jackpotTxId: jackpotTx.id,
+            queueType: QueueType.PARTICIPATE_JACKPOT,
+          } as ParticipateJackpotDTO,
+        );
+      }
     } catch (error) {
       this.logger.error(error);
       await queryRunner.rollbackTransaction();
@@ -1458,6 +1520,129 @@ export class BetService implements OnModuleInit {
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
+  }
+
+  async handleParticipateJackpot(job: Job<ParticipateJackpotDTO>) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const {
+        walletAddress,
+        uid,
+        ticketId,
+        feeTokenAddress,
+        feeAmount,
+        jackpotId,
+        jackpotTxId,
+      } = job.data;
+
+      const jackpot = await queryRunner.manager
+        .createQueryBuilder(Jackpot, 'jackpot')
+        .where('jackpot.id = :id', { id: jackpotId })
+        .getOne();
+
+      // jackpot signer authorize this participate jackpot tx
+      const jackpotSigner = new Wallet(
+        await MPC.retrievePrivateKey(
+          this.configService.get('JACKPOT_SIGNER_ADDRESS'),
+        ),
+      );
+      const hash = ethers.solidityPackedKeccak256(
+        [
+          'string',
+          'address',
+          'uint256',
+          'uint256',
+          'address',
+          'uint256',
+          'uint256',
+        ],
+        [
+          jackpot.projectName,
+          walletAddress,
+          Number(uid),
+          ticketId,
+          feeTokenAddress,
+          feeAmount,
+          this.configService.get('BASE_CHAIN_ID'),
+        ],
+      );
+      const signature = await jackpotSigner.signMessage(ethers.getBytes(hash));
+      // participate jackpot on-chain tx is executed by user wallet
+      const userSigner = new Wallet(
+        await MPC.retrievePrivateKey(walletAddress),
+        new JsonRpcProvider(
+          this.configService.get(
+            'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
+          ),
+        ),
+      );
+      const jackpotContract = Jackpot__factory.connect(
+        this.configService.get('JACKPOT_CONTRACT_ADDRESS'),
+        userSigner,
+      );
+      const txResponse = await jackpotContract.participate(
+        jackpot.projectName,
+        walletAddress,
+        uid,
+        ticketId,
+        feeTokenAddress,
+        feeAmount,
+        signature,
+      );
+      const txReceipt = await txResponse.wait();
+
+      if (txReceipt && txReceipt.status === 1) {
+        // on-chain tx success, set txHash & randomHash(for jackpot) into jackpotTx
+        const jackpotTx = await queryRunner.manager
+          .createQueryBuilder(JackpotTx, 'jackpotTx')
+          .where('jackpotTx.id = :id', { id: jackpotTxId })
+          .getOne();
+        jackpotTx.txHash = txReceipt.hash;
+        jackpotTx.status = TxStatus.SUCCESS;
+        jackpotTx.randomHash = txReceipt.logs.find(
+          (log) =>
+            log.topics[0] ===
+            jackpotContract.interface.getEvent('Participated').topicHash,
+        )?.topics[3]; // randomHash
+        await queryRunner.manager.save(jackpotTx);
+      } else {
+        // on-chain tx failed, retry again in next job
+        throw new Error(
+          `handleParticipateJackpot: on-chain tx failed, tx hash: ${txReceipt.hash}`,
+        );
+      }
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw new Error(`handleParticipateJackpot error: ${error}`);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async onParticipateJackpotFailed(
+    job: Job<ParticipateJackpotDTO>,
+    error: Error,
+  ) {
+    const { jackpotTxId } = job.data;
+    const jackpotTx = await this.jackpotTxRepository
+      .createQueryBuilder('jackpotTx')
+      .where('jackpotTx.id = :id', { id: jackpotTxId })
+      .getOne();
+
+    this.logger.error(
+      'Error in onParticipateJackpotFailed from handleParticipateJackpot',
+      error,
+    );
+
+    if (job.attemptsMade > job.opts.attempts) {
+      jackpotTx.status = TxStatus.FAILED;
+    } else {
+      jackpotTx.retryCount++;
+    }
+    await this.jackpotTxRepository.save(jackpotTx);
   }
 
   async restartHandleReferralFlow(walletTxId: number, gameUsdTxId: number) {
