@@ -38,7 +38,7 @@ import { PointModule } from 'src/point/point.module';
 import { ConfigModule } from 'src/config/config.module';
 import { CreditService } from './services/credit.service';
 import { IpWhitelistMiddleware } from './middleware/ip-whitelist.middleware';
-import { UserService } from 'src/user/user.service';
+import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
 
 @Module({
   imports: [
@@ -62,6 +62,7 @@ import { UserService } from 'src/user/user.service';
       Setting,
       ReferralTx,
       InternalTransfer,
+      JackpotTx,
     ]),
     PermissionModule,
     SharedModule,
@@ -77,7 +78,6 @@ import { UserService } from 'src/user/user.service';
     ConfigService,
     DepositService,
     CreditService,
-    // UserService,
   ],
   controllers: [WalletController],
   exports: [
