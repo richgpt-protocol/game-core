@@ -30,6 +30,7 @@ import { Notification } from 'src/notification/entities/notification.entity';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { UserModule } from 'src/user/user.module';
 import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
+import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participant.entity';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
       Notification,
       UserNotification,
       JackpotTx,
+      SquidGameParticipant,
     ]),
     CampaignModule,
     ConfigModule,

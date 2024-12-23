@@ -2,8 +2,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpStatus,
+  Logger,
   Post,
+  Request,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Secure, SecureEJS } from 'src/shared/decorators/secure.decorator';
@@ -16,6 +19,7 @@ import { ResponseVo } from 'src/shared/vo/response.vo';
 @ApiTags('campaign')
 @Controller('api/v1/campaign')
 export class CampaignController {
+  private readonly logger = new Logger(CampaignController.name);
   constructor(private campaignService: CampaignService) {}
 
   @SecureEJS(PermissionEnum.UPDATE_SITE_SETTING, UserRole.ADMIN)
@@ -58,6 +62,48 @@ export class CampaignController {
         statusCode: HttpStatus.BAD_REQUEST,
         data: {},
         message,
+      };
+    }
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('squid-game-participant')
+  async getSquidGameParticipant(@Request() req): Promise<ResponseVo<any>> {
+    try {
+      const participant = await this.campaignService.getSquidGameParticipant(
+        req.user.userId,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        data: participant, // if null means not in participants
+        message: 'Get participant success',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: {},
+        message: 'Failed to get participant',
+      };
+    }
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('squid-game-data')
+  async getSquidGameData(): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.campaignService.getSquidGameData();
+      return {
+        statusCode: HttpStatus.OK,
+        data: data,
+        message: 'Get participant success',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: {},
+        message: 'Failed to get participant',
       };
     }
   }

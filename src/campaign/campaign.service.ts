@@ -16,6 +16,7 @@ import { User } from 'src/user/entities/user.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { TxStatus } from 'src/shared/enum/status.enum';
+import { SquidGameParticipant } from './entities/squidGame.participant.entity';
 
 @Injectable()
 export class CampaignService {
@@ -25,6 +26,8 @@ export class CampaignService {
     private campaignRepository: Repository<Campaign>,
     private datasource: DataSource,
     private creditService: CreditService,
+    @InjectRepository(SquidGameParticipant)
+    private squidGameParticipantRepository: Repository<SquidGameParticipant>,
   ) {}
 
   async createCampaign(payload: CreateCampaignDto): Promise<any> {
@@ -354,5 +357,41 @@ export class CampaignService {
     });
 
     return campaigns;
+  }
+
+  async getSquidGameParticipant(userId: number): Promise<SquidGameParticipant> {
+    return await this.squidGameParticipantRepository
+      .createQueryBuilder('participant')
+      .where('participant.userId = :userId', { userId })
+      .getOne();
+  }
+
+  async getSquidGameData() {
+    const [, stage1ParticipantCount] = await this.squidGameParticipantRepository
+      .createQueryBuilder('participant')
+      .where('participant.lastStage = 1')
+      .getManyAndCount();
+
+    const [, stage2ParticipantCount] = await this.squidGameParticipantRepository
+      .createQueryBuilder('participant')
+      .where('participant.lastStage = 2')
+      .getManyAndCount();
+
+    const [, stage3ParticipantCount] = await this.squidGameParticipantRepository
+      .createQueryBuilder('participant')
+      .where('participant.lastStage = 3')
+      .getManyAndCount();
+
+    const [, stage4ParticipantCount] = await this.squidGameParticipantRepository
+      .createQueryBuilder('participant')
+      .where('participant.lastStage = 4')
+      .getManyAndCount();
+
+    return {
+      stage1ParticipantCount,
+      stage2ParticipantCount,
+      stage3ParticipantCount,
+      stage4ParticipantCount,
+    };
   }
 }

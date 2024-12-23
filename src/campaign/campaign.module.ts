@@ -5,10 +5,12 @@ import { CampaignController } from './campaign.controller';
 import { CampaignService } from './campaign.service';
 import { PermissionModule } from 'src/permission/permission.module';
 import { WalletModule } from 'src/wallet/wallet.module';
+import { SquidGameParticipant } from './entities/squidGame.participant.entity';
+import { SquidGameRevive } from './entities/squidGame.revive.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Campaign]),
+    TypeOrmModule.forFeature([Campaign, SquidGameParticipant, SquidGameRevive]),
     PermissionModule,
     WalletModule,
   ],
