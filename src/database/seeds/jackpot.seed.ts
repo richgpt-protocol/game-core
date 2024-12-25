@@ -1,9 +1,9 @@
 import { Seeder, SeederFactoryManager } from 'typeorm-extension';
 import { DataSource } from 'typeorm';
 
-const projectName = 'FUYO X SQUID GAME - STAGE 1'; // to update, must match with contract
-const startTime = '2024-12-16 00:00:00'; // to update, in UTC
-const endTime = '2024-12-22 23:59:59'; // to update, in UTC
+const projectName = 'FUYO X SQUID GAME - STAGE 2'; // to update, must be exactly same as contract
+const startTime = '2024-12-23 00:00:00'; // to update, in UTC
+const endTime = '2024-12-29 23:59:59'; // to update, in UTC
 
 export default class CreateJackpot implements Seeder {
   /**
@@ -21,8 +21,9 @@ export default class CreateJackpot implements Seeder {
     let round = 0;
     const jackpot = await dataSource
       .createQueryBuilder()
-      .select('round')
+      .select('jackpot')
       .from('jackpot', 'jackpot')
+      .orderBy('jackpot.round', 'DESC')
       .getOne();
     if (jackpot) {
       round = jackpot.round + 1;
