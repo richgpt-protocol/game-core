@@ -17,6 +17,18 @@ import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { CreditService } from 'src/wallet/services/credit.service';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { SquidGameParticipant } from './entities/squidGame.participant.entity';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { Setting } from 'src/setting/entities/setting.entity';
+import { SQUID_GAME_STAGE_2 } from 'src/database/seeds/squidGameStage2.seed';
+import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
+import { ConfigService } from 'src/config/config.service';
+
+enum SQUID_GAME_STAGE_2_STATUS {
+  SQUID_GAME_STAGE_1_NOT_SUCCESS = 'SQUID_GAME_STAGE_1_NOT_SUCCESS',
+  SQUID_GAME_STAGE_2_IN_PROGRESS = 'SQUID_GAME_STAGE_2_IN_PROGRESS',
+  TICKET_ELIGIBLE_STAGE_2_SUCCESS = 'TICKET_ELIGIBLE_STAGE_2_SUCCESS',
+  TICKET_NOT_ELIGIBLE_STAGE_2_SUCCESS = 'TICKET_NOT_ELIGIBLE_STAGE_2_SUCCESS',
+}
 
 @Injectable()
 export class CampaignService {
@@ -28,6 +40,11 @@ export class CampaignService {
     private creditService: CreditService,
     @InjectRepository(SquidGameParticipant)
     private squidGameParticipantRepository: Repository<SquidGameParticipant>,
+    @InjectRepository(Setting)
+    private settingRepository: Repository<Setting>,
+    @InjectRepository(JackpotTx)
+    private jackpotTxRepository: Repository<JackpotTx>,
+    private configService: ConfigService,
   ) {}
 
   async createCampaign(payload: CreateCampaignDto): Promise<any> {
@@ -58,7 +75,7 @@ export class CampaignService {
 
       return;
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       throw new BadRequestException('Failed to create campaign');
     }
   }
@@ -101,7 +118,7 @@ export class CampaignService {
 
       return activeCampaigns;
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       throw new Error('Failed to fetch active campaigns');
     }
   }
@@ -393,5 +410,114 @@ export class CampaignService {
       stage3ParticipantCount,
       stage4ParticipantCount,
     };
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async handleUpdateSquidGameStage2Participant() {
+    const setting = await this.settingRepository
+      .createQueryBuilder('setting')
+      .where('setting.key = :key', { key: 'ENABLE_SQUID_GAME_STAGE_2' })
+      .getOne();
+    if (!setting) return;
+    const squidGameStage2 = JSON.parse(setting.value) as SQUID_GAME_STAGE_2;
+
+    const currentTime = new Date();
+    if (
+      currentTime >= new Date(squidGameStage2.endTime) &&
+      !squidGameStage2.participantIsUpdated
+    ) {
+      const jackpotTxs = await this.jackpotTxRepository
+        .createQueryBuilder('jackpotTx')
+        .leftJoinAndSelect('jackpotTx.walletTx', 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('jackpotTx.jackpot', 'jackpot')
+        .where('jackpot.projectName = :projectName', {
+          projectName: squidGameStage2.projectName,
+        })
+        .andWhere('jackpotTx.status = :status', {
+          status: TxStatus.SUCCESS,
+        })
+        .getMany();
+
+      for (const jackpotTx of jackpotTxs) {
+        if (jackpotTx.randomHash.endsWith(squidGameStage2.seedChar)) {
+          const participant = await this.squidGameParticipantRepository
+            .createQueryBuilder('participant')
+            .where('participant.userId = :userId', {
+              userId: jackpotTx.walletTx.userWallet.userId,
+            })
+            .andWhere('participant.lastStage = 1')
+            .getOne();
+          if (participant) {
+            participant.lastStage = 2;
+            await this.squidGameParticipantRepository.save(participant);
+          }
+        }
+      }
+
+      squidGameStage2.participantIsUpdated = true;
+      setting.value = JSON.stringify(squidGameStage2);
+      await this.settingRepository.save(setting);
+    }
+  }
+
+  async getUserSquidGameStage2Ticket(
+    userId: number,
+    page: number,
+    limit: number,
+  ) {
+    const skip = (page - 1) * limit;
+    const jackpotTxs = await this.jackpotTxRepository
+      .createQueryBuilder('jackpotTx')
+      .leftJoinAndSelect('jackpotTx.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('userWallet.user', 'user')
+      .where('user.id = :userId', { userId })
+      .andWhere('jackpotTx.status = :status', { status: TxStatus.SUCCESS })
+      .orderBy('jackpotTx.id', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
+
+    const setting = await this.settingRepository
+      .createQueryBuilder('setting')
+      .where('setting.key = :key', { key: 'ENABLE_SQUID_GAME_STAGE_2' })
+      .getOne();
+    const squidGameStage2Setting = JSON.parse(
+      setting.value,
+    ) as SQUID_GAME_STAGE_2;
+
+    let squidGameStage2Status = '';
+
+    const participant = await this.squidGameParticipantRepository
+      .createQueryBuilder('participant')
+      .where('participant.userId = :userId', { userId })
+      .getOne();
+
+    if (!participant) {
+      squidGameStage2Status =
+        SQUID_GAME_STAGE_2_STATUS.SQUID_GAME_STAGE_1_NOT_SUCCESS;
+    } else {
+      if (!squidGameStage2Setting.participantIsUpdated) {
+        squidGameStage2Status =
+          SQUID_GAME_STAGE_2_STATUS.SQUID_GAME_STAGE_2_IN_PROGRESS;
+      }
+    }
+
+    return jackpotTxs.map((jackpotTx) => {
+      return {
+        id: jackpotTx.id,
+        hashGenerated: jackpotTx.randomHash,
+        createdTime: jackpotTx.createdDate,
+        explorerUrl: `${this.configService.get(
+          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+        )}/tx/${jackpotTx.txHash}`,
+        squidGameStage2Status: squidGameStage2Status
+          ? squidGameStage2Status
+          : jackpotTx.randomHash.endsWith(squidGameStage2Setting.seedChar)
+            ? SQUID_GAME_STAGE_2_STATUS.TICKET_ELIGIBLE_STAGE_2_SUCCESS
+            : SQUID_GAME_STAGE_2_STATUS.TICKET_NOT_ELIGIBLE_STAGE_2_SUCCESS,
+      };
+    });
   }
 }
