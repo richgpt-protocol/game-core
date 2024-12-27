@@ -52,11 +52,6 @@ import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { JackpotTx } from './entities/jackpot-tx.entity';
 import { Jackpot } from './entities/jackpot.entity';
-import {
-  SQUID_GAME_PARTICIPANT_STATUS,
-  SQUID_GAME_STAGE_2,
-} from 'src/database/seeds/squidGameStage2.seed';
-import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participant.entity';
 
 interface SubmitBetJobDTO {
   userWalletId: number;
@@ -1623,8 +1618,6 @@ export class BetService implements OnModuleInit {
         )?.topics[3]; // randomHash
         await queryRunner.manager.save(jackpotTx);
 
-        await this._participateSquidGameStage2(jackpotTx.id, queryRunner);
-
         await queryRunner.commitTransaction();
       } else {
         // on-chain tx failed, retry again in next job
@@ -1860,55 +1853,6 @@ export class BetService implements OnModuleInit {
       return false;
     } else {
       return true;
-    }
-  }
-
-  private async _participateSquidGameStage2(
-    jackpotTxId: number,
-    queryRunner: QueryRunner,
-  ) {
-    const jackpotTx = await queryRunner.manager
-      .createQueryBuilder(JackpotTx, 'jackpotTx')
-      .leftJoinAndSelect(
-        'jackpotTx.walletTx',
-        'walletTx',
-        'jackpotTx.walletTxId = walletTx.id',
-      )
-      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-      .leftJoinAndSelect('userWallet.user', 'user')
-      .where('jackpotTx.id = :id', { id: jackpotTxId })
-      .getOne();
-    const setting = await queryRunner.manager
-      .createQueryBuilder(Setting, 'setting')
-      .where('setting.key = :key', { key: 'ENABLE_SQUID_GAME_STAGE_2' })
-      .getOne();
-    if (setting) {
-      const squidGameStage2 = JSON.parse(setting.value) as SQUID_GAME_STAGE_2;
-      if (
-        jackpotTx.createdDate >= squidGameStage2.startTime &&
-        jackpotTx.createdDate <= squidGameStage2.endTime
-      ) {
-        // update participate record if found and if last char of randomHash is the same as seedChar
-        const squidGameParticipant = await queryRunner.manager
-          .createQueryBuilder(SquidGameParticipant, 'squidGameParticipant')
-          .where('squidGameParticipant.userId = :userId', {
-            userId: jackpotTx.walletTx.userWallet.user.id,
-          })
-          .getOne();
-        if (squidGameParticipant) {
-          if (squidGameParticipant.lastStage === 1) {
-            if (jackpotTx.randomHash.slice(-1) === squidGameStage2.seedChar) {
-              squidGameParticipant.lastStage = 2;
-              squidGameParticipant.participantStatus =
-                SQUID_GAME_PARTICIPANT_STATUS.STAGE_2_SUCCESS;
-            } else {
-              squidGameParticipant.participantStatus =
-                SQUID_GAME_PARTICIPANT_STATUS.STAGE_2_FAILED;
-            }
-            await queryRunner.manager.save(squidGameParticipant);
-          }
-        }
-      }
     }
   }
 }
