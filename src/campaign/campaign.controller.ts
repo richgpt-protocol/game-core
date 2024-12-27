@@ -6,9 +6,10 @@ import {
   HttpStatus,
   Logger,
   Post,
+  Query,
   Request,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiHeader, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Secure, SecureEJS } from 'src/shared/decorators/secure.decorator';
 import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { UserRole } from 'src/shared/enum/role.enum';
@@ -104,6 +105,44 @@ export class CampaignController {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         data: {},
         message: 'Failed to get participant',
+      };
+    }
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('get-user-squid-game-stage-2-ticket')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async getUserSquidGameStage2Ticket(
+    @Request() req,
+    // i.e. page 2 limit 10, it will return data from 11 to 20, default to page 1 limit 10
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.campaignService.getUserSquidGameStage2Ticket(
+        req.user.userId,
+        page ?? 1,
+        limit ?? 10,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        data: data,
+        message: 'get user squid game stage 2 ticket success',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'get user squid game stage 2 ticket failed',
       };
     }
   }

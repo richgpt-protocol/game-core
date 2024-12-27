@@ -7,12 +7,22 @@ import { PermissionModule } from 'src/permission/permission.module';
 import { WalletModule } from 'src/wallet/wallet.module';
 import { SquidGameParticipant } from './entities/squidGame.participant.entity';
 import { SquidGameRevive } from './entities/squidGame.revive.entity';
+import { Setting } from 'src/setting/entities/setting.entity';
+import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
+import { ConfigModule } from 'src/config/config.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Campaign, SquidGameParticipant, SquidGameRevive]),
+    TypeOrmModule.forFeature([
+      Campaign,
+      SquidGameParticipant,
+      SquidGameRevive,
+      Setting,
+      JackpotTx,
+    ]),
     PermissionModule,
     WalletModule,
+    ConfigModule,
   ],
   providers: [CampaignService],
   controllers: [CampaignController],
