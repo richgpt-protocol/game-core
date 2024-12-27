@@ -3,9 +3,9 @@ import {
   CreateDateColumn,
   Entity,
   ManyToOne,
-  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  JoinColumn,
 } from 'typeorm';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
@@ -53,7 +53,8 @@ export class JackpotTx {
   @Column()
   walletTxId: number;
 
-  @OneToOne(() => WalletTx, (walletTx) => walletTx.id)
+  @ManyToOne(() => WalletTx)
+  @JoinColumn({ name: 'walletTxId' })
   walletTx: WalletTx;
 
   @Column({ nullable: true })
