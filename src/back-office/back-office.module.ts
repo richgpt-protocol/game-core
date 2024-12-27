@@ -65,7 +65,7 @@ import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participan
     UserModule,
   ],
   controllers: [BackOfficeController],
-  providers: [BackOfficeService, CampaignService, WalletService],
+  providers: [BackOfficeService, WalletService],
   exports: [BackOfficeService],
 })
 export class BackOfficeModule {}
