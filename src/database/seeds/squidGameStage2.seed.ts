@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 
 // please use lowercase if seedChar is not number
 const seedChar: string = 'a';
+const seedString: string = `The qualified end character for Fuyo x Squid Game - stage 2 is: ${seedChar}`;
 
 // must match with the projectName in jackpot table
 const projectName = 'FUYO X SQUID GAME - STAGE 2';
@@ -11,7 +12,7 @@ const projectName = 'FUYO X SQUID GAME - STAGE 2';
 export type SQUID_GAME_STAGE_2 = {
   projectName: string;
   seedChar: string;
-  hashedSeedChar: string;
+  hashedSeedString: string;
   startTime: Date;
   endTime: Date;
   participantIsUpdated: boolean;
@@ -37,7 +38,7 @@ export default class SquidGameStage2 implements Seeder {
     }
 
     // computes UTF-8 bytes of seedString, computes the keccak256 and remove the 0x prefix
-    const hashedSeedChar = ethers.id(seedChar).slice(2);
+    const hashedSeedString = ethers.id(seedString).slice(2);
 
     // insert or update into setting table
     const result = await dataSource
@@ -50,7 +51,7 @@ export default class SquidGameStage2 implements Seeder {
           value: JSON.stringify({
             projectName,
             seedChar,
-            hashedSeedChar,
+            hashedSeedString,
             startTime: project.startTime,
             endTime: project.endTime,
             participantIsUpdated: false,
@@ -61,11 +62,12 @@ export default class SquidGameStage2 implements Seeder {
       .execute();
     console.log(result);
 
-    // log the hashedSeedChar
-    console.log('Hashed seed char:', hashedSeedChar);
+    // log the seedString and hashedSeedString
+    console.log('Seed string:', seedString);
+    console.log('Hashed seed string:', hashedSeedString);
   }
 }
-// how to verify the hashed seed character?
-// after announce the seed character, verify the hashed seed character with:
+// how to verify the hashed seed string?
+// after announce the seed string, verify the hashed seed string with:
 // https://emn178.github.io/online-tools/keccak_256.html
-// input the seed character should get exactly same hashed seed character
+// input the seed string should get exactly same hashed seed string
