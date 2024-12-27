@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, DataSource, In, LessThan, Repository } from 'typeorm';
+import { Between, Brackets, DataSource, In, LessThan, Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -331,10 +331,21 @@ export class GameService implements OnModuleInit {
         for (const drawResult of drawResults) {
           const betOrders = await queryRunner.manager
             .createQueryBuilder(BetOrder, 'betOrder')
+            .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+            .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
             .where('betOrder.gameId = :gameId', { gameId })
             .andWhere('betOrder.numberPair = :numberPair', {
               numberPair: drawResult.numberPair,
             })
+            .andWhere(
+              new Brackets((qb) => {
+                qb.where('walletTx.status = :status', {
+                  status: TxStatus.SUCCESS,
+                }).orWhere('creditWalletTx.status = :status', {
+                  status: TxStatus.SUCCESS,
+                });
+              }),
+            )
             .getMany();
           // there might be more than 1 betOrder that numberPair matched
           for (const betOrder of betOrders) {
