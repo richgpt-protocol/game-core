@@ -363,7 +363,7 @@ export class WalletService {
     const skip = (page - 1) * limit;
     const jackpotTx = await this.jackpotTxRepository
       .createQueryBuilder('jackpotTx')
-      .leftJoin('wallet_tx', 'walletTx', 'walletTx.id = jackpotTx.walletTxId')
+      .leftJoinAndSelect('jackpotTx.walletTx', 'walletTx')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .leftJoinAndSelect('userWallet.user', 'user')
       .where('user.id = :userId', { userId })
