@@ -9,7 +9,6 @@ import * as bodyParser from 'body-parser';
 import * as cookieParser from 'cookie-parser';
 import { join } from 'path';
 import { ConfigService } from './config/config.service';
-import { LoggerMiddleware } from './shared/middlewares/logger.middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -26,7 +25,6 @@ async function bootstrap() {
 
   app.use(bodyParser.json({ limit: '20mb' }));
   app.use(bodyParser.urlencoded({ limit: '20mb', extended: true }));
-  app.use(LoggerMiddleware);
   app.useLogger(app.get(Logger));
 
   app.useStaticAssets(join(__dirname, '..', 'public'), { prefix: '/' });
