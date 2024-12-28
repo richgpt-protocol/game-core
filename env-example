@@ -138,8 +138,8 @@ FUYO_BOT_WEBHOOK_SECRET=
 FUYO_BOT_TOKEN=
 FUYO_BOT_WEBHOOK_URL=
 
-# block explorer url(please omit / at the end of the url)
-BLOCK_EXPLORER_URL_56=
-BLOCK_EXPLORER_URL_204=
-BLOCK_EXPLORER_URL_97=
-BLOCK_EXPLORER_URL_5611=
+# block explorer url
+BLOCK_EXPLORER_URL_56=https://bscscan.com
+BLOCK_EXPLORER_URL_204=https://opbnb.bscscan.com
+BLOCK_EXPLORER_URL_97=https://testnet.bscscan.com
+BLOCK_EXPLORER_URL_5611=https://opbnb-testnet.bscscan.com
