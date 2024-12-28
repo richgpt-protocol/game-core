@@ -38,8 +38,6 @@ import { ClaimService } from 'src/wallet/services/claim.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { ReferralTxType, WalletTxType } from 'src/shared/enum/txType.enum';
-import { SettingEnum } from 'src/shared/enum/setting.enum';
-import { Setting } from 'src/setting/entities/setting.entity';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -69,8 +67,6 @@ export class GameService implements OnModuleInit {
     private readonly claimService: ClaimService,
     @InjectRepository(BetOrder)
     private betOrderRepository: Repository<BetOrder>,
-    @InjectRepository(Setting)
-    private settingRepository: Repository<Setting>,
   ) {}
 
   // process of closing bet for current epoch, set draw result, announce draw result, set available claim and process referral bonus
