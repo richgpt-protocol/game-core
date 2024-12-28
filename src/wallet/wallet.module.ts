@@ -39,6 +39,10 @@ import { ConfigModule } from 'src/config/config.module';
 import { CreditService } from './services/credit.service';
 import { IpWhitelistMiddleware } from './middleware/ip-whitelist.middleware';
 import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
+import { CampaignService } from 'src/campaign/campaign.service';
+import { Campaign } from 'src/campaign/entities/campaign.entity';
+import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participant.entity';
+import { SquidGameRevival } from 'src/campaign/entities/squidGame.revival.entity';
 
 @Module({
   imports: [
@@ -63,6 +67,9 @@ import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
       ReferralTx,
       InternalTransfer,
       JackpotTx,
+      Campaign,
+      SquidGameParticipant,
+      SquidGameRevival,
     ]),
     PermissionModule,
     SharedModule,
@@ -78,6 +85,7 @@ import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
     ConfigService,
     DepositService,
     CreditService,
+    CampaignService,
   ],
   controllers: [WalletController],
   exports: [
