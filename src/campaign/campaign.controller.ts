@@ -146,4 +146,36 @@ export class CampaignController {
       };
     }
   }
+
+  @Secure(null, UserRole.USER)
+  @Get('get-user-squid-game-revival-data')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async getUserSquidGameRevivalData(@Request() req): Promise<ResponseVo<any>> {
+    try {
+      const data =
+        await this.campaignService.getSquidGameParticipantRevivalData(
+          req.user.userId,
+        );
+      return {
+        statusCode: HttpStatus.OK,
+        data: data,
+        message: 'get user squid game revival data success',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'get user squid game revival data failed',
+      };
+    }
+  }
 }
