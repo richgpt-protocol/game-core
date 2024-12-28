@@ -32,6 +32,7 @@ import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import { CampaignService } from 'src/campaign/campaign.service';
 
 /**
  * How deposit works
@@ -60,6 +61,7 @@ export class DepositService implements OnModuleInit {
     private readonly userService: UserService,
     private eventEmitter: EventEmitter2,
     private queueService: QueueService,
+    private campaignService: CampaignService,
   ) {}
   onModuleInit() {
     this.queueService.registerHandler(
@@ -901,6 +903,13 @@ export class DepositService implements OnModuleInit {
       }
 
       await queryRunner.commitTransaction();
+
+      await this.campaignService.squidGameRevival(
+        user.id,
+        gameUsdTx.amount,
+        queryRunner,
+      );
+
       if (!queryRunner.isReleased) await queryRunner.release();
 
       await this.userService.setUserNotification(walletTx.userWallet.userId, {
