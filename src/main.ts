@@ -26,7 +26,7 @@ async function bootstrap() {
 
   app.use(bodyParser.json({ limit: '20mb' }));
   app.use(bodyParser.urlencoded({ limit: '20mb', extended: true }));
-  app.use(new LoggerMiddleware());
+  app.use(LoggerMiddleware);
   app.useLogger(app.get(Logger));
 
   app.useStaticAssets(join(__dirname, '..', 'public'), { prefix: '/' });
