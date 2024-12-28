@@ -41,7 +41,7 @@ export class JackpotTx {
   availableClaim: boolean;
 
   @Column({ nullable: true })
-  // only available if isClaimed is true,no decimals, 1 = $1
+  // no decimals, 1 = $1
   payoutAmount: number;
 
   @CreateDateColumn()
