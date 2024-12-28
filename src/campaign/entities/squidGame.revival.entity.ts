@@ -7,7 +7,7 @@ import {
 } from 'typeorm';
 
 @Entity()
-export class SquidGameRevive {
+export class SquidGameRevival {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -15,15 +15,16 @@ export class SquidGameRevive {
   userId: number;
 
   @Column()
+  // this revival record is for which stage
   stageNumber: number;
 
   @Column({ nullable: true })
   reviveTime: number;
 
-  @Column({ nullable: true })
+  @Column({ default: 0 })
   amountPaid: number;
 
-  @Column({ nullable: true })
+  @Column({ default: 0 })
   amountReferred: number;
 
   @CreateDateColumn()
