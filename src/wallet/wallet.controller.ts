@@ -143,6 +143,12 @@ export class WalletController {
     @Req() req: any,
     @Body() payload: RedeemDto,
   ): Promise<ResponseVo<any>> {
+    return {
+      statusCode: HttpStatus.OK,
+      data: {},
+      message: 'Redeem is under maintenance',
+    };
+
     try {
       const res = await this.withdrawService.requestRedeem(
         Number(req.user.userId),
@@ -491,6 +497,12 @@ export class WalletController {
     @Request() req,
     @Body() payload: TransferGameUSDDto,
   ): Promise<ResponseVo<any>> {
+    return {
+      statusCode: HttpStatus.OK,
+      data: {},
+      message: 'Internal Transfer is under maintenance',
+    };
+
     const userId = req.user.userId;
     // const userId = 1;
     try {
