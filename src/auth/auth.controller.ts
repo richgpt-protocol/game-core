@@ -18,7 +18,7 @@ import { CreateAdminVo } from 'src/admin/vo/admin.vo';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { HandlerClass } from 'src/shared/decorators/handler-class.decorator';
 import { IpAddress } from 'src/shared/decorators/ip-address.decorator';
-import { Secure, SecureEJS } from 'src/shared/decorators/secure.decorator';
+import { Secure } from 'src/shared/decorators/secure.decorator';
 import { UserRole } from 'src/shared/enum/role.enum';
 import { IHandlerClass } from 'src/shared/interfaces/handler-class.interface';
 import { ErrorResponseVo, ResponseVo } from 'src/shared/vo/response.vo';
@@ -589,6 +589,23 @@ export class AuthController {
         },
       };
     }
+  }
+
+  @Secure()
+  @Get('request-game-token')
+  @ApiResponse({
+    status: 200,
+    description: 'Successful Response',
+    type: ResponseVo,
+  })
+  async requestGameToken(@Request() req): Promise<ResponseVo<any>> {
+    const token = await this.authService.requestGameToken(req.user.userId);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Success',
+      data: token,
+    };
   }
 
   // @Post('user-forgot-password')
