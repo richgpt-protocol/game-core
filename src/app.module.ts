@@ -1,4 +1,4 @@
-import { Logger, MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UserModule } from './user/user.module';
@@ -33,7 +33,6 @@ import { PublicModule } from './public/public.module';
 // import { BullModule } from '@nestjs/bullmq';
 import { QueueModule } from './queue/queue.module';
 import { AppDataSource } from './data-source';
-import { LoggerMiddleware } from './shared/middlewares/logger.middleware';
 // import { QueueOptions } from 'bullmq';
 
 @Module({
@@ -104,10 +103,4 @@ import { LoggerMiddleware } from './shared/middlewares/logger.middleware';
     },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(LoggerMiddleware) // Apply the middleware
-      .forRoutes('*');
-  }
-}
+export class AppModule {}
