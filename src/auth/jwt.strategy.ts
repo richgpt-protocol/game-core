@@ -33,7 +33,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         }
         break;
       case UserRole.USER:
-        const user = await this.userService.findOneWithoutHiddenFields(payload.sub);
+        const user = await this.userService.findOneWithoutHiddenFields(
+          payload.sub,
+        );
         if (!user) {
           throw new UnauthorizedException();
         }

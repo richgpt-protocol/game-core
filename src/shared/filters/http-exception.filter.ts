@@ -18,11 +18,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
   async catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const lang = ctx.getRequest().i18nLang;
+    const req = ctx.getRequest();
+    const lang = req.i18nLang;
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = [];
 
     try {
+      this.logger.error(
+        `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} from ${req.ip}: ${JSON.stringify(exception)}`,
+      );
+
       if (exception instanceof HttpException) {
         status = exception.getStatus();
         if (exception.getResponse() instanceof Object) {
@@ -57,8 +62,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
             message = await translateMessages();
           }
         }
-      } else {
-        this.logger.error(exception);
       }
 
       response.status(status).json({

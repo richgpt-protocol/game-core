@@ -135,6 +135,28 @@ export class UpdateUserByAdminDto {
 export class WithdrawlPinDto {
   @ApiProperty()
   @IsString()
+  @IsOptional()
+  oldPin: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  pin: string;
+}
+
+export class WithdrawlPinByAdminDto {
+  @ApiProperty()
+  @IsNumber()
+  @IsNotEmpty()
+  userId: number;
+
+  @ApiProperty()
+  @IsString()
+  @IsOptional()
+  oldPin: string;
+
+  @ApiProperty()
+  @IsString()
   @IsNotEmpty()
   pin: string;
 }
