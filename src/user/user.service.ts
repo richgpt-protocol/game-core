@@ -1366,7 +1366,11 @@ export class UserService implements OnModuleInit {
     }
   }
 
-  async updateWithdrawPin(userId: number, withdrawPin: string, oldPin: string) {
+  async updateWithdrawPin(
+    userId: number,
+    withdrawPin: string,
+    oldPin?: string,
+  ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
