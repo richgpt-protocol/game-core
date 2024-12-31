@@ -45,6 +45,12 @@ import {
   WalletTxType,
   PointTxType,
 } from 'src/shared/enum/txType.enum';
+import { GameService } from 'src/game/game.service';
+import { BetService } from 'src/game/bet.service';
+import { CampaignService } from 'src/campaign/campaign.service';
+import { BetDto } from 'src/game/dto/Bet.dto';
+import { WithdrawService } from 'src/wallet/services/withdraw.service';
+import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -69,6 +75,10 @@ export class PublicService {
     private adminNotificationService: AdminNotificationService,
     private eventEmitter: EventEmitter2,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private gameService: GameService,
+    private betService: BetService,
+    private campaignService: CampaignService,
+    private withdrawService: WithdrawService,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
       'DEPOSIT_BOT_ADDRESS',
@@ -320,6 +330,241 @@ export class PublicService {
     const ott = crypto.randomBytes(32).toString('hex');
     await this.cacheManager.set(`ott_${user.uid}`, ott, 30000);
     return ott;
+  }
+
+  async getDrawInfo() {
+    const currentGame = await this.gameService.getCurrentGame();
+
+    const previousGameEpoch = Number(currentGame.epoch) - 1;
+    const previousDraw = await this.gameService.getDrawResultByEpoch(
+      previousGameEpoch.toString(),
+    );
+    const previousWinningAmount =
+      await this.gameService.getWinningAmountByEpoch(
+        previousGameEpoch.toString(),
+      );
+
+    return {
+      currentGame,
+      previousDraw,
+      previousWinningAmount,
+    };
+  }
+
+  async getRecentTransactions() {
+    const deposits = await this.walletService.getDepositTransactions(10);
+    const withdrawals = await this.walletService.getWithdrawTransactions(10);
+    const bets = await this.betService.getRecentBets(10);
+
+    const formattedDeposits = deposits.map((deposit) => {
+      return {
+        ...deposit,
+        uid:
+          deposit.uid.slice(0, 3) +
+          '****' +
+          deposit.uid.slice(deposit.uid.length - 3),
+        url:
+          this.configService.get('EXPLORER_BASE_URL') + '/tx/' + deposit.txHash,
+      };
+    });
+
+    const formattedWithdrawals = withdrawals.map((withdrawal) => {
+      return {
+        ...withdrawal,
+        uid:
+          withdrawal.uid.slice(0, 3) +
+          '****' +
+          withdrawal.uid.slice(withdrawal.uid.length - 3),
+        url:
+          this.configService.get('EXPLORER_BASE_URL') +
+          '/tx/' +
+          withdrawal.txHash,
+      };
+    });
+
+    return {
+      deposits: formattedDeposits,
+      withdrawals: formattedWithdrawals,
+      bets,
+    };
+  }
+
+  async getCampaigbnInfo() {
+    return await this.campaignService.findActiveWithBannerCampaigns();
+  }
+
+  async bet(uid: string, payload: BetDto[]) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    await this.betService.bet(user.id, payload);
+  }
+
+  async getDepositInfo() {
+    if (Number(this.configService.get('BASE_CHAIN_ID')) === 5611) {
+      return {
+        chains: [
+          {
+            chainId: 97,
+            label: 'BNB Smart Chain',
+            logoUri: 'https://storage.googleapis.com/fuyo-assets/BNB.png',
+            shortname: 'BNB Testnet',
+            tokens: [
+              {
+                symbol: 'USDT',
+                tokenName: 'Tether USD',
+                logoUri: 'https://storage.googleapis.com/fuyo-assets/usdt.svg',
+                tokenAddress: '0x1e1f230848e2e24e5b728dd445de5de380c7ed41',
+              },
+            ],
+          },
+          {
+            chainId: 5611,
+            label: 'opBNB',
+            logoUri: 'https://storage.googleapis.com/fuyo-assets/BNB.png',
+            shortname: 'opBNB Testnet',
+            tokens: [
+              {
+                symbol: 'USDT',
+                tokenName: 'Tether USD',
+                logoUri: 'https://storage.googleapis.com/fuyo-assets/usdt.svg',
+                tokenAddress: '0x79dd344db3668816a727a54e21a96c328cad7d01',
+              },
+            ],
+          },
+        ],
+      };
+    } else {
+      return {
+        chains: [
+          {
+            chainId: 56,
+            label: 'BNB Smart Chain',
+            logoUri: 'https://storage.googleapis.com/fuyo-assets/BNB.png',
+            shortname: 'BNB Chain',
+            tokens: [
+              {
+                symbol: 'USDT',
+                tokenName: 'Tether USD',
+                logoUri: 'https://storage.googleapis.com/fuyo-assets/usdt.svg',
+                tokenAddress: '0x55d398326f99059ff775485246999027b3197955',
+              },
+            ],
+          },
+          {
+            chainId: 204,
+            label: 'opBNB',
+            logoUri: 'https://storage.googleapis.com/fuyo-assets/BNB.png',
+            shortname: 'opBNB Chain',
+            tokens: [
+              {
+                symbol: 'USDT',
+                tokenName: 'Tether USD',
+                logoUri: 'https://storage.googleapis.com/fuyo-assets/usdt.svg',
+                tokenAddress: '0x9e5aac1ba1a2e6aed6b32689dfcf62a509ca96f3',
+              },
+            ],
+          },
+        ],
+      };
+    }
+  }
+
+  async getUserWalletAddress(uid: string) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const userWallet = await this.walletService.getWalletInfo(user.id);
+    if (!userWallet) {
+      throw new BadRequestException('User wallet not found');
+    }
+
+    return userWallet.walletAddress;
+  }
+
+  async getWithdrawInfo() {
+    if (Number(this.configService.get('BASE_CHAIN_ID')) === 5611) {
+      return {
+        chains: [
+          {
+            chainId: 97,
+            label: 'BNB Smart Chain',
+            logoUri: 'https://storage.googleapis.com/fuyo-assets/BNB.png',
+            shortname: 'BNB Testnet',
+            tokens: [
+              {
+                symbol: 'USDT',
+                tokenName: 'Tether USD',
+                logoUri: 'https://storage.googleapis.com/fuyo-assets/usdt.svg',
+                tokenAddress: '0x1e1f230848e2e24e5b728dd445de5de380c7ed41',
+              },
+            ],
+          },
+        ],
+      };
+    } else {
+      return {
+        chains: [
+          {
+            chainId: 56,
+            label: 'BNB Smart Chain',
+            logoUri: 'https://storage.googleapis.com/fuyo-assets/BNB.png',
+            shortname: 'BNB Chain',
+            tokens: [
+              {
+                symbol: 'USDT',
+                tokenName: 'Tether USD',
+                logoUri: 'https://storage.googleapis.com/fuyo-assets/usdt.svg',
+                tokenAddress: '0x55d398326f99059ff775485246999027b3197955',
+              },
+            ],
+          },
+        ],
+      };
+    }
+  }
+
+  async getUserWithdrawableInfo(uid: string, chainId: number) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const userInfo = await this.userService.getUserInfo(user.id);
+    const withdrawFees = await this.withdrawService.getWithdrawalFees(chainId);
+
+    return {
+      withdrawableBalance:
+        userInfo.withdrawableBalance -
+        userInfo.withdrawableBalance * withdrawFees,
+      isWithdrawPasswordSet: userInfo.isWithdrawPasswordSet,
+    };
+  }
+
+  async withdraw(payload: RequestWithdrawDto) {
+    const { uid, ...withdrawPayload } = payload;
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    return await this.withdrawService.requestRedeem(user.id, withdrawPayload);
+  }
+
+  async setWithdrawPassword(payload: SetWithdrawPinDto) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    return await this.userService.updateWithdrawPin(
+      user.id,
+      payload.withdrawPin,
+    );
   }
 
   private async addXP(
