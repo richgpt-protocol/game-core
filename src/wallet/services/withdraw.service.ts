@@ -540,6 +540,7 @@ export class WithdrawService implements OnModuleInit {
       redeemTxId: number;
     }>,
   ) {
+    this.logger.log('handlePayout()');
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
@@ -559,6 +560,7 @@ export class WithdrawService implements OnModuleInit {
         .andWhere('redeemTx.reviewedBy IS NOT NULL')
         .getOne();
 
+      this.logger.log('redeemTx: ' + JSON.stringify(redeemTx));
       if (!redeemTx) return;
 
       const amountToTransfer = redeemTx.amount - redeemTx.fees;
@@ -622,7 +624,7 @@ export class WithdrawService implements OnModuleInit {
         );
       }
     } catch (error) {
-      this.logger.error('handlePayout() error: ', error);
+      this.logger.error('handlePayout() error: ', JSON.stringify(error));
       await queryRunner.rollbackTransaction();
 
       throw new Error('Handle Payout errored'); //re-tried by queue
@@ -819,7 +821,7 @@ export class WithdrawService implements OnModuleInit {
 
       return txReceipt;
     } catch (error) {
-      this.logger.error('payoutUSDT() error: ', error);
+      this.logger.error('payoutUSDT() error: ', JSON.stringify(error));
       return null;
     }
   }
