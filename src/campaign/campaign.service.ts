@@ -475,7 +475,7 @@ export class CampaignService {
     limit: number,
   ) {
     const skip = (page - 1) * limit;
-    const jackpotTxs = await this.jackpotTxRepository
+    const [jackpotTxs, totalCount] = await this.jackpotTxRepository
       .createQueryBuilder('jackpotTx')
       .leftJoinAndSelect('jackpotTx.walletTx', 'walletTx')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
@@ -485,7 +485,7 @@ export class CampaignService {
       .orderBy('jackpotTx.id', 'DESC')
       .skip(skip)
       .take(limit)
-      .getMany();
+      .getManyAndCount();
 
     const setting = await this.settingRepository
       .createQueryBuilder('setting')
@@ -512,21 +512,25 @@ export class CampaignService {
       }
     }
 
-    return jackpotTxs.map((jackpotTx) => {
-      return {
-        id: jackpotTx.id,
-        hashGenerated: jackpotTx.randomHash,
-        createdTime: jackpotTx.createdDate,
-        explorerUrl: `${this.configService.get(
-          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
-        )}/tx/${jackpotTx.txHash}`,
-        squidGameStage2Status: squidGameStage2Status
-          ? squidGameStage2Status
-          : jackpotTx.randomHash.endsWith(squidGameStage2Setting.seedChar)
-            ? SQUID_GAME_STAGE_2_STATUS.TICKET_ELIGIBLE_STAGE_2_SUCCESS
-            : SQUID_GAME_STAGE_2_STATUS.TICKET_NOT_ELIGIBLE_STAGE_2_SUCCESS,
-      };
-    });
+    return {
+      data: jackpotTxs.map((jackpotTx) => {
+        return {
+          id: jackpotTx.id,
+          hashGenerated: jackpotTx.randomHash,
+          createdTime: jackpotTx.createdDate,
+          explorerUrl: `${this.configService.get(
+            `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+          )}/tx/${jackpotTx.txHash}`,
+          squidGameStage2Status: squidGameStage2Status
+            ? squidGameStage2Status
+            : jackpotTx.randomHash.endsWith(squidGameStage2Setting.seedChar)
+              ? SQUID_GAME_STAGE_2_STATUS.TICKET_ELIGIBLE_STAGE_2_SUCCESS
+              : SQUID_GAME_STAGE_2_STATUS.TICKET_NOT_ELIGIBLE_STAGE_2_SUCCESS,
+        };
+      }),
+      totalCount,
+      currentPage: page,
+    };
   }
 
   async squidGameRevival(
