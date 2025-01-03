@@ -29,6 +29,7 @@ import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { WalletModule } from 'src/wallet/wallet.module';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { JackpotTx } from './entities/jackpot-tx.entity';
+import { Jackpot } from './entities/jackpot.entity';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { JackpotTx } from './entities/jackpot-tx.entity';
       CreditWalletTx,
       Setting,
       JackpotTx,
+      Jackpot,
     ]),
     PermissionModule,
     ConfigModule,
