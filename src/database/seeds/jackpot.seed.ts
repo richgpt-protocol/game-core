@@ -1,9 +1,16 @@
-import { Seeder, SeederFactoryManager } from 'typeorm-extension';
-import { DataSource } from 'typeorm';
+import { Seeder } from 'typeorm-extension';
+import { DataSource, InsertResult, UpdateResult } from 'typeorm';
+import { ethers } from 'ethers';
+import { Jackpot__factory } from '../../contract';
 
-const projectName = 'FUYO X SQUID GAME - STAGE 2'; // to update, must be exactly same as contract
-const startTime = '2024-12-23 00:00:00'; // to update, in UTC
-const endTime = '2024-12-29 23:59:59'; // to update, in UTC
+// game.service.setSquidGameJackpotHash() relies on projectName, startTime and endTime to determine time to set squid game jackpot hash on-chain
+export const projectName = 'FUYO X SQUID GAME - STAGE 4'; // to update, must be exactly same as contract
+export const startTime = '2024-12-30 00:00:00'; // to update, in UTC
+export const endTime = '2025-01-05 23:59:59'; // to update, in UTC
+const minimumBetAmount = 2;
+const PROVIDER_RPC_URL =
+  'https://opbnb-testnet.nodereal.io/v1/8e5337e061dc418eaca1cc8236ba566a'; // to update
+const JACKPOT_CONTRACT_ADDRESS = '0x797AB0A4aBC716dE283267a4F8f9E91137C307c8'; // to update
 
 export default class CreateJackpot implements Seeder {
   /**
@@ -13,41 +20,58 @@ export default class CreateJackpot implements Seeder {
    */
   track = false;
 
-  public async run(
-    dataSource: DataSource,
-    factoryManager: SeederFactoryManager,
-  ): Promise<void> {
-    // get last round
-    let round = 0;
-    const jackpot = await dataSource
+  public async run(dataSource: DataSource): Promise<void> {
+    // fetch current round from contract
+    const provider = new ethers.JsonRpcProvider(PROVIDER_RPC_URL);
+    const jackpotContract = Jackpot__factory.connect(
+      JACKPOT_CONTRACT_ADDRESS,
+      provider,
+    );
+    const squidGameStage4Project = await jackpotContract.projects(projectName);
+
+    const jackpotData = {
+      round: Number(squidGameStage4Project.currentRound),
+      projectName: projectName,
+      startTime: new Date(startTime),
+      endTime: new Date(endTime),
+      duration:
+        (new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000,
+      minimumBetAmount: minimumBetAmount,
+      feeTokenAddress: '0x0000000000000000000000000000000000000000',
+      feeAmount: 0,
+    };
+
+    const existingRecord = await dataSource
       .createQueryBuilder()
       .select('jackpot')
       .from('jackpot', 'jackpot')
-      .orderBy('jackpot.round', 'DESC')
+      .where('jackpot.round = :round', {
+        round: Number(squidGameStage4Project.currentRound),
+      })
+      .andWhere('jackpot.projectName = :projectName', { projectName })
       .getOne();
-    if (jackpot) {
-      round = jackpot.round + 1;
-    }
 
-    const result = await dataSource
-      .createQueryBuilder()
-      .insert()
-      .into('jackpot')
-      .values([
-        {
-          round: round,
-          projectName: projectName,
-          startTime: new Date(startTime),
-          endTime: new Date(endTime),
-          duration:
-            (new Date(endTime).getTime() - new Date(startTime).getTime()) /
-            1000,
-          minimumBetAmount: 2,
-          feeTokenAddress: '0x0000000000000000000000000000000000000000',
-          feeAmount: 0,
-        },
-      ])
-      .execute();
+    let result: InsertResult | UpdateResult;
+    if (existingRecord) {
+      // Update existing record
+      result = await dataSource
+        .createQueryBuilder()
+        .update('jackpot')
+        .set(jackpotData)
+        .where('round = :round', {
+          round: Number(squidGameStage4Project.currentRound),
+        })
+        .andWhere('projectName = :projectName', { projectName })
+        .execute();
+    } else {
+      // Insert new record
+      result = await dataSource
+        .createQueryBuilder()
+        .insert()
+        .into('jackpot')
+        .values([jackpotData])
+        .execute();
+    }
     console.log(result);
   }
 }
