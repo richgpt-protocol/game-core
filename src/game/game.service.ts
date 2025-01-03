@@ -19,7 +19,12 @@ import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
 import { Cron } from '@nestjs/schedule';
 import { ethers } from 'ethers';
-import { Core__factory, Deposit__factory, Helper__factory } from 'src/contract';
+import {
+  Core__factory,
+  Deposit__factory,
+  Helper__factory,
+  Jackpot__factory,
+} from 'src/contract';
 import { IHelper, ICore } from 'src/contract/Helper';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
@@ -38,6 +43,8 @@ import { ClaimService } from 'src/wallet/services/claim.service';
 import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { ReferralTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import { projectName, endTime } from 'src/database/seeds/jackpot.seed';
+import { Jackpot } from './entities/jackpot.entity';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -67,6 +74,8 @@ export class GameService implements OnModuleInit {
     private readonly claimService: ClaimService,
     @InjectRepository(BetOrder)
     private betOrderRepository: Repository<BetOrder>,
+    @InjectRepository(Jackpot)
+    private jackpotRepository: Repository<Jackpot>,
   ) {}
 
   // process of closing bet for current epoch, set draw result, announce draw result, set available claim and process referral bonus
@@ -85,6 +94,21 @@ export class GameService implements OnModuleInit {
         failureHandler: this.onReferralBonusFailed.bind(this),
       },
     );
+
+    const now = new Date(Date.now());
+    const target = new Date(endTime);
+    if (now < target) {
+      const delay = target.getTime() - now.getTime();
+      setTimeout(
+        () => {
+          this.setSquidGameJackpotHash();
+        },
+        // after drawSquidGameStage4 bot set jackpot hash into jackpot record
+        // if this function read jackpot record too early, it won't get the jackpot hash from the record(and trigger fallback method)
+        // tested 1 minute delay is not enough
+        delay + 1000 * 60 * 5, // wait 5 minutes before set jackpot hash on-chain
+      );
+    }
   }
 
   @Cron('0 0 */1 * * *') // every hour
@@ -1058,5 +1082,75 @@ export class GameService implements OnModuleInit {
     }
 
     return total;
+  }
+
+  async setSquidGameJackpotHash(): Promise<void> {
+    const jackpot = await this.jackpotRepository
+      .createQueryBuilder('jackpot')
+      .where('jackpot.projectName = :projectName', { projectName })
+      .getOne();
+    if (!jackpot) {
+      this.logger.error(`Jackpot record for ${projectName} not found`);
+      return;
+    }
+
+    const jackpotContractOwner = new ethers.Wallet(
+      await MPC.retrievePrivateKey(
+        this.configService.get('JACKPOT_CONTRACT_OWNER_ADDRESS'),
+      ),
+      this.provider,
+    );
+    const jackpotContract = Jackpot__factory.connect(
+      this.configService.get('JACKPOT_CONTRACT_ADDRESS'),
+      jackpotContractOwner,
+    );
+
+    if (!jackpot.jackpotHash) {
+      // something wrong with drawSquidGameStage4 bot
+      // fallback to set jackpot hash randomly
+      this.logger.error(`Jackpot hash for ${projectName} not set`);
+
+      const txResponse = await jackpotContract.drawJackpotHash(projectName);
+      const txReceipt = await txResponse.wait();
+      jackpot.jackpotHash = txReceipt.hash;
+      await this.jackpotRepository.save(jackpot);
+    }
+
+    let retryCount = 0;
+    while (retryCount < 5) {
+      try {
+        const txResponse = await jackpotContract.setJackpotHash(
+          projectName,
+          jackpot.jackpotHash,
+        );
+        const txReceipt = await txResponse.wait();
+        if (!txReceipt) throw new Error('txReceipt is null');
+        if (txReceipt.status !== 1)
+          throw new Error('txReceipt status is not 1(tx failed)');
+
+        jackpot.status = TxStatus.SUCCESS;
+        jackpot.txHash = txReceipt.hash;
+        await this.jackpotRepository.save(jackpot);
+
+        break;
+      } catch (error) {
+        retryCount++;
+        this.logger.error(`Failed to set jackpot hash: ${error}`);
+      }
+    }
+
+    if (retryCount === 5) {
+      this.logger.error(`Failed to set jackpot hash after 5 retries`);
+      jackpot.status = TxStatus.FAILED;
+      await this.jackpotRepository.save(jackpot);
+
+      await this.adminNotificationService.setAdminNotification(
+        `Error occur in game.service.setSquidGameJackpotHash`,
+        'SetJackpotHashFailed',
+        'Error Occurred When Try to Set Jackpot Hash On-chain for Squid Game Stage 4',
+        true,
+        true,
+      );
+    }
   }
 }
