@@ -40,7 +40,7 @@ export class JackpotTx {
   })
   availableClaim: boolean;
 
-  @Column({ nullable: true })
+  @Column({ default: 0 })
   // no decimals, 1 = $1
   payoutAmount: number;
 
