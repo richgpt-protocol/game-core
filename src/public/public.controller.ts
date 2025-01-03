@@ -343,14 +343,14 @@ export class PublicController {
   }
 
   @UseGuards(SecretTokenGuard)
-  @Get('get-user-squid-game-tickets')
+  @Post('get-user-squid-game-tickets')
   @ApiResponse({
     status: 200,
-    description: 'Get withdrawable balance',
+    description: 'Get user squid game tickets',
     type: ResponseVo,
   })
   async getUserSquidGameTickers(
-    @Query() payload: SquidGameTicketListDto,
+    @Body() payload: SquidGameTicketListDto,
   ): Promise<ResponseVo<any>> {
     const data = await this.publicService.getSquidGameTicketList(payload);
     return {
