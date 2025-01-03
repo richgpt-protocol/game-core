@@ -1024,7 +1024,10 @@ export class BetService implements OnModuleInit {
         })
         .getOne();
 
-      if (jackpot && gameUsdTx.amount >= jackpot.minimumBetAmount) {
+      if (
+        jackpot &&
+        Number(gameUsdTx.amount) >= Number(jackpot.minimumBetAmount)
+      ) {
         // create jackpotTx record with status pending
         const jackpotTx = new JackpotTx();
         jackpotTx.status = TxStatus.PENDING;
@@ -1648,7 +1651,7 @@ export class BetService implements OnModuleInit {
       error,
     );
 
-    if (job.attemptsMade > job.opts.attempts) {
+    if (job.attemptsMade >= job.opts.attempts) {
       jackpotTx.status = TxStatus.FAILED;
     } else {
       jackpotTx.retryCount++;
