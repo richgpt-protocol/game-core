@@ -120,6 +120,42 @@ export class AuthService {
     throw new BadRequestException('Invalid OTT');
   }
 
+  async requestGameToken(userId: number) {
+    try {
+      const user = await this.userService.findOne(userId);
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      const secretKey = this.configService.get('FUYO_GAME_SECRET_KEY');
+      const hmacKey = this.configService.get('FUYO_GAME_HMAC_KEY');
+      const iv = crypto.randomBytes(16);
+
+      const timestamp = Date.now();
+      const message = `${user.uid}:${timestamp}`;
+
+      // Encryption
+      const cipher = crypto.createCipheriv('aes-256-cbc', secretKey, iv);
+      let encrypted = cipher.update(message, 'utf8', 'hex');
+      encrypted += cipher.final('hex');
+
+      // HMAC for Integrity
+      const hash = crypto
+        .createHmac('sha256', hmacKey)
+        .update(encrypted)
+        .digest('hex');
+
+      // Concatenate iv, encrypted, and hash
+      const token = `${iv.toString('hex')}:${encrypted}:${hash}`;
+
+      // Encode for URL
+      return encodeURIComponent(token); // URL encode to pass safely
+    } catch (error) {
+      console.log('error', error);
+      throw error;
+    }
+  }
+
   async createToken(user: any, role: string) {
     const payload = {
       sub: user.id,
