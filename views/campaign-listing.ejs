@@ -298,21 +298,7 @@
                                 <% } %>
                         </tbody>
                     </table>
-                    <!-- <div class="pagination">
-                        <% if (data.currentPage> 1) { %>
-                            <a href="?page=<%= data.currentPage - 1 %>">Previous</a>
-                            <% } %>
 
-                                <% for (let i=1; i <=data.totalPages; i++) { %>
-                                    <a href="?page=<%= i %>" class="<%= data.currentPage == i ? 'active' : '' %>">
-                                        <%= i %>
-                                    </a>
-                                    <% } %>
-
-                                        <% if (data.currentPage < data.totalPages) { %>
-                                            <a href="?page=<%= Number(data.currentPage) + 1 %>">Next</a>
-                                            <% } %>
-                    </div> -->
                     <div class="pagination">
                         <% if (data.currentPage > 1) { %>
                           <a href="?page=<%= data.currentPage - 1 %>">Previous</a>
