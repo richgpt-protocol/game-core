@@ -495,7 +495,7 @@ export class CampaignService {
       setting.value,
     ) as SQUID_GAME_STAGE_2;
 
-    let squidGameStage2Status = '';
+    let squidGameStage2Status: any = null;
 
     const participant = await this.squidGameParticipantRepository
       .createQueryBuilder('participant')
