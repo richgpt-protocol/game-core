@@ -1075,7 +1075,7 @@ export class GameService implements OnModuleInit {
 
     return total;
   }
-  
+
   @Cron('0 55 * * * *') // 5 minutes before every hour
   async pushBettingStatistic(): Promise<void> {
     // get current epoch
@@ -1207,4 +1207,5 @@ export class GameService implements OnModuleInit {
       true,
       true,
     );
+  }
 }
