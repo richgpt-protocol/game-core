@@ -20,6 +20,7 @@ import { ConfigService } from 'src/config/config.service';
 import { WalletModule } from 'src/wallet/wallet.module';
 import { GameUsdTx } from 'src/wallet/entities/game-usd-tx.entity';
 import { CampaignModule } from 'src/campaign/campaign.module';
+import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { CampaignModule } from 'src/campaign/campaign.module';
       Notification,
       UserNotification,
       GameUsdTx,
+      JackpotTx,
     ]),
     AuditLogModule,
     ConfigModule,

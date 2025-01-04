@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PublicService } from './public.service';
 import { SecretTokenGuard } from 'src/shared/guards/secret-token.guard';
 import { ResponseVo } from 'src/shared/vo/response.vo';
@@ -17,6 +17,9 @@ import { UpdateUserGameDto } from './dtos/update-user-game.dto';
 import { UpdateTaskXpDto } from './dtos/update-task-xp.dto';
 import { UpdateUserTelegramDto } from './dtos/update-user-telegram.dto';
 import { GetOttDto } from './dtos/get-ott.dto';
+import { LiteBetDto } from './dtos/lite-bet.dto';
+import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
+import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
@@ -194,6 +197,162 @@ export class PublicController {
   })
   async getActiveCampaignWithBanners(): Promise<ResponseVo<any>> {
     const data = await this.publicService.getCampaigbnInfo();
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('lite-bet')
+  @ApiResponse({
+    status: 201,
+    description: 'Get lite bet',
+    type: ResponseVo,
+  })
+  async liteBet(@Body() payload: LiteBetDto): Promise<ResponseVo<any>> {
+    const data = await this.publicService.bet(payload.uid, payload.bets);
+    return {
+      statusCode: HttpStatus.CREATED,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-deposit-info')
+  @ApiResponse({
+    status: 200,
+    description: 'Get deposit info',
+    type: ResponseVo,
+  })
+  async getDepositInfo(): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getDepositInfo();
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-user-address/:uid')
+  @ApiResponse({
+    status: 200,
+    description: 'Get user address',
+    type: ResponseVo,
+  })
+  async getUserAddress(@Param('uid') uid: string): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getUserWalletAddress(uid);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-withdraw-info')
+  @ApiResponse({
+    status: 200,
+    description: 'Get withdraw info',
+    type: ResponseVo,
+  })
+  async getWithdrawInfo(): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getWithdrawInfo();
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-user-withdrawable-info')
+  @ApiQuery({ name: 'uid', required: true })
+  @ApiQuery({ name: 'chainId', required: true })
+  @ApiResponse({
+    status: 200,
+    description: 'Get withdrawable balance',
+    type: ResponseVo,
+  })
+  async getUserWithdrawableInfo(
+    @Query('uid') uid: string,
+    @Query('chainId') chainId: number,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getUserWithdrawableInfo(uid, chainId);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('request-withdraw')
+  @ApiResponse({
+    status: 201,
+    description: 'Request withdraw',
+    type: ResponseVo,
+  })
+  async requestWithdraw(
+    @Body() payload: RequestWithdrawDto,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.withdraw(payload);
+    return {
+      statusCode: HttpStatus.CREATED,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('update-withdraw-pin')
+  @ApiResponse({
+    status: 201,
+    description: 'Update withdraw pin',
+    type: ResponseVo,
+  })
+  async updateWithdrawPin(
+    @Body() payload: SetWithdrawPinDto,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.setWithdrawPassword(payload);
+    return {
+      statusCode: HttpStatus.CREATED,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-squid-game-info/:uid')
+  @ApiParam({ name: 'uid', required: true })
+  @ApiResponse({
+    status: 200,
+    description: 'Get squid game info',
+    type: ResponseVo,
+  })
+  async getSquidGameInfo(@Param('uid') uid: string): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getSquidGameInfo(uid);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('get-user-squid-game-tickets')
+  @ApiResponse({
+    status: 200,
+    description: 'Get user squid game tickets',
+    type: ResponseVo,
+  })
+  async getUserSquidGameTickers(
+    @Body() payload: SquidGameTicketListDto,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getSquidGameTicketList(payload);
     return {
       statusCode: HttpStatus.OK,
       data,

@@ -35,6 +35,7 @@ import {
   UpdateUserByAdminDto,
   UpdateUserDto,
   VerifyOtpDto,
+  WithdrawlPinByAdminDto,
   WithdrawlPinDto,
 } from './dto/register-user.dto';
 import { UserService } from './user.service';
@@ -42,9 +43,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { WalletService } from 'src/wallet/wallet.service';
-import * as bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
-import { User } from './entities/user.entity';
+import { isValidSixDigitPairs } from 'src/shared/utils/digit-validation.util';
 
 @ApiTags('User')
 @Controller('api/v1/user')
@@ -313,47 +313,64 @@ export class UserController {
     @IpAddress() ipAddress,
     @HandlerClass() classInfo: IHandlerClass,
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    try {
-      await queryRunner.startTransaction();
-      const userId = req.user.userId;
-      const hash = await bcrypt.hash(payload.pin, 10);
-      await queryRunner.manager.update(
-        User,
-        { id: userId },
-        {
-          withdrawPin: hash,
-        },
-      );
-
-      // await this.userService.update(userId, { withdrawPin: hash });
-
-      await this.auditLogService.addAuditLog(
-        classInfo,
-        req,
-        ipAddress,
-        `Update Withdraw Password Successful: ${JSON.stringify(payload)}`,
-      );
-
-      await queryRunner.commitTransaction();
-
-      return {
-        statusCode: HttpStatus.CREATED,
-        data: {},
-        message: 'update withdraw password successful',
-      };
-    } catch (error) {
-      this.logger.error(error);
-      await queryRunner.rollbackTransaction();
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        data: {},
-        message: 'Failed to update withdraw password, please contact admin',
-      };
-    } finally {
-      if (!queryRunner.isReleased) await queryRunner.release();
+    if (!isValidSixDigitPairs(payload.pin)) {
+      throw new BadRequestException('Invalid withdraw pin format');
     }
+
+    await this.userService.updateWithdrawPin(
+      req.user.userId,
+      payload.pin,
+      payload.oldPin,
+    );
+
+    await this.auditLogService.addAuditLog(
+      classInfo,
+      req,
+      ipAddress,
+      `Update Withdraw Password Successful.`,
+    );
+
+    return {
+      statusCode: HttpStatus.CREATED,
+      data: {},
+      message: 'Update withdraw password successful',
+    };
+  }
+
+  @Secure(null, UserRole.ADMIN)
+  @Post('update-withdraw-password-by-admin')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  async updateWithdrawPasswordByAdmin(
+    @Request() req,
+    @Body() payload: WithdrawlPinByAdminDto,
+    @IpAddress() ipAddress,
+    @HandlerClass() classInfo: IHandlerClass,
+  ) {
+    if (!isValidSixDigitPairs(payload.pin)) {
+      throw new BadRequestException('Invalid withdraw pin format');
+    }
+
+    await this.userService.updateWithdrawPin(
+      payload.userId,
+      payload.pin,
+      payload.oldPin,
+    );
+
+    await this.auditLogService.addAuditLog(
+      classInfo,
+      req,
+      ipAddress,
+      `Update Withdraw Password Successful. UserId: ${payload.userId}`,
+    );
+
+    return {
+      statusCode: HttpStatus.CREATED,
+      data: {},
+      message: 'Update withdraw password successful',
+    };
   }
 
   @Secure(null, UserRole.USER)

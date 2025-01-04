@@ -139,7 +139,7 @@ export class GameController {
       };
     } catch (error) {
       // todo: inform if error come from throw above
-      console.log(error);
+      this.logger.error(error);
       return {
         statusCode: HttpStatus.BAD_REQUEST,
         data: null,
@@ -175,7 +175,7 @@ export class GameController {
         message: 'bet success',
       };
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       throw new BadRequestException(error.message);
     }
   }
@@ -206,7 +206,7 @@ export class GameController {
         message: 'bet success',
       };
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       throw new BadRequestException(error.message);
     }
   }
@@ -237,7 +237,7 @@ export class GameController {
         message: 'Processing referral bonus',
       };
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       throw new BadRequestException(error.message);
     }
   }
@@ -268,7 +268,7 @@ export class GameController {
         message: 'update referral distribution success',
       };
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       throw new BadRequestException(error.message);
     }
   }
@@ -289,7 +289,7 @@ export class GameController {
         message: 'get recent bets success',
       };
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       throw new BadRequestException(error.message);
     }
   }

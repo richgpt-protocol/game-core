@@ -23,6 +23,8 @@
     "seed:create": "ts-node ./node_modules/typeorm-extension/bin/cli.cjs seed:create"
   },
   "dependencies": {
+    "@bull-board/api": "^6.5.4",
+    "@bull-board/express": "^6.5.4",
     "@nestjs/axios": "^3.0.2",
     "@nestjs/bull": "^10.1.0",
     "@nestjs/bullmq": "^10.2.1",

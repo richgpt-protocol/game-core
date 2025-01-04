@@ -28,6 +28,7 @@ import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { WalletModule } from 'src/wallet/wallet.module';
 import { Setting } from 'src/setting/entities/setting.entity';
+import { JackpotTx } from './entities/jackpot-tx.entity';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { Setting } from 'src/setting/entities/setting.entity';
       ReloadTx,
       CreditWalletTx,
       Setting,
+      JackpotTx,
     ]),
     PermissionModule,
     ConfigModule,

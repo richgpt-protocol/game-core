@@ -13,6 +13,7 @@ import { TxStatus } from 'src/shared/enum/status.enum';
 import { UsdtTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 import * as dotenv from 'dotenv';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
+import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
 dotenv.config();
 
 type TransactionHistory = {
@@ -34,6 +35,8 @@ export class WalletService {
     private gameUsdTxRepository: Repository<GameUsdTx>,
     private datasource: DataSource,
     private configService: ConfigService,
+    @InjectRepository(JackpotTx)
+    private jackpotTxRepository: Repository<JackpotTx>,
   ) {
     for (let i = 1; i <= 100; i++) {
       // const xp = Math.floor(50 * Math.pow(i, 3) + 1000 * Math.exp(0.1 * i));
@@ -352,6 +355,33 @@ export class WalletService {
         amount: parseFloat(Number(walletTx.txAmount).toFixed(2)),
         txHash: walletTx.redeemTx.payoutTxHash,
         createdDate: walletTx.createdDate,
+      };
+    });
+  }
+
+  async getUserJackpotTicket(userId: number, page: number, limit: number) {
+    const skip = (page - 1) * limit;
+    const jackpotTx = await this.jackpotTxRepository
+      .createQueryBuilder('jackpotTx')
+      .leftJoinAndSelect('jackpotTx.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('userWallet.user', 'user')
+      .where('user.id = :userId', { userId })
+      .andWhere('jackpotTx.status = :status', { status: TxStatus.SUCCESS })
+      .orderBy('jackpotTx.id', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
+
+    return jackpotTx.map((jackpotTx) => {
+      return {
+        id: jackpotTx.id,
+        hashGenerated: jackpotTx.randomHash,
+        createdTime: jackpotTx.createdDate,
+        explorerUrl: `${this.configService.get(
+          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+        )}/tx/${jackpotTx.txHash}`,
+        availableClaim: jackpotTx.availableClaim,
       };
     });
   }
