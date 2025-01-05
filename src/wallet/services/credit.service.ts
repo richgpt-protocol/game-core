@@ -59,9 +59,8 @@ export class CreditService {
     private eventEmitter: EventEmitter2,
     private readonly queueService: QueueService,
   ) {
-    this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
-      'DEPOSIT_BOT_ADDRESS',
-    );
+    this.GAMEUSD_TRANFER_INITIATOR =
+      this.configService.get('CREDIT_BOT_ADDRESS');
   }
 
   onModuleInit() {
@@ -487,6 +486,13 @@ export class CreditService {
         signer,
       );
 
+      // reload credit bot if needed
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        signer.address,
+        this.configService.get('BASE_CHAIN_ID'),
+      );
+
       const receipt = await onchainTx.wait(2);
 
       if (receipt && receipt.status != 1) {
@@ -798,21 +804,35 @@ export class CreditService {
         ethers.MaxUint256,
       );
       await approveTx.wait();
+
+      // reload user wallet if needed
+      this.eventEmitter.emit(
+        'gas.service.reload',
+        user.address,
+        this.configService.get('BASE_CHAIN_ID'),
+      );
     }
     // execute revoke credit function
-    const depositBot = await this.getSigner(
+    const creditBot = await this.getSigner(
       gameUsdTx.chainId,
       this.GAMEUSD_TRANFER_INITIATOR,
     );
     const depositContract = Deposit__factory.connect(
       depositContractAddress,
-      depositBot,
+      creditBot,
     );
     const txResponse = await depositContract.revokeExpiredCredit(
       gameUsdTx.senderAddress,
       parseUnits(gameUsdTx.amount.toString(), 18),
     );
     const txReceipt = await txResponse.wait();
+
+    // reload credit bot if needed
+    this.eventEmitter.emit(
+      'gas.service.reload',
+      creditBot.address,
+      this.configService.get('BASE_CHAIN_ID'),
+    );
 
     if (txReceipt.status != 1) {
       // throw error to retry again in next job

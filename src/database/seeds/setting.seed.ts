@@ -127,6 +127,10 @@ export default class CreateSettings implements Seeder {
           key: SettingEnum.FILTERED_REFERRAL_CODES,
           value: JSON.stringify([]),
         },
+        {
+          key: SettingEnum.BOT_ACCOUNT_USER_IDS,
+          value: JSON.stringify([]),
+        },
       ])
       .execute();
   }

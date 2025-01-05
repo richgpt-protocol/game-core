@@ -25,9 +25,10 @@ import { ReferralTx } from 'src/referral/entities/referral-tx.entity';
 import { SharedModule } from 'src/shared/shared.module';
 import { UserModule } from 'src/user/user.module';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
-import { CreditService } from 'src/wallet/services/credit.service';
 import { CreditWalletTx } from 'src/wallet/entities/credit-wallet-tx.entity';
 import { WalletModule } from 'src/wallet/wallet.module';
+import { Setting } from 'src/setting/entities/setting.entity';
+import { JackpotTx } from './entities/jackpot-tx.entity';
 
 @Module({
   imports: [
@@ -47,6 +48,8 @@ import { WalletModule } from 'src/wallet/wallet.module';
       ReferralTx,
       ReloadTx,
       CreditWalletTx,
+      Setting,
+      JackpotTx,
     ]),
     PermissionModule,
     ConfigModule,

@@ -32,6 +32,7 @@ import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import { CampaignService } from 'src/campaign/campaign.service';
 
 /**
  * How deposit works
@@ -60,6 +61,7 @@ export class DepositService implements OnModuleInit {
     private readonly userService: UserService,
     private eventEmitter: EventEmitter2,
     private queueService: QueueService,
+    private campaignService: CampaignService,
   ) {}
   onModuleInit() {
     this.queueService.registerHandler(
@@ -679,21 +681,25 @@ export class DepositService implements OnModuleInit {
         return;
       }
 
-      const depositAdminWallet = await this.getSigner(
-        this.configService.get('DEPOSIT_BOT_ADDRESS'),
+      const signer = await this.getSigner(
+        // use deposit bot for normal deposit(>=1 USD),
+        // else use credit bot for credit deposit
+        gameUsdTx.amount >= 1
+          ? this.configService.get('DEPOSIT_BOT_ADDRESS')
+          : this.configService.get('CREDIT_BOT_ADDRESS'),
         gameUsdTx.chainId,
       );
 
       const onchainGameUsdTx = await this.depositGameUSD(
         gameUsdTx.receiverAddress,
         parseEther(gameUsdTx.amount.toString()),
-        depositAdminWallet,
+        signer,
       );
 
       // reload deposit admin wallet if needed
       this.eventEmitter.emit(
         'gas.service.reload',
-        await depositAdminWallet.getAddress(),
+        await signer.getAddress(),
         gameUsdTx.chainId,
       );
 
@@ -897,6 +903,13 @@ export class DepositService implements OnModuleInit {
       }
 
       await queryRunner.commitTransaction();
+
+      await this.campaignService.squidGameRevival(
+        user.id,
+        gameUsdTx.amount,
+        queryRunner,
+      );
+
       if (!queryRunner.isReleased) await queryRunner.release();
 
       await this.userService.setUserNotification(walletTx.userWallet.userId, {
