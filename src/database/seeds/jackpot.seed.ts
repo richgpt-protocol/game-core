@@ -2,8 +2,8 @@ import { Seeder, SeederFactoryManager } from 'typeorm-extension';
 import { DataSource } from 'typeorm';
 
 const projectName = 'FUYO X SQUID GAME - STAGE 2'; // to update, must be exactly same as contract
-const startTime = '2025-01-03 17:37:01'; // to update, in UTC
-const endTime = '2025-01-10 17:37:00'; // to update, in UTC
+const startTime = '2025-01-05 16:19:02'; // to update, in UTC
+const endTime = '2025-01-12 16:19:01'; // to update, in UTC
 
 export default class CreateJackpot implements Seeder {
   /**
