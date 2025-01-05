@@ -43,6 +43,8 @@ import { CampaignService } from 'src/campaign/campaign.service';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participant.entity';
 import { SquidGameRevival } from 'src/campaign/entities/squidGame.revival.entity';
+import { ClaimJackpotDetail } from './entities/claim-jackpot-detail.entity';
+import { Jackpot } from 'src/game/entities/jackpot.entity';
 
 @Module({
   imports: [
@@ -70,6 +72,8 @@ import { SquidGameRevival } from 'src/campaign/entities/squidGame.revival.entity
       Campaign,
       SquidGameParticipant,
       SquidGameRevival,
+      ClaimJackpotDetail,
+      Jackpot,
     ]),
     PermissionModule,
     SharedModule,
