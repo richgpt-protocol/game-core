@@ -1,17 +1,17 @@
 import { Seeder } from 'typeorm-extension';
 import { DataSource } from 'typeorm';
 
-const stage1RevivalStartTime: Date = new Date('2024-12-09T00:00:00Z'); // in UTC
-const stage1RevivalEndTime: Date = new Date('2024-12-15T23:59:59Z'); // in UTC
-const stage1RevivalAmountRequired: number = 10; // 100 means 100 USDT/GameUSD
+const stage1RevivalStartTime: Date = new Date('2025-01-03T00:00:00Z'); // in UTC
+const stage1RevivalEndTime: Date = new Date('2025-01-09T23:59:59Z'); // in UTC
+const stage1RevivalAmountRequired: number = 1; // 100 means 100 USDT/GameUSD
 
-const stage2RevivalStartTime: Date = new Date('2024-12-16T00:00:00Z'); // in UTC
-const stage2RevivalEndTime: Date = new Date('2024-12-22T23:59:59Z'); // in UTC
-const stage2RevivalAmountRequired: number = 10; // 100 means 100 USDT/GameUSD
+const stage2RevivalStartTime: Date = new Date('2025-01-10T00:00:00Z'); // in UTC
+const stage2RevivalEndTime: Date = new Date('2025-01-16T23:59:59Z'); // in UTC
+const stage2RevivalAmountRequired: number = 50; // 100 means 100 USDT/GameUSD
 
-const stage3RevivalStartTime: Date = new Date('2024-12-23T00:00:00Z'); // in UTC
-const stage3RevivalEndTime: Date = new Date('2024-12-29T23:59:59Z'); // in UTC
-const stage3RevivalAmountRequired: number = 10; // 100 means 100 USDT/GameUSD
+const stage3RevivalStartTime: Date = new Date('2025-01-17T00:00:00Z'); // in UTC
+const stage3RevivalEndTime: Date = new Date('2025-01-23T23:59:59Z'); // in UTC
+const stage3RevivalAmountRequired: number = 100; // 100 means 100 USDT/GameUSD
 
 // for example,
 

@@ -52,6 +52,7 @@ import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { JackpotTx } from './entities/jackpot-tx.entity';
 import { Jackpot } from './entities/jackpot.entity';
+import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participant.entity';
 
 interface SubmitBetJobDTO {
   userWalletId: number;
@@ -1023,6 +1024,25 @@ export class BetService implements OnModuleInit {
           currentTime: currentTime,
         })
         .getOne();
+
+      const participant = await queryRunner.manager
+        .createQueryBuilder(SquidGameParticipant, 'participant')
+        .where('participant.userId = :userId', {
+          userId: userWallet.user.id,
+        })
+        .getOne();
+
+      // check if the user is eligible to participate in the jackpot
+      if (
+        (jackpot &&
+          jackpot.projectName === 'FUYO X SQUID GAME - STAGE 2' &&
+          !participant) ||
+        (jackpot.projectName === 'FUYO X SQUID GAME - STAGE 4' &&
+          participant &&
+          participant.lastStage !== 3)
+      ) {
+        return;
+      }
 
       if (
         jackpot &&

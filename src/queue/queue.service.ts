@@ -1,7 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { INestApplication, Injectable, Logger } from '@nestjs/common';
 import { Job, Queue, Worker } from 'bullmq';
 import { ConfigService } from 'src/config/config.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { ExpressAdapter } from '@bull-board/express';
+import { createBullBoard } from '@bull-board/api';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 
 interface QueueHandler {
   jobHandler: (job: Job) => Promise<any>;
@@ -20,9 +23,64 @@ export class QueueService {
   private maxWorkers = 10; // Number of workers in the pool
   private waitingQueue: Array<{ queueName: string; jobData: any }> = []; // Track waiting jobs
 
+  private bullBoardServer: any;
+  private addQueue: (adapter: BullMQAdapter) => void;
+
   constructor(private readonly configService: ConfigService) {
     this.redisHost = this.configService.get('REDIS_HOST');
     this.redisPort = +this.configService.get('REDIS_PORT');
+  }
+
+  // Accept the Nest app instance after bootstrap
+  setAppInstance(app: INestApplication) {
+    this.setupBullBoard(app);
+  }
+
+  /**
+   * Set up Bull Board to monitor queues
+   */
+  private setupBullBoard(app: INestApplication) {
+    this.bullBoardServer = new ExpressAdapter();
+    this.bullBoardServer.setBasePath('/redis-admin/queues');
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const bullBoard = createBullBoard({
+      queues: Array.from(this.queues.values()).map(
+        (queue) => new BullMQAdapter(queue),
+      ),
+      serverAdapter: this.bullBoardServer,
+    });
+
+    // Extract the addQueue method for dynamic queue registration
+    this.addQueue = bullBoard.addQueue;
+
+    const expressApp = app.getHttpAdapter().getInstance();
+    expressApp.use('/redis-admin/queues', (req, res, next) => {
+      const auth = {
+        login: process.env.BULL_ADMIN_USERNAME,
+        password: process.env.BULL_ADMIN_PASSWORD,
+      };
+      const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
+      const [login, password] = Buffer.from(b64auth, 'base64')
+        .toString()
+        .split(':');
+
+      // Check credentials
+      if (
+        login &&
+        password &&
+        login === auth.login &&
+        password === auth.password
+      ) {
+        return next();
+      }
+
+      // Request authentication
+      res.set('WWW-Authenticate', 'Basic realm="401"');
+      res.status(401).send('Authentication required.');
+    });
+    expressApp.use('/redis-admin/queues', this.bullBoardServer.getRouter());
+    this.logger.log('Bull Board is available at /redis-admin/queues');
   }
 
   async onFailed(job: Job, error: Error) {
@@ -88,6 +146,13 @@ export class QueueService {
       },
     });
     this.queues.set(queueName, queue);
+
+    // Dynamically add new queues to Bull Board
+    if (this.addQueue) {
+      const adapter = new BullMQAdapter(queue);
+      this.addQueue(adapter);
+      this.logger.log(`Queue ${queueName} registered in Bull Board.`);
+    }
     return queue;
   }
 

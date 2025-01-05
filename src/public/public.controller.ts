@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PublicService } from './public.service';
 import { SecretTokenGuard } from 'src/shared/guards/secret-token.guard';
 import { ResponseVo } from 'src/shared/vo/response.vo';
@@ -19,6 +19,7 @@ import { UpdateUserTelegramDto } from './dtos/update-user-telegram.dto';
 import { GetOttDto } from './dtos/get-ott.dto';
 import { LiteBetDto } from './dtos/lite-bet.dto';
 import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
+import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
@@ -319,6 +320,41 @@ export class PublicController {
     const data = await this.publicService.setWithdrawPassword(payload);
     return {
       statusCode: HttpStatus.CREATED,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-squid-game-info/:uid')
+  @ApiParam({ name: 'uid', required: true })
+  @ApiResponse({
+    status: 200,
+    description: 'Get squid game info',
+    type: ResponseVo,
+  })
+  async getSquidGameInfo(@Param('uid') uid: string): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getSquidGameInfo(uid);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('get-user-squid-game-tickets')
+  @ApiResponse({
+    status: 200,
+    description: 'Get user squid game tickets',
+    type: ResponseVo,
+  })
+  async getUserSquidGameTickers(
+    @Body() payload: SquidGameTicketListDto,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getSquidGameTicketList(payload);
+    return {
+      statusCode: HttpStatus.OK,
       data,
       message: 'Success',
     };
