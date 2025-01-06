@@ -896,4 +896,19 @@ export class CreditService {
       await queryRunner.release();
     }
   }
+
+  async findClaimedCreditWithDepositCampaigns(
+    userWalletId: number,
+    campaignIds: number[],
+  ) {
+    return await this.creditWalletTxRepository.find({
+      where: {
+        campaignId: In(campaignIds),
+        userWallet: {
+          id: userWalletId,
+        },
+        status: TxStatus.SUCCESS,
+      },
+    });
+  }
 }
