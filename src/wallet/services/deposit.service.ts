@@ -1018,6 +1018,7 @@ export class DepositService implements OnModuleInit {
       },
     });
 
+    this.logger.log(campaigns);
     const depositWithOne = campaigns.find((campaign) => {
       return campaign.name === 'Deposit $1 USDT Free $1 Credit';
     });
@@ -1037,6 +1038,7 @@ export class DepositService implements OnModuleInit {
       },
     });
 
+    this.logger.log(claimedCredits);
     const isClaimedWithOne = claimedCredits.find(
       (credit) => credit.campaign.id === depositWithOne.id,
     );
@@ -1044,7 +1046,9 @@ export class DepositService implements OnModuleInit {
       (credit) => credit.campaign.id === depositWithTen.id,
     );
 
-    if (depositWithOne && isClaimedWithOne) {
+    if (depositWithOne && !isClaimedWithOne) {
+      this.logger.log('depositWithOne');
+
       const startDate = new Date(depositWithOne.startTime * 1000);
       const endDate = new Date(depositWithOne.endTime * 1000);
 
@@ -1059,6 +1063,7 @@ export class DepositService implements OnModuleInit {
       const amount = walletTxs.reduce((acc, tx) => {
         return acc + tx.txAmount;
       }, 0);
+      this.logger.log('depositWithOne', amount);
 
       if (amount >= 1) {
         const creditWalletTx = await this.creditService.addCreditQueryRunner(
@@ -1075,6 +1080,8 @@ export class DepositService implements OnModuleInit {
     }
 
     if (depositWithTen && !isClaimedWithTen) {
+      this.logger.log('depositWithTen');
+
       const startDate = new Date(depositWithOne.startTime * 1000);
       const endDate = new Date(depositWithOne.endTime * 1000);
 
@@ -1090,6 +1097,7 @@ export class DepositService implements OnModuleInit {
         return acc + tx.txAmount;
       }, 0);
 
+      this.logger.log('depositWithTen', amount);
       if (amount >= 10) {
         const creditWalletTx = await this.creditService.addCreditQueryRunner(
           {
