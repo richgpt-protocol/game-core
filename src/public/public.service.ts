@@ -178,14 +178,16 @@ export class PublicService {
       await queryRunner.startTransaction();
 
       if (payload.xp > 0) {
-        await this.addXP(
-          payload.xp,
-          PointTxType.QUEST,
-          userWallet,
-          null,
-          payload.taskId,
-          queryRunner,
-        );
+        if (payload.taskId !== 8 && payload.taskId !== 9) {
+          await this.addXP(
+            payload.xp,
+            PointTxType.QUEST,
+            userWallet,
+            null,
+            payload.taskId,
+            queryRunner,
+          );
+        }
       }
 
       await queryRunner.commitTransaction();
