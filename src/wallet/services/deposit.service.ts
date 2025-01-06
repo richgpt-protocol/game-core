@@ -1027,6 +1027,7 @@ export class DepositService implements OnModuleInit {
     });
 
     const claimedCredits = await queryRunner.manager.find(CreditWalletTx, {
+      relations: ['campaign'],
       where: {
         status: TxStatus.SUCCESS,
         userWallet: {
