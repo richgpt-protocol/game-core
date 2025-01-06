@@ -1061,7 +1061,7 @@ export class DepositService implements OnModuleInit {
       });
 
       const amount = walletTxs.reduce((acc, tx) => {
-        return acc + tx.txAmount;
+        return acc + Number(tx.txAmount);
       }, 0);
       this.logger.log('depositWithOne', amount);
 
@@ -1094,7 +1094,7 @@ export class DepositService implements OnModuleInit {
       });
 
       const amount = walletTxs.reduce((acc, tx) => {
-        return acc + tx.txAmount;
+        return acc + Number(tx.txAmount);
       }, 0);
 
       this.logger.log('depositWithTen', amount);
