@@ -7,7 +7,15 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryRunner, Repository } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  In,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  QueryRunner,
+  Repository,
+} from 'typeorm';
 import { ConfigService } from 'src/config/config.service';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
@@ -33,6 +41,9 @@ import { GameTx } from 'src/public/entity/gameTx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 import { CampaignService } from 'src/campaign/campaign.service';
+import { CreditService } from './credit.service';
+import { Campaign } from 'src/campaign/entities/campaign.entity';
+import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 
 /**
  * How deposit works
@@ -62,6 +73,7 @@ export class DepositService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
     private queueService: QueueService,
     private campaignService: CampaignService,
+    private creditService: CreditService,
   ) {}
   onModuleInit() {
     this.queueService.registerHandler(
@@ -902,7 +914,18 @@ export class DepositService implements OnModuleInit {
         );
       }
 
+      // Add check for user deposit amount whether it is eligible for campaign
+      const creditWalletTxs = await this.verifyDepositTasks(
+        queryRunner,
+        walletTx.userWallet,
+      );
+
       await queryRunner.commitTransaction();
+
+      // Execute credit wallet txs
+      for (const creditWalletTx of creditWalletTxs) {
+        await this.creditService.addToQueue(creditWalletTx.id);
+      }
 
       await this.campaignService.squidGameRevival(
         user.id,
@@ -981,6 +1004,108 @@ export class DepositService implements OnModuleInit {
   //     },
   //   });
   // }
+
+  private async verifyDepositTasks(
+    queryRunner: QueryRunner,
+    userWallet: UserWallet,
+  ) {
+    const creditWalletTxs = [];
+    const currentTime = new Date().getTime() / 1000;
+    const campaigns = await queryRunner.manager.find(Campaign, {
+      where: {
+        startTime: LessThanOrEqual(currentTime),
+        endTime: MoreThanOrEqual(currentTime),
+      },
+    });
+
+    const depositWithOne = campaigns.find((campaign) => {
+      return campaign.name === 'Deposit $1 USDT Free $1 Credit';
+    });
+    const depositWithTen = campaigns.find((campaign) => {
+      return campaign.name === 'Deposit $10 USDT Free $10 Credit';
+    });
+
+    const claimedCredits = await queryRunner.manager.find(CreditWalletTx, {
+      where: {
+        status: TxStatus.SUCCESS,
+        userWallet: {
+          id: userWallet.id,
+        },
+        campaign: {
+          id: In([depositWithOne?.id, depositWithTen?.id]),
+        },
+      },
+    });
+
+    const isClaimedWithOne = claimedCredits.find(
+      (credit) => credit.campaign.id === depositWithOne.id,
+    );
+    const isClaimedWithTen = claimedCredits.find(
+      (credit) => credit.campaign.id === depositWithTen.id,
+    );
+
+    if (depositWithOne && isClaimedWithOne) {
+      const startDate = new Date(depositWithOne.startTime * 1000);
+      const endDate = new Date(depositWithOne.endTime * 1000);
+
+      const walletTxs = await queryRunner.manager.find(WalletTx, {
+        where: {
+          status: TxStatus.SUCCESS,
+          txType: WalletTxType.DEPOSIT,
+          createdDate: Between(startDate, endDate),
+        },
+      });
+
+      const amount = walletTxs.reduce((acc, tx) => {
+        return acc + tx.txAmount;
+      }, 0);
+
+      if (amount >= 1) {
+        const creditWalletTx = await this.creditService.addCreditQueryRunner(
+          {
+            amount: 1,
+            walletAddress: userWallet.walletAddress,
+            campaignId: depositWithOne.id,
+          },
+          queryRunner,
+          false,
+        );
+        creditWalletTxs.push(creditWalletTx);
+      }
+    }
+
+    if (depositWithTen && !isClaimedWithTen) {
+      const startDate = new Date(depositWithOne.startTime * 1000);
+      const endDate = new Date(depositWithOne.endTime * 1000);
+
+      const walletTxs = await queryRunner.manager.find(WalletTx, {
+        where: {
+          status: TxStatus.SUCCESS,
+          txType: WalletTxType.DEPOSIT,
+          createdDate: Between(startDate, endDate),
+        },
+      });
+
+      const amount = walletTxs.reduce((acc, tx) => {
+        return acc + tx.txAmount;
+      }, 0);
+
+      if (amount >= 10) {
+        const creditWalletTx = await this.creditService.addCreditQueryRunner(
+          {
+            amount: 10,
+            walletAddress: userWallet.walletAddress,
+            campaignId: depositWithOne.id,
+          },
+          queryRunner,
+          false,
+        );
+        creditWalletTxs.push(creditWalletTx);
+      }
+    }
+
+    return creditWalletTxs;
+  }
 
   private async lastValidPointTx(walletId: number) {
     return await this.dataSource.manager.findOne(PointTx, {
