@@ -6,7 +6,7 @@ import {
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { Game } from './entities/game.entity';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { GameService } from './game.service';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
@@ -31,6 +31,7 @@ export class GameGateway {
     private cacheSettingService: CacheSettingService,
     private adminNotificationService: AdminNotificationService,
     private readonly queueService: QueueService,
+    private dataSource: DataSource,
   ) {}
 
   @SubscribeMessage('liveDrawResult')
@@ -57,6 +58,10 @@ export class GameGateway {
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
     this.logger.log('emitDrawResult()');
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
     try {
       // get draw result from last hour game
       const lastHour = new Date(Date.now() - 60 * 60 * 1000);
@@ -68,8 +73,8 @@ export class GameGateway {
         lastHour.getUTCMinutes(),
         lastHour.getUTCSeconds(),
       );
-      const lastGame = await this.gameRepository
-        .createQueryBuilder('game')
+      const lastGame = await queryRunner.manager
+        .createQueryBuilder(Game, 'game')
         .leftJoinAndSelect('game.drawResult', 'drawResult')
         .where('game.startDate < :lastHourUTC', { lastHourUTC })
         .andWhere('game.endDate > :lastHourUTC', { lastHourUTC })
@@ -130,10 +135,12 @@ export class GameGateway {
           attempts++;
         }
       }
+      await queryRunner.commitTransaction();
 
       await this.gameService.setAvailableClaimAndProcessReferralBonus(
         drawResults,
         lastGame.id,
+        queryRunner,
       );
     } catch (err) {
       this.logger.error(err);
@@ -145,6 +152,8 @@ export class GameGateway {
         true,
         true,
       );
+    } finally {
+      await queryRunner.release();
     }
   }
 }

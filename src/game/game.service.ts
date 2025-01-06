@@ -13,6 +13,7 @@ import {
   LessThan,
   LessThanOrEqual,
   MoreThanOrEqual,
+  QueryRunner,
   Repository,
 } from 'typeorm';
 import { Game } from './entities/game.entity';
@@ -359,9 +360,8 @@ export class GameService implements OnModuleInit {
   async setAvailableClaimAndProcessReferralBonus(
     drawResults: Array<DrawResult>,
     gameId: number,
+    queryRunner: QueryRunner,
   ): Promise<void> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
       for (const drawResult of drawResults) {
@@ -414,9 +414,8 @@ export class GameService implements OnModuleInit {
       // no rollbackTransaction() to prevent duplicate REFERRAL_BONUS queue added
       // await queryRunner.rollbackTransaction();
       throw error;
-    } finally {
-      await queryRunner.release();
     }
+    // queryRunner will be released by parent function
   }
 
   async reProcessReferralBonus(
