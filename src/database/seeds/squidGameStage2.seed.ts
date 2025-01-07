@@ -43,7 +43,7 @@ export default class SquidGameStage2 implements Seeder {
     // append hashedSeedString with an empty space and follow by serverSeed, compute the keccak256 and remove the 0x prefix
     const hashedSeedStringWithServerSeed = ethers
       .id(hashedSeedString + ' ' + serverSeed)
-      .slice(2);
+      .slice(30);
 
     // insert or update into setting table
     const result = await dataSource
