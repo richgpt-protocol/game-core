@@ -1054,6 +1054,9 @@ export class DepositService implements OnModuleInit {
           status: TxStatus.SUCCESS,
           txType: WalletTxType.DEPOSIT,
           createdDate: Between(startDate, endDate),
+          userWallet: {
+            id: userWallet.id,
+          },
         },
       });
 
@@ -1088,6 +1091,9 @@ export class DepositService implements OnModuleInit {
           status: TxStatus.SUCCESS,
           txType: WalletTxType.DEPOSIT,
           createdDate: Between(startDate, endDate),
+          userWallet: {
+            id: userWallet.id,
+          },
         },
       });
 
