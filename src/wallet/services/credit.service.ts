@@ -543,9 +543,7 @@ export class CreditService {
           },
         });
 
-        console.log('user', user);
-
-        if (!user) {
+        if (user) {
           if (
             creditWalletTx.campaign.name === 'Deposit $1 USDT Free $1 Credit'
           ) {
