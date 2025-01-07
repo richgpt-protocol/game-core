@@ -680,6 +680,10 @@ export class ClaimService implements OnModuleInit {
         })
         .getMany();
 
+      if (jackpotTxs.length === 0) {
+        return { error: 'No jackpot to claim', data: null };
+      }
+
       // create a new walletTx for claim jackpot
       const walletTx = new WalletTx();
       walletTx.txType = WalletTxType.CLAIM;
@@ -688,35 +692,16 @@ export class ClaimService implements OnModuleInit {
       walletTx.note = 'Jackpot Claim';
       await queryRunner.manager.save(walletTx);
 
-      // create ClaimJackpotDetail record for each jackpotTx and construct claimParams for on-chain claim
+      // construct claimParams for on-chain claim
       let amountToClaim = 0;
       const claimParams: IJackpot.ClaimParamsStruct[] = [];
       for (const jackpotTx of jackpotTxs) {
         amountToClaim += jackpotTx.payoutAmount;
 
-        let matchedCount = 0;
         const jackpot = await queryRunner.manager
           .createQueryBuilder(Jackpot, 'jackpot')
           .where('jackpot.id = :jackpotId', { jackpotId: jackpotTx.jackpotId })
           .getOne();
-        for (let i = 1; i < 7; i++) {
-          if (
-            jackpot.jackpotHash[jackpot.jackpotHash.length - i] ===
-            jackpotTx.randomHash[jackpotTx.randomHash.length - i]
-          ) {
-            matchedCount++;
-          } else {
-            break;
-          }
-        }
-
-        const claimJackpotDetail = new ClaimJackpotDetail();
-        claimJackpotDetail.matchedCharCount = matchedCount;
-        claimJackpotDetail.claimAmount = amountToClaim;
-        claimJackpotDetail.walletTxId = walletTx.id;
-        claimJackpotDetail.jackpotId = jackpot.id;
-        claimJackpotDetail.jackpotTxId = jackpotTx.id;
-        await queryRunner.manager.save(claimJackpotDetail);
 
         claimParams.push({
           projectName: jackpot.projectName,
@@ -825,8 +810,8 @@ export class ClaimService implements OnModuleInit {
         throw new Error('Claim Jackpot on-chain failed');
       }
 
-      // update jackpotTx to claimed
       for (const claimParam of claimParams) {
+        // update jackpotTx to claimed
         const jackpotTx = await queryRunner.manager
           .createQueryBuilder(JackpotTx, 'jackpotTx')
           .where('jackpotTx.randomHash = :randomHash', {
@@ -835,6 +820,32 @@ export class ClaimService implements OnModuleInit {
           .getOne();
         jackpotTx.isClaimed = true;
         await queryRunner.manager.save(jackpotTx);
+
+        // calculate matchedCount
+        let matchedCount = 0;
+        const jackpot = await queryRunner.manager
+          .createQueryBuilder(Jackpot, 'jackpot')
+          .where('jackpot.id = :jackpotId', { jackpotId: jackpotTx.jackpotId })
+          .getOne();
+        for (let i = 1; i < 7; i++) {
+          if (
+            jackpot.jackpotHash[jackpot.jackpotHash.length - i] ===
+            jackpotTx.randomHash[jackpotTx.randomHash.length - i]
+          ) {
+            matchedCount++;
+          } else {
+            break;
+          }
+        }
+
+        // create new claimJackpotDetail record
+        const claimJackpotDetail = new ClaimJackpotDetail();
+        claimJackpotDetail.matchedCharCount = matchedCount;
+        claimJackpotDetail.claimAmount = jackpotTx.payoutAmount;
+        claimJackpotDetail.walletTxId = walletTx.id;
+        claimJackpotDetail.jackpotId = jackpot.id;
+        claimJackpotDetail.jackpotTxId = jackpotTx.id;
+        await queryRunner.manager.save(claimJackpotDetail);
       }
 
       // update walletTx
