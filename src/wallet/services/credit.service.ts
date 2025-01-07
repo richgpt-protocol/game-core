@@ -653,6 +653,7 @@ export class CreditService {
         .groupBy('userWallet.id')
         .getRawMany();
 
+      const revokeCreditJobData: { jobId: string; gameUsdTxId: number }[] = [];
       for (const tx of expiredCreditWalletTxns) {
         const expiredAmount = Number(tx.totalAmount) || 0;
         const activeCredit = Math.max(
@@ -705,21 +706,22 @@ export class CreditService {
           );
           gameUsdTx.retryCount = 0;
           gameUsdTx.creditWalletTx = [creditWalletTx];
-          await queryRunner.manager.save(gameUsdTx);
+          const savedGameUsdTx = await queryRunner.manager.save(gameUsdTx);
 
-          await queryRunner.commitTransaction();
-
-          const jobId = `addCredit-${creditWalletTx.id}`;
-          await this.queueService.addJob(
-            QueueName.CREDIT,
-            jobId,
-            {
-              gameUsdTx: gameUsdTx,
-              queueType: QueueType.REVOKE_CREDIT,
-            },
-            // 3000,
-          );
+          revokeCreditJobData.push({
+            jobId: `revokeCredit-${creditWalletTx.id}`,
+            gameUsdTxId: savedGameUsdTx.id,
+          });
         }
+      }
+
+      await queryRunner.commitTransaction();
+
+      for (const jobData of revokeCreditJobData) {
+        await this.queueService.addJob(QueueName.CREDIT, jobData.jobId, {
+          gameUsdTxId: jobData.gameUsdTxId,
+          queueType: QueueType.REVOKE_CREDIT,
+        });
       }
     } catch (error) {
       this.logger.error(error);
@@ -807,13 +809,18 @@ export class CreditService {
   async processRevokeCredit(
     job: Job<
       {
-        gameUsdTx: GameUsdTx;
+        gameUsdTxId: number;
       },
       any,
       string
     >,
   ): Promise<any> {
-    const { gameUsdTx } = job.data;
+    const { gameUsdTxId } = job.data;
+
+    const gameUsdTx = await this.gameUsdTxRepository
+      .createQueryBuilder('gameUsdTx')
+      .where('gameUsdTx.id = :gameUsdTxId', { gameUsdTxId })
+      .getOne();
 
     // execute on-chain tx
     // check approval
@@ -894,19 +901,23 @@ export class CreditService {
   async revokeCreditFailed(
     job: Job<
       {
-        creditWalletTx: CreditWalletTx;
-        gameUsdTx: GameUsdTx;
+        gameUsdTxId: number;
       },
       any,
       string
     >,
   ): Promise<any> {
-    const { gameUsdTx } = job.data;
+    const { gameUsdTxId } = job.data;
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      const gameUsdTx = await queryRunner.manager
+        .createQueryBuilder(GameUsdTx, 'gameUsdTx')
+        .where('gameUsdTx.id = :gameUsdTxId', { gameUsdTxId })
+        .getOne();
+
       if (job.attemptsMade >= job.opts.attempts) {
         gameUsdTx.status = TxStatus.FAILED;
         await queryRunner.manager.save(gameUsdTx);
