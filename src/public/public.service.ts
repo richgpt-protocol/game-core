@@ -178,14 +178,16 @@ export class PublicService {
       await queryRunner.startTransaction();
 
       if (payload.xp > 0) {
-        await this.addXP(
-          payload.xp,
-          PointTxType.QUEST,
-          userWallet,
-          null,
-          payload.taskId,
-          queryRunner,
-        );
+        if (payload.taskId !== 8 && payload.taskId !== 9) {
+          await this.addXP(
+            payload.xp,
+            PointTxType.QUEST,
+            userWallet,
+            null,
+            payload.taskId,
+            queryRunner,
+          );
+        }
       }
 
       await queryRunner.commitTransaction();
@@ -597,6 +599,44 @@ export class PublicService {
       payload.page,
       payload.limit,
     );
+  }
+
+  async getDepositTaskInfo(uid: string) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const userWallet = await this.walletService.getWalletInfo(user.id);
+    if (!userWallet) {
+      throw new BadRequestException('User wallet not found');
+    }
+
+    const campaigns = await this.campaignService.findActiveCampaigns();
+    const depositWithOne = campaigns.find((campaign) => {
+      return campaign.name === 'Deposit $1 USDT Free $1 Credit';
+    });
+    const depositWithTen = campaigns.find((campaign) => {
+      return campaign.name === 'Deposit $10 USDT Free $10 Credit';
+    });
+
+    const claimedCredits =
+      await this.creditService.findClaimedCreditWithDepositCampaigns(
+        userWallet.id,
+        [depositWithOne.id, depositWithTen.id],
+      );
+
+    const isClaimedWithOne = claimedCredits.find(
+      (credit) => credit.campaign.id === depositWithOne.id,
+    );
+    const isClaimedWithTen = claimedCredits.find(
+      (credit) => credit.campaign.id === depositWithTen.id,
+    );
+
+    return {
+      isClaimedWithOne,
+      isClaimedWithTen,
+    };
   }
 
   private async addXP(

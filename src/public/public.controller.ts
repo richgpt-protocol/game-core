@@ -359,4 +359,23 @@ export class PublicController {
       message: 'Success',
     };
   }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-deposit-tasks/:uid')
+  @ApiParam({ name: 'uid', required: true })
+  @ApiResponse({
+    status: 200,
+    description: 'Get deposit tasks',
+    type: ResponseVo,
+  })
+  async getDepositTaskInfo(
+    @Param('uid') uid: string,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getDepositTaskInfo(uid);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
 }
