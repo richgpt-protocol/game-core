@@ -67,7 +67,7 @@ export class CreditService {
       this.configService.get('CREDIT_BOT_ADDRESS');
 
     this.fuyoQuestWebhookSecret = this.configService.get(
-      'FUYO_QUEST_WEBHOOK_URL',
+      'FUYO_BOT_WEBHOOK_SECRET',
     );
   }
 
