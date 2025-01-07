@@ -951,6 +951,7 @@ export class CreditService {
     campaignIds: number[],
   ) {
     return await this.creditWalletTxRepository.find({
+      relations: ['campaign'],
       where: {
         campaignId: In(campaignIds),
         userWallet: {
