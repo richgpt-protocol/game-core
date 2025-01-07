@@ -967,7 +967,7 @@ export class CreditService {
     questId: number;
   }) {
     try {
-      const response = await axios.post(
+      await axios.post(
         this.configService.get('FUYO_QUEST_WEBHOOK_URL'),
         {
           uid,
