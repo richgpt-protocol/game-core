@@ -1,4 +1,11 @@
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { WalletTx } from './wallet-tx.entity';
 import { Jackpot } from 'src/game/entities/jackpot.entity';
 import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
@@ -50,6 +57,7 @@ export class ClaimJackpotDetail {
   @Column()
   jackpotTxId: number;
 
-  @ManyToOne(() => JackpotTx, (jackpotTx) => jackpotTx.id)
+  @OneToOne(() => JackpotTx, (jackpotTx) => jackpotTx.id)
+  @JoinColumn()
   jackpotTx: JackpotTx;
 }
