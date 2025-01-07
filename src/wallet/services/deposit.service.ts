@@ -1057,9 +1057,13 @@ export class DepositService implements OnModuleInit {
         },
       });
 
+      console.log('walletTxs', walletTxs);
+
       const amount = walletTxs.reduce((acc, tx) => {
         return acc + Number(tx.txAmount);
       }, 0);
+
+      this.logger.log(`depositWithOne Amount: ${amount}`);
 
       if (amount >= 1) {
         const creditWalletTx = await this.creditService.addCreditQueryRunner(
@@ -1076,8 +1080,8 @@ export class DepositService implements OnModuleInit {
     }
 
     if (depositWithTen && !isClaimedWithTen) {
-      const startDate = new Date(depositWithOne.startTime * 1000);
-      const endDate = new Date(depositWithOne.endTime * 1000);
+      const startDate = new Date(depositWithTen.startTime * 1000);
+      const endDate = new Date(depositWithTen.endTime * 1000);
 
       const walletTxs = await queryRunner.manager.find(WalletTx, {
         where: {
@@ -1087,16 +1091,20 @@ export class DepositService implements OnModuleInit {
         },
       });
 
+      console.log('walletTxs', walletTxs);
+
       const amount = walletTxs.reduce((acc, tx) => {
         return acc + Number(tx.txAmount);
       }, 0);
+
+      this.logger.log(`depositWithTen Amount: ${amount}`);
 
       if (amount >= 10) {
         const creditWalletTx = await this.creditService.addCreditQueryRunner(
           {
             amount: 10,
             walletAddress: userWallet.walletAddress,
-            campaignId: depositWithOne.id,
+            campaignId: depositWithTen.id,
           },
           queryRunner,
           false,
