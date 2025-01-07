@@ -1060,13 +1060,9 @@ export class DepositService implements OnModuleInit {
         },
       });
 
-      console.log('walletTxs', walletTxs);
-
       const amount = walletTxs.reduce((acc, tx) => {
         return acc + Number(tx.txAmount);
       }, 0);
-
-      this.logger.log(`depositWithOne Amount: ${amount}`);
 
       if (amount >= 1) {
         const creditWalletTx = await this.creditService.addCreditQueryRunner(
@@ -1097,13 +1093,9 @@ export class DepositService implements OnModuleInit {
         },
       });
 
-      console.log('walletTxs', walletTxs);
-
       const amount = walletTxs.reduce((acc, tx) => {
         return acc + Number(tx.txAmount);
       }, 0);
-
-      this.logger.log(`depositWithTen Amount: ${amount}`);
 
       if (amount >= 10) {
         const creditWalletTx = await this.creditService.addCreditQueryRunner(

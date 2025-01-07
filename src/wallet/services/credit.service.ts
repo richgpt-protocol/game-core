@@ -535,7 +535,6 @@ export class CreditService {
         );
       }
 
-      console.log('creditWalletTx', creditWalletTx);
       if (creditWalletTx.campaign) {
         const user = await queryRunner.manager.findOne(User, {
           where: {
@@ -551,7 +550,6 @@ export class CreditService {
               uid: user.uid,
               questId: 8,
             });
-            console.log('sent post request');
           } else if (
             creditWalletTx.campaign.name === 'Deposit $10 USDT Free $10 Credit'
           ) {
@@ -559,7 +557,6 @@ export class CreditService {
               uid: user.uid,
               questId: 9,
             });
-            console.log('sent post request');
           }
         }
       }
@@ -983,7 +980,6 @@ export class CreditService {
           },
         },
       );
-      console.log('Response:', response.data);
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
         console.error('Error response:', error.response.data);
