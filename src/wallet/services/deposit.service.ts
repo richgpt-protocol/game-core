@@ -1010,6 +1010,8 @@ export class DepositService implements OnModuleInit {
         userWallet,
       );
 
+      await queryRunner.commitTransaction();
+
       // Execute credit wallet txs
       for (const creditWalletTx of creditWalletTxs) {
         await this.creditService.addToQueue(creditWalletTx.id);
@@ -1062,7 +1064,7 @@ export class DepositService implements OnModuleInit {
     const claimedCredits = await queryRunner.manager.find(CreditWalletTx, {
       relations: ['campaign'],
       where: {
-        status: TxStatus.SUCCESS,
+        status: In([TxStatus.SUCCESS, TxStatus.PENDING]),
         userWallet: {
           id: userWallet.id,
         },
