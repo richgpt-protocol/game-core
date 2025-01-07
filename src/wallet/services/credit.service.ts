@@ -37,11 +37,15 @@ import { Setting } from 'src/setting/entities/setting.entity';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { CreditWalletTxType } from 'src/shared/enum/txType.enum';
 import { TxStatus } from 'src/shared/enum/status.enum';
+import axios from 'axios';
+
 @Injectable()
 export class CreditService {
   private readonly logger = new Logger(CreditService.name);
   GAMEUSD_TRANFER_INITIATOR: string;
   private readonly cronMutex: Mutex = new Mutex();
+  fuyoQuestWebhookSecret: string;
+
   constructor(
     @InjectRepository(UserWallet)
     private readonly userWalletRepository: Repository<UserWallet>,
@@ -61,6 +65,10 @@ export class CreditService {
   ) {
     this.GAMEUSD_TRANFER_INITIATOR =
       this.configService.get('CREDIT_BOT_ADDRESS');
+
+    this.fuyoQuestWebhookSecret = this.configService.get(
+      'FUYO_QUEST_WEBHOOK_URL',
+    );
   }
 
   onModuleInit() {
@@ -464,6 +472,7 @@ export class CreditService {
         .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
         .leftJoinAndSelect('creditWalletTx.gameUsdTx', 'gameUsdTx')
         .leftJoinAndSelect('creditWalletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('creditWalletTx.campaign', 'campaign')
         .where('creditWalletTx.id = :id', { id: creditWalletTxId })
         .getOne();
 
@@ -524,6 +533,32 @@ export class CreditService {
             walletTxId: creditWalletTx.id,
           },
         );
+      }
+
+      if (creditWalletTx.campaign) {
+        const user = await queryRunner.manager.findOne(User, {
+          where: {
+            id: creditWalletTx.userWallet.userId,
+          },
+        });
+
+        if (!user) {
+          if (
+            creditWalletTx.campaign.name === 'Deposit $1 USDT Free $1 Credit'
+          ) {
+            this.sendPostRequest({
+              uid: user.uid,
+              questId: 8,
+            });
+          } else if (
+            creditWalletTx.campaign.name === 'Deposit $10 USDT Free $10 Credit'
+          ) {
+            this.sendPostRequest({
+              uid: user.uid,
+              questId: 9,
+            });
+          }
+        }
       }
     } catch (error) {
       this.logger.error(error);
@@ -894,6 +929,52 @@ export class CreditService {
       await queryRunner.rollbackTransaction();
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  async findClaimedCreditWithDepositCampaigns(
+    userWalletId: number,
+    campaignIds: number[],
+  ) {
+    return await this.creditWalletTxRepository.find({
+      where: {
+        campaignId: In(campaignIds),
+        userWallet: {
+          id: userWalletId,
+        },
+        status: TxStatus.SUCCESS,
+      },
+    });
+  }
+
+  private async sendPostRequest({
+    uid,
+    questId,
+  }: {
+    uid: string;
+    questId: number;
+  }) {
+    try {
+      const response = await axios.post(
+        this.configService.get('FUYO_QUEST_WEBHOOK_URL'),
+        {
+          uid,
+          questId,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.fuyoQuestWebhookSecret}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      console.log('Response:', response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        console.error('Error response:', error.response.data);
+      } else {
+        console.error('Error message:', (error as any).message);
+      }
     }
   }
 }

@@ -43,6 +43,7 @@ import { CampaignService } from 'src/campaign/campaign.service';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participant.entity';
 import { SquidGameRevival } from 'src/campaign/entities/squidGame.revival.entity';
+import { HttpModule } from '@nestjs/axios';
 import { ClaimJackpotDetail } from './entities/claim-jackpot-detail.entity';
 import { Jackpot } from 'src/game/entities/jackpot.entity';
 
@@ -80,6 +81,7 @@ import { Jackpot } from 'src/game/entities/jackpot.entity';
     forwardRef(() => UserModule),
     forwardRef(() => PointModule),
     ConfigModule,
+    HttpModule,
   ],
   providers: [
     WalletService,
