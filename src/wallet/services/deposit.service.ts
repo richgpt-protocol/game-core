@@ -102,6 +102,14 @@ export class DepositService implements OnModuleInit {
         failureHandler: this.onGameUsdTxHashFailed.bind(this),
       },
     );
+
+    this.queueService.registerHandler(
+      QueueName.DEPOSIT,
+      QueueType.VERIFY_DEPOSIT_TASK,
+      {
+        jobHandler: this.onVerifyDepositTask.bind(this),
+      },
+    );
   }
 
   async getAllAddress(page: number = 1, limit: number = 100) {
@@ -914,18 +922,14 @@ export class DepositService implements OnModuleInit {
         );
       }
 
-      // Add check for user deposit amount whether it is eligible for campaign
-      const creditWalletTxs = await this.verifyDepositTasks(
-        queryRunner,
-        walletTx.userWallet,
-      );
-
       await queryRunner.commitTransaction();
 
-      // Execute credit wallet txs
-      for (const creditWalletTx of creditWalletTxs) {
-        await this.creditService.addToQueue(creditWalletTx.id);
-      }
+      // Add check for user deposit amount whether it is eligible for campaign
+      const jobId = `verifyDepositTask-${job.data.gameUsdTxId}`;
+      await this.queueService.addJob(QueueName.DEPOSIT, jobId, {
+        userWallet: walletTx.userWallet,
+        queueType: QueueType.VERIFY_DEPOSIT_TASK,
+      });
 
       await this.campaignService.squidGameRevival(
         user.id,
@@ -993,6 +997,38 @@ export class DepositService implements OnModuleInit {
     }
   }
 
+  private async onVerifyDepositTask(job: Job<{ userWallet: UserWallet }>) {
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      const { userWallet } = job.data;
+      const creditWalletTxs = await this.verifyDepositTasks(
+        queryRunner,
+        userWallet,
+      );
+
+      await queryRunner.commitTransaction();
+
+      // Execute credit wallet txs
+      for (const creditWalletTx of creditWalletTxs) {
+        await this.creditService.addToQueue(creditWalletTx.id);
+      }
+    } catch (error) {
+      this.logger.error(
+        'onVerifyDepositTask() error within queryRunner, error:',
+        error,
+      );
+      await queryRunner.rollbackTransaction();
+
+      throw new Error(`Error processing gameUsdTx ${error}`); //throwing to retry
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
   // private async lastValidWalletTx(userWalletId: number) {
   //   return await this.dataSource.manager.findOne(WalletTx, {
   //     where: {
@@ -1028,7 +1064,7 @@ export class DepositService implements OnModuleInit {
     const claimedCredits = await queryRunner.manager.find(CreditWalletTx, {
       relations: ['campaign'],
       where: {
-        status: TxStatus.SUCCESS,
+        status: In([TxStatus.SUCCESS, TxStatus.PENDING]),
         userWallet: {
           id: userWallet.id,
         },
