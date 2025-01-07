@@ -535,6 +535,7 @@ export class CreditService {
         );
       }
 
+      console.log('creditWalletTx', creditWalletTx);
       if (creditWalletTx.campaign) {
         const user = await queryRunner.manager.findOne(User, {
           where: {
@@ -542,21 +543,25 @@ export class CreditService {
           },
         });
 
+        console.log('user', user);
+
         if (!user) {
           if (
             creditWalletTx.campaign.name === 'Deposit $1 USDT Free $1 Credit'
           ) {
-            this.sendPostRequest({
+            await this.sendPostRequest({
               uid: user.uid,
               questId: 8,
             });
+            console.log('sent post request');
           } else if (
             creditWalletTx.campaign.name === 'Deposit $10 USDT Free $10 Credit'
           ) {
-            this.sendPostRequest({
+            await this.sendPostRequest({
               uid: user.uid,
               questId: 9,
             });
+            console.log('sent post request');
           }
         }
       }
