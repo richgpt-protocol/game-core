@@ -6,7 +6,7 @@ import {
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { Game } from './entities/game.entity';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { GameService } from './game.service';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
@@ -31,6 +31,7 @@ export class GameGateway {
     private cacheSettingService: CacheSettingService,
     private adminNotificationService: AdminNotificationService,
     private readonly queueService: QueueService,
+    private dataSource: DataSource,
   ) {}
 
   @SubscribeMessage('liveDrawResult')
@@ -57,6 +58,10 @@ export class GameGateway {
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
     this.logger.log('emitDrawResult()');
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
     try {
       // get draw result from last hour game
       const lastHour = new Date(Date.now() - 60 * 60 * 1000);
@@ -66,15 +71,32 @@ export class GameGateway {
         lastHour.getUTCDate(),
         lastHour.getUTCHours(),
         lastHour.getUTCMinutes(),
-        lastHour.getUTCSeconds()
+        lastHour.getUTCSeconds(),
       );
-      const lastGame = await this.gameRepository
-        .createQueryBuilder('game')
+      const lastGame = await queryRunner.manager
+        .createQueryBuilder(Game, 'game')
         .leftJoinAndSelect('game.drawResult', 'drawResult')
         .where('game.startDate < :lastHourUTC', { lastHourUTC })
         .andWhere('game.endDate > :lastHourUTC', { lastHourUTC })
         .getOne();
-      const drawResults = lastGame.drawResult;
+      let drawResults = lastGame.drawResult;
+
+      // fallback method if drawResults.length === 0 for some reason i.e. set draw result bot/server down
+      if (drawResults.length === 0) {
+        drawResults = await this.gameService.setFallbackDrawResults(
+          lastGame.id,
+        );
+
+        // inform admin
+        await this.adminNotificationService.setAdminNotification(
+          'game.gateway.emitDrawResult: drawResults.length === 0',
+          'NO_DRAW_RESULT_FOUND',
+          'No draw result record found in last game',
+          true,
+          true,
+        );
+      }
+
       // current drawResults is in sequence(first, second...)
       // loop through drawResults in reverse order(consolation, special...) and emit to client
       for (let i = drawResults.length - 1; i >= 0; i--) {
@@ -90,22 +112,38 @@ export class GameGateway {
       }
 
       // submit draw result to Core contract
-      const jobId = `submitDrawResult-${lastGame.id}`;
+      let attempts = 0;
+      while (true) {
+        if (attempts === 5) {
+          // failed for 5 times, inform admin
+          await this.adminNotificationService.setAdminNotification(
+            'Submit draw result on-chain tx had failed for 5 times',
+            'SUBMIT_DRAW_RESULT_FAILED_5_TIMES',
+            'Submit draw result failed 5 times',
+            true,
+            true,
+          );
+          return;
+        }
+        try {
+          await this.gameService.submitDrawResult(drawResults, lastGame.id);
+          // no error, success
+          break;
+        } catch (error) {
+          // error occur, log and retry
+          this.logger.error(error);
+          attempts++;
+        }
+      }
+      await queryRunner.commitTransaction();
 
-      console.log('emitDrawResult jobId:', jobId);
-      await this.queueService.addJob(
-        QueueName.GAME,
-        jobId,
-        {
-          drawResults: drawResults,
-          gameId: lastGame.id,
-          queueType: QueueType.SUBMIT_DRAW_RESULT,
-        },
-        0, // no delay
+      await this.gameService.setAvailableClaimAndProcessReferralBonus(
+        drawResults,
+        lastGame.id,
+        queryRunner,
       );
-      console.log('emitDrawResult jobId:', jobId, 'submitted');
     } catch (err) {
-      console.error(err);
+      this.logger.error(err);
       // inform admin
       await this.adminNotificationService.setAdminNotification(
         `Error occur in game.gateway.emitDrawResult, error: ${err}`,
@@ -114,6 +152,8 @@ export class GameGateway {
         true,
         true,
       );
+    } finally {
+      await queryRunner.release();
     }
   }
 }

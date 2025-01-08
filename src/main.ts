@@ -9,6 +9,7 @@ import * as bodyParser from 'body-parser';
 import * as cookieParser from 'cookie-parser';
 import { join } from 'path';
 import { ConfigService } from './config/config.service';
+import { QueueService } from './queue/queue.service';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -22,6 +23,10 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor());
   app.use(sseMiddleware);
   app.use(cookieParser());
+
+  // Pass the Nest app instance to QueueService
+  const queueService = app.get(QueueService);
+  queueService.setAppInstance(app); // Inject the app instance into QueueService
 
   app.use(bodyParser.json({ limit: '20mb' }));
   app.use(bodyParser.urlencoded({ limit: '20mb', extended: true }));

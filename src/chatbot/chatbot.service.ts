@@ -7,13 +7,13 @@ var similarity = require('compute-cosine-similarity'); // pure js lib, use impor
 import { InjectRepository } from '@nestjs/typeorm';
 import { ChatLog } from './entities/chatLog.entity';
 import { Repository } from 'typeorm';
-import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { UserService } from 'src/user/user.service';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { PointTxType } from 'src/shared/enum/txType.enum';
+import axios from 'axios';
+import { ConfigService } from 'src/config/config.service';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -26,41 +26,46 @@ export class ChatbotService {
   private readonly logger = new Logger(ChatbotService.name);
 
   availableFunctions: { [key: string]: Function } = {
-    getNumberRecommendation: this.getNumberRecommendation,
-    getImage: this.getImage,
+    getNumberRecommendation: (message: string) =>
+      this.getNumberRecommendation(message),
+    getImage: (keyword?: string) => this.getImage(keyword),
+    getFuyoDocumentation: (question: string) =>
+      this.getFuyoDocumentation(question),
+    searchForNews: (searchKeywords: string) =>
+      this.searchForNews(searchKeywords),
   };
 
   constructor(
     @InjectRepository(ChatLog)
     private chatLogRepository: Repository<ChatLog>,
-    private eventEmitter: EventEmitter2,
-    private adminNotificationService: AdminNotificationService,
     @InjectRepository(UserWallet)
     private userWalletRepository: Repository<UserWallet>,
     @InjectRepository(PointTx)
     private pointTxRepository: Repository<PointTx>,
     private userService: UserService,
+    private configService: ConfigService,
   ) {}
 
-  async sendMessage(userId: number, payload: SendMessageDto): Promise<Array<{type: string, content: string}>> {
+  async sendMessage(
+    userId: number,
+    payload: SendMessageDto,
+  ): Promise<Array<{ type: string; content: string }>> {
     const chatLog = await this.chatLogRepository.findBy({ userId });
     // extract chat completion message from chatLog
     // @ts-ignore
     let messages: Array<ChatCompletionMessageParam> = chatLog
-      .map(log => ({ role: log.role, content: log.content }))
-      .filter(log => log.role !== 'tool');
+      .map((log) => ({ role: log.role, content: log.content }))
+      .filter((log) => log.role !== 'tool');
 
-    const initialContent = 
-`You are a human named Professor Rich, please reply in casual conversation in simple English under 3 sentences.
-Try to figure out my gender and slightly use some flirty words.
+    const initialContent = `You are a human named Professor Fuyo, live in Fuyo app and Fuyo mini game. Please reply in casual conversation in simple English under 3 sentences.
+Fuyo app is a revolutionizing 4D lottery gaming with blockchain, AI, and chatGPT.
+Try to figure out user gender and slightly use some flirty words.
 You can reply with image(to execute getImage function) if the topic regards something that can be visualized.
-You should ONLY mention 4-Digits lottery when current topic is related to bet.
-When I mention lost or number not matched in 4-Digits lottery, pity me / ask me to take a break / control the cost of betting.
+You should ONLY mention 4-Digits lottery when current topic is related to bet, else just normal chit-chat.
+When user mention lost or number not matched in 4-Digits lottery, pity user / ask user to take a break / control the cost of betting.
+When user ask anything, search for Fuyo documentation.
+When user ask something that exceed your cutting knowledge date, trigger searchForNews function.
 Today date: ${new Date().toDateString()}.`;
-// Cutting knowledge date: October 2023, today date: ${new Date().toDateString()}.`;
-
-    // there is an initial chat from Professor Rich in frontend: Hi How are you today?
-    // TODO: add this into chatCompletion & database
 
     // TODO: if the conversation is too long, summarize it to save tokens
 
@@ -73,9 +78,10 @@ Today date: ${new Date().toDateString()}.`;
         },
         {
           role: 'assistant',
-          content: "Hello there, lucky seeker! I'm Professor Rich, Ready to turn your dreams into numbers?",
-        }
-      ]
+          content:
+            "Hello there, lucky seeker! I'm Professor Fuyo, Ready to turn your dreams into numbers?",
+        },
+      ];
 
       // save initial chatLog in database
       await this.chatLogRepository.save([
@@ -90,15 +96,13 @@ Today date: ${new Date().toDateString()}.`;
           content: messages[1].content as string,
         }),
       ]);
-
     } else {
       // update latest initialContent into database
-      await this.chatLogRepository.update(
-        chatLog[0].id,
-        { content: initialContent },
-      );
+      await this.chatLogRepository.update(chatLog[0].id, {
+        content: initialContent,
+      });
       // also update in messages
-      messages[0].content = initialContent
+      messages[0].content = initialContent;
     }
 
     // save user message into dabatase
@@ -153,8 +157,42 @@ Today date: ${new Date().toDateString()}.`;
               },
               required: ['keyword'],
             },
-          }
-        }
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'getFuyoDocumentation',
+            description: 'get Documentation for Fuyo App and Fuyo Mini Game',
+            parameters: {
+              type: 'object',
+              properties: {
+                question: {
+                  type: 'string',
+                  description: 'question i.e. How to bet',
+                },
+              },
+              required: ['question'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'searchForNews',
+            description: 'get latest news / information about the topic',
+            parameters: {
+              type: 'object',
+              properties: {
+                searchKeywords: {
+                  type: 'string',
+                  description: 'search keywords',
+                },
+              },
+              required: ['searchKeywords'],
+            },
+          },
+        },
       ],
       // https://platform.openai.com/docs/guides/text-generation/how-should-i-set-the-temperature-parameter
       temperature: 1.2, // 0.0 to 2.0
@@ -164,7 +202,8 @@ Today date: ${new Date().toDateString()}.`;
     // add assistantMessage into messages
     messages.push(assistantMessage);
 
-    let replies: Array<{type: 'text' | 'image' | 'speech', content: string}> = [];
+    let replies: Array<{ type: 'text' | 'image' | 'speech'; content: string }> =
+      [];
     const toolCalls = assistantMessage.tool_calls;
     if (toolCalls) {
       // this message is to call functions
@@ -176,12 +215,14 @@ Today date: ${new Date().toDateString()}.`;
 
         if (functionName === 'getNumberRecommendation') {
           functionResponse = await functionToCall(functionArgs.message);
-
         } else if (functionName === 'getImage') {
           functionResponse = await functionToCall(functionArgs.keyword);
           // add into bot replies(to user)
           replies.push({ type: 'image', content: functionResponse });
-
+        } else if (functionName === 'getFuyoDocumentation') {
+          functionResponse = await functionToCall(functionArgs.question);
+        } else if (functionName === 'searchForNews') {
+          functionResponse = await functionToCall(functionArgs.searchKeywords);
         } else {
           // all other functions (without argument)
           functionResponse = await functionToCall();
@@ -202,17 +243,18 @@ Today date: ${new Date().toDateString()}.`;
             tool_call_id: toolCall.id,
             role: 'tool',
             content: '', // should be image in base64 but will throw error because too large to process
-          })
+          });
           // second message
           // here treat as user ask bot what is in the image
           messages.push({
             role: 'user',
-            content: [{
-              type: 'image_url',
-              image_url: { 'url': `data:image/png;base64,${functionResponse}` }
-            }],
-          })
-
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: `data:image/png;base64,${functionResponse}` },
+              },
+            ],
+          });
         } else {
           // function response is object, add into messages
           // bot will create reply based on the object
@@ -220,7 +262,7 @@ Today date: ${new Date().toDateString()}.`;
             tool_call_id: toolCall.id,
             role: 'tool',
             content: JSON.stringify(functionResponse),
-          })
+          });
         }
       }
 
@@ -241,8 +283,10 @@ Today date: ${new Date().toDateString()}.`;
       );
 
       // add into bot replies(to user)
-      replies.push({ type: 'text', content: assistantReplyBasedOnFunctionResponse.content });
-
+      replies.push({
+        type: 'text',
+        content: assistantReplyBasedOnFunctionResponse.content,
+      });
     } else {
       // this message is normal message
 
@@ -265,16 +309,19 @@ Today date: ${new Date().toDateString()}.`;
       voice: 'nova',
       input: replies[replies.length - 1].content,
       speed: 1,
-    })
+    });
     const speechInBuffer = Buffer.from(await speech.arrayBuffer());
-    replies.push({ type: 'speech', content: speechInBuffer.toString('base64') });
+    replies.push({
+      type: 'speech',
+      content: speechInBuffer.toString('base64'),
+    });
 
     // 3 conversation daily get xp
     // loop backward and check all the chats that over 00:00 UTC today
     // get xp only if these chats contains 2 user role + over 2 assistant role
     // 2 instead of 3 because, newest chat log haven't added into database
     // and we assume that at least +1 chat for both user and assistant when reach here
-    const todayAtUtc0 = new Date()
+    const todayAtUtc0 = new Date();
     todayAtUtc0.setUTCHours(0, 0, 0, 0); // utc 00:00 of today
     let userMessageCount = 0;
     let assistantMessageCount = 0;
@@ -295,8 +342,8 @@ Today date: ${new Date().toDateString()}.`;
       const lastPointTx = await this.pointTxRepository.findOne({
         where: { walletId: userWallet.id },
         order: { id: 'DESC' },
-      })
-      
+      });
+
       const pointAmount = 10;
       const pointTx = this.pointTxRepository.create({
         txType: PointTxType.CHAT,
@@ -334,11 +381,12 @@ Today date: ${new Date().toDateString()}.`;
       const db = client.db('fdgpt').collection('qztwzt');
       const cursor = db.find();
       qztwzt = <QztWzt[]>await cursor.toArray();
-    
     } catch (e) {
       this.logger.error(e);
-      throw new HttpException('Cannot connect to qztwzt database', HttpStatus.INTERNAL_SERVER_ERROR);
-
+      throw new HttpException(
+        'Cannot connect to qztwzt database',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     } finally {
       await client.close();
     }
@@ -372,7 +420,7 @@ Today date: ${new Date().toDateString()}.`;
 
   async getImage(keyword?: string): Promise<string> {
     const image = await openai.images.generate({
-      prompt: keyword ?? "any image",
+      prompt: keyword ?? 'any image',
       model: 'dall-e-2',
       n: 1,
       quality: 'standard',
@@ -382,8 +430,99 @@ Today date: ${new Date().toDateString()}.`;
     return image.data[0].b64_json;
   }
 
-  async getHistoricalMessage(userId: number, limit: number): Promise<Array<{role: string, content: string}>> {
-    // const chatLog = await this.chatLogRepository.findBy({ userId });
+  async getFuyoDocumentation(question: string): Promise<string> {
+    let fuyoDocs = [];
+    try {
+      await client.connect();
+      const db = client.db('fdgpt').collection('fuyoDocs');
+      const cursor = db.find();
+      fuyoDocs = await cursor.toArray();
+    } catch (e) {
+      this.logger.error(e);
+      throw new HttpException(
+        'Cannot connect to fuyoDocs database',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    } finally {
+      await client.close();
+    }
+
+    // create embedding for input message
+    const resp = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: question,
+    });
+    const queryEmbedding = resp.data[0].embedding;
+
+    // // find the nearest
+    // let largestSimilarity = 0;
+    // let nearestIndex = 0;
+    // for (let i = 0; i < fuyoDocs.length; i++) {
+    //   const embedding = fuyoDocs[i].embedding;
+    //   const s = similarity(embedding, queryEmbedding);
+    //   if (s && s > largestSimilarity) {
+    //     largestSimilarity = s;
+    //     console.log('similarity:', s, fuyoDocs[i].url);
+    //     nearestIndex = i;
+    //   }
+    // }
+
+    // find the 2 nearest
+    let largestSimilarity = 0;
+    let secondLargestSimilarity = 0;
+    let nearestIndex = -1;
+    let secondNearestIndex = -1;
+    for (let i = 0; i < fuyoDocs.length; i++) {
+      const embedding = fuyoDocs[i].embedding;
+      const s = similarity(embedding, queryEmbedding);
+      if (s && s > largestSimilarity) {
+        // Shift the largest to the second largest
+        secondLargestSimilarity = largestSimilarity;
+        secondNearestIndex = nearestIndex;
+        // Update the largest similarity and index
+        largestSimilarity = s;
+        nearestIndex = i;
+      } else if (s && s > secondLargestSimilarity) {
+        // Update the second largest similarity and index
+        secondLargestSimilarity = s;
+        secondNearestIndex = i;
+      }
+    }
+
+    return (
+      fuyoDocs[nearestIndex].docs + '\n' + fuyoDocs[secondNearestIndex].docs
+    );
+  }
+
+  async searchForNews(searchKeywords: string): Promise<string> {
+    const res = await axios.get(
+      `https://api.search.brave.com/res/v1/news/search?q=${searchKeywords}&count=5&freshness=pw`,
+      {
+        headers: {
+          Accept: 'application/json',
+          'Accept-Encoding': 'gzip',
+          'X-Subscription-Token': this.configService.get(
+            'BRAVE_SEARCH_API_KEY',
+          ),
+        },
+      },
+    );
+    const results = res.data.results;
+    let titleAndDescription = results.map((result: any) => {
+      return {
+        title: result.title,
+        description: result.description,
+        date: result.page_age,
+      };
+    });
+    console.log('titleAndDescription:', titleAndDescription);
+    return JSON.stringify(titleAndDescription);
+  }
+
+  async getHistoricalMessage(
+    userId: number,
+    limit: number,
+  ): Promise<Array<{ role: string; content: string }>> {
     const chatLog = await this.chatLogRepository
       .createQueryBuilder('chatLog')
       .select('chatLog.role')
@@ -392,7 +531,6 @@ Today date: ${new Date().toDateString()}.`;
       .andWhere('role != :role', { role: 'system' })
       .orderBy('id', 'DESC')
       .getMany();
-    // console.log(chatLog);
     const historicalMessage = chatLog.slice(0, limit);
     return historicalMessage;
   }

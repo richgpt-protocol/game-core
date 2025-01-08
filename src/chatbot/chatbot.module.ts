@@ -5,7 +5,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
 import { PermissionModule } from 'src/permission/permission.module';
 import { ChatLog } from './entities/chatLog.entity';
-import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { UserNotification } from 'src/notification/entities/user-notification.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
@@ -28,7 +27,7 @@ import { ConfigService } from 'src/config/config.service';
     UserModule,
     CacheModule.register()
   ],
-  providers: [ChatbotService, AdminNotificationService, ConfigService],
+  providers: [ChatbotService, ConfigService],
   controllers: [ChatbotController],
   exports: [],
 })

@@ -5,6 +5,7 @@ import {
   Get,
   HttpStatus,
   InternalServerErrorException,
+  Logger,
   Post,
   Query,
   Req,
@@ -41,6 +42,8 @@ import { DataSource } from 'typeorm';
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
 export class WalletController {
+  private readonly logger = new Logger(WalletController.name);
+
   constructor(
     private walletService: WalletService,
     private withdrawService: WithdrawService,
@@ -669,5 +672,43 @@ export class WalletController {
       message: 'retry deposit process initiated',
       data: {},
     };
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('get-user-jackpot-ticket')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OK',
+    type: ResponseVo,
+  })
+  async getUserJackpotTicket(
+    @Request() req,
+    // i.e. page 2 limit 10, it will return data from 11 to 20, default to page 1 limit 10
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.walletService.getUserJackpotTicket(
+        req.user.userId,
+        page ?? 1,
+        limit ?? 10,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        data: data,
+        message: 'get user jackpot ticket success',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'get user jackpot ticket failed',
+      };
+    }
   }
 }

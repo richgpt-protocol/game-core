@@ -7,7 +7,15 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryRunner, Repository } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  In,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  QueryRunner,
+  Repository,
+} from 'typeorm';
 import { ConfigService } from 'src/config/config.service';
 import { DepositTx } from 'src/wallet/entities/deposit-tx.entity';
 import { WalletTx } from 'src/wallet/entities/wallet-tx.entity';
@@ -32,6 +40,10 @@ import { UsdtTx } from 'src/public/entity/usdt-tx.entity';
 import { GameTx } from 'src/public/entity/gameTx.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
+import { CampaignService } from 'src/campaign/campaign.service';
+import { CreditService } from './credit.service';
+import { Campaign } from 'src/campaign/entities/campaign.entity';
+import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 
 /**
  * How deposit works
@@ -60,6 +72,8 @@ export class DepositService implements OnModuleInit {
     private readonly userService: UserService,
     private eventEmitter: EventEmitter2,
     private queueService: QueueService,
+    private campaignService: CampaignService,
+    private creditService: CreditService,
   ) {}
   onModuleInit() {
     this.queueService.registerHandler(
@@ -86,6 +100,14 @@ export class DepositService implements OnModuleInit {
       {
         jobHandler: this.handleGameUsdTxHash.bind(this),
         failureHandler: this.onGameUsdTxHashFailed.bind(this),
+      },
+    );
+
+    this.queueService.registerHandler(
+      QueueName.DEPOSIT,
+      QueueType.VERIFY_DEPOSIT_TASK,
+      {
+        jobHandler: this.onVerifyDepositTask.bind(this),
       },
     );
   }
@@ -679,21 +701,25 @@ export class DepositService implements OnModuleInit {
         return;
       }
 
-      const depositAdminWallet = await this.getSigner(
-        this.configService.get('DEPOSIT_BOT_ADDRESS'),
+      const signer = await this.getSigner(
+        // use deposit bot for normal deposit(>=1 USD),
+        // else use credit bot for credit deposit
+        gameUsdTx.amount >= 1
+          ? this.configService.get('DEPOSIT_BOT_ADDRESS')
+          : this.configService.get('CREDIT_BOT_ADDRESS'),
         gameUsdTx.chainId,
       );
 
       const onchainGameUsdTx = await this.depositGameUSD(
         gameUsdTx.receiverAddress,
         parseEther(gameUsdTx.amount.toString()),
-        depositAdminWallet,
+        signer,
       );
 
       // reload deposit admin wallet if needed
       this.eventEmitter.emit(
         'gas.service.reload',
-        await depositAdminWallet.getAddress(),
+        await signer.getAddress(),
         gameUsdTx.chainId,
       );
 
@@ -897,6 +923,20 @@ export class DepositService implements OnModuleInit {
       }
 
       await queryRunner.commitTransaction();
+
+      // Add check for user deposit amount whether it is eligible for campaign
+      const jobId = `verifyDepositTask-${job.data.gameUsdTxId}`;
+      await this.queueService.addJob(QueueName.DEPOSIT, jobId, {
+        userWallet: walletTx.userWallet,
+        queueType: QueueType.VERIFY_DEPOSIT_TASK,
+      });
+
+      await this.campaignService.squidGameRevival(
+        user.id,
+        gameUsdTx.amount,
+        queryRunner,
+      );
+
       if (!queryRunner.isReleased) await queryRunner.release();
 
       await this.userService.setUserNotification(walletTx.userWallet.userId, {
@@ -957,6 +997,38 @@ export class DepositService implements OnModuleInit {
     }
   }
 
+  private async onVerifyDepositTask(job: Job<{ userWallet: UserWallet }>) {
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      const { userWallet } = job.data;
+      const creditWalletTxs = await this.verifyDepositTasks(
+        queryRunner,
+        userWallet,
+      );
+
+      await queryRunner.commitTransaction();
+
+      // Execute credit wallet txs
+      for (const creditWalletTx of creditWalletTxs) {
+        await this.creditService.addToQueue(creditWalletTx.id);
+      }
+    } catch (error) {
+      this.logger.error(
+        'onVerifyDepositTask() error within queryRunner, error:',
+        error,
+      );
+      await queryRunner.rollbackTransaction();
+
+      throw new Error(`Error processing gameUsdTx ${error}`); //throwing to retry
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+  }
+
   // private async lastValidWalletTx(userWalletId: number) {
   //   return await this.dataSource.manager.findOne(WalletTx, {
   //     where: {
@@ -968,6 +1040,115 @@ export class DepositService implements OnModuleInit {
   //     },
   //   });
   // }
+
+  private async verifyDepositTasks(
+    queryRunner: QueryRunner,
+    userWallet: UserWallet,
+  ) {
+    const creditWalletTxs = [];
+    const currentTime = new Date().getTime() / 1000;
+    const campaigns = await queryRunner.manager.find(Campaign, {
+      where: {
+        startTime: LessThanOrEqual(currentTime),
+        endTime: MoreThanOrEqual(currentTime),
+      },
+    });
+
+    const depositWithOne = campaigns.find((campaign) => {
+      return campaign.name === 'Deposit $1 USDT Free $1 Credit';
+    });
+    const depositWithTen = campaigns.find((campaign) => {
+      return campaign.name === 'Deposit $10 USDT Free $10 Credit';
+    });
+
+    const claimedCredits = await queryRunner.manager.find(CreditWalletTx, {
+      relations: ['campaign'],
+      where: {
+        status: In([TxStatus.SUCCESS, TxStatus.PENDING]),
+        userWallet: {
+          id: userWallet.id,
+        },
+        campaign: {
+          id: In([depositWithOne?.id, depositWithTen?.id]),
+        },
+      },
+    });
+
+    const isClaimedWithOne = claimedCredits.find(
+      (credit) => credit.campaign.id === depositWithOne.id,
+    );
+    const isClaimedWithTen = claimedCredits.find(
+      (credit) => credit.campaign.id === depositWithTen.id,
+    );
+
+    if (depositWithOne && !isClaimedWithOne) {
+      const startDate = new Date(depositWithOne.startTime * 1000);
+      const endDate = new Date(depositWithOne.endTime * 1000);
+
+      const walletTxs = await queryRunner.manager.find(WalletTx, {
+        where: {
+          status: TxStatus.SUCCESS,
+          txType: WalletTxType.DEPOSIT,
+          createdDate: Between(startDate, endDate),
+          userWallet: {
+            id: userWallet.id,
+          },
+        },
+      });
+
+      const amount = walletTxs.reduce((acc, tx) => {
+        return acc + Number(tx.txAmount);
+      }, 0);
+
+      if (amount >= 1) {
+        const creditWalletTx = await this.creditService.addCreditQueryRunner(
+          {
+            amount: 1,
+            walletAddress: userWallet.walletAddress,
+            campaignId: depositWithOne.id,
+          },
+          queryRunner,
+          false,
+        );
+        creditWalletTxs.push(creditWalletTx);
+      }
+    }
+
+    if (depositWithTen && !isClaimedWithTen) {
+      const startDate = new Date(depositWithTen.startTime * 1000);
+      const endDate = new Date(depositWithTen.endTime * 1000);
+
+      const walletTxs = await queryRunner.manager.find(WalletTx, {
+        where: {
+          status: TxStatus.SUCCESS,
+          txType: WalletTxType.DEPOSIT,
+          createdDate: Between(startDate, endDate),
+          userWallet: {
+            id: userWallet.id,
+          },
+        },
+      });
+
+      const amount = walletTxs.reduce((acc, tx) => {
+        return acc + Number(tx.txAmount);
+      }, 0);
+
+      if (amount >= 10) {
+        const creditWalletTx = await this.creditService.addCreditQueryRunner(
+          {
+            amount: 10,
+            walletAddress: userWallet.walletAddress,
+            campaignId: depositWithTen.id,
+          },
+          queryRunner,
+          false,
+        );
+        creditWalletTxs.push(creditWalletTx);
+      }
+    }
+
+    return creditWalletTxs;
+  }
 
   private async lastValidPointTx(walletId: number) {
     return await this.dataSource.manager.findOne(PointTx, {
