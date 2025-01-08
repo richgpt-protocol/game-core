@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import { DataSource } from 'typeorm';
 
 // please use lowercase if seedChar is not number
-const seedChar: string = '1';
+const seedChar: string = 'F';
 const serverSeed = ethers.hexlify(ethers.randomBytes(32)).slice(2); // a random 32 bytes hex string without 0x prefix
 const seedString: string = `The qualified end character for Fuyo x Squid Game - stage 2 is: ${seedChar}`;
 

@@ -1,8 +1,8 @@
 import { Seeder } from 'typeorm-extension';
 import { DataSource } from 'typeorm';
 
-const stage1RevivalStartTime: Date = new Date('2025-01-05T00:00:00Z'); // in UTC
-const stage1RevivalEndTime: Date = new Date('2025-01-11T23:59:59Z'); // in UTC
+const stage1RevivalStartTime: Date = new Date('2025-01-08T13:49:32Z'); // in UTC
+const stage1RevivalEndTime: Date = new Date('2025-01-15T13:49:31Z'); // in UTC
 const stage1RevivalAmountRequired: number = 1; // 100 means 100 USDT/GameUSD
 
 const stage2RevivalStartTime: Date = new Date('2025-01-12T00:00:00Z'); // in UTC
@@ -49,39 +49,39 @@ export default class SquidGameRevival implements Seeder {
         .orUpdate(['value'], ['key'])
         .execute();
 
-      await dataSource
-        .createQueryBuilder()
-        .insert()
-        .into('setting')
-        .values([
-          {
-            key: 'SQUID_GAME_REVIVAL_STAGE_2',
-            value: JSON.stringify({
-              startTime: stage2RevivalStartTime,
-              endTime: stage2RevivalEndTime,
-              amountRequired: stage2RevivalAmountRequired,
-            } as SQUID_GAME_REVIVAL),
-          },
-        ])
-        .orUpdate(['value'], ['key'])
-        .execute();
+      // await dataSource
+      //   .createQueryBuilder()
+      //   .insert()
+      //   .into('setting')
+      //   .values([
+      //     {
+      //       key: 'SQUID_GAME_REVIVAL_STAGE_2',
+      //       value: JSON.stringify({
+      //         startTime: stage2RevivalStartTime,
+      //         endTime: stage2RevivalEndTime,
+      //         amountRequired: stage2RevivalAmountRequired,
+      //       } as SQUID_GAME_REVIVAL),
+      //     },
+      //   ])
+      //   .orUpdate(['value'], ['key'])
+      //   .execute();
 
-      await dataSource
-        .createQueryBuilder()
-        .insert()
-        .into('setting')
-        .values([
-          {
-            key: 'SQUID_GAME_REVIVAL_STAGE_3',
-            value: JSON.stringify({
-              startTime: stage3RevivalStartTime,
-              endTime: stage3RevivalEndTime,
-              amountRequired: stage3RevivalAmountRequired,
-            } as SQUID_GAME_REVIVAL),
-          },
-        ])
-        .orUpdate(['value'], ['key'])
-        .execute();
+      // await dataSource
+      //   .createQueryBuilder()
+      //   .insert()
+      //   .into('setting')
+      //   .values([
+      //     {
+      //       key: 'SQUID_GAME_REVIVAL_STAGE_3',
+      //       value: JSON.stringify({
+      //         startTime: stage3RevivalStartTime,
+      //         endTime: stage3RevivalEndTime,
+      //         amountRequired: stage3RevivalAmountRequired,
+      //       } as SQUID_GAME_REVIVAL),
+      //     },
+      //   ])
+      //   .orUpdate(['value'], ['key'])
+      //   .execute();
     } catch (error) {
       console.error('Error executing seed:', error);
     }
