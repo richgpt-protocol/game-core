@@ -48,7 +48,7 @@ export class TelegramService {
     const senderId = msg.from?.id || 0;
     const chatId = msg.chat.id;
     const photoUrl =
-      'https://storage.googleapis.com/fuyo-assets/Beta%20Mainnet.jpg';
+      'https://storage.googleapis.com/fuyo-assets/photo_2025-01-03%2018.33.32.jpeg';
 
     // Define the inline keyboard
     const inlineKeyboard = {
@@ -70,7 +70,7 @@ export class TelegramService {
 
     this.fuyoBot.sendPhoto(chatId, photoUrl, {
       caption:
-        "<b>Fuyo Beta Mainnet  Launch: Bet Smarter, Win BIGGER!</b> 🚨\n\n<b>Win like you've NEVER won before</b>💥 Top players, top losers, referrals—<b>EVERYONE WINS</b>. Play smarter, bet crazier, and watch your bank balance EXPLODE. 💰\n\n<b>Sign up NOW to unlock  your $5 free credit and start winning!</b>  💸🔥\n\n<b>Tap. Play. Win.</b>\n<b>Get rich. Get Fuyo today.</b>",
+        '<b>🔥 1 BTC. 1 Winner. Will it be YOU? 🔥</b> \n\n🏆 4 Stage campaign.\n💀 Last Man Standing.\n💸 Win 1 $BTC.\n\nJoin #FuyoSquidGame 🦑\n\n<b>Fuyo is revolutionising the lottery gaming with blockchain, AI & ChatGPT!</b>\n\n🤑 Play 4D bet for 6500x win!\n🚀 Gain XP = future $FUYO airdrop\n\nGet rich. #GetFuyo.',
       parse_mode: 'HTML',
       ...inlineKeyboard,
     });
