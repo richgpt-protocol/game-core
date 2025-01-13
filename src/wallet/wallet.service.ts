@@ -382,6 +382,7 @@ export class WalletService {
           `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
         )}/tx/${jackpotTx.txHash}`,
         availableClaim: jackpotTx.availableClaim,
+        payoutAmount: Number(jackpotTx.payoutAmount),
       };
     });
   }

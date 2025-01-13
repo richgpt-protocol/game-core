@@ -23,13 +23,31 @@ import type {
   TypedContractMethod,
 } from "./common";
 
+export declare namespace IJackpot {
+  export type ClaimParamsStruct = {
+    projectName: string;
+    winningRound: BigNumberish;
+    jackpotHashToClaim: BytesLike;
+  };
+
+  export type ClaimParamsStructOutput = [
+    projectName: string,
+    winningRound: bigint,
+    jackpotHashToClaim: string
+  ] & { projectName: string; winningRound: bigint; jackpotHashToClaim: string };
+}
+
 export interface JackpotInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "UPGRADE_INTERFACE_VERSION"
       | "claim"
       | "drawJackpotHash"
+      | "getProjectRewardAmount"
+      | "getProjectRoundData"
+      | "getProjectRoundParticipantHashes"
       | "initialize"
+      | "isJackpotHashClaimed"
       | "owner"
       | "participate"
       | "projects"
@@ -60,15 +78,31 @@ export interface JackpotInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "claim",
-    values: [string, AddressLike, BigNumberish, BytesLike]
+    values: [AddressLike, IJackpot.ClaimParamsStruct[]]
   ): string;
   encodeFunctionData(
     functionFragment: "drawJackpotHash",
     values: [string]
   ): string;
   encodeFunctionData(
+    functionFragment: "getProjectRewardAmount",
+    values: [string, BigNumberish[]]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getProjectRoundData",
+    values: [string, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getProjectRoundParticipantHashes",
+    values: [string, BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "initialize",
     values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "isJackpotHashClaimed",
+    values: [string, BytesLike]
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
@@ -129,7 +163,23 @@ export interface JackpotInterface extends Interface {
     functionFragment: "drawJackpotHash",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "getProjectRewardAmount",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getProjectRoundData",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getProjectRoundParticipantHashes",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "initialize", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "isJackpotHashClaimed",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "participate",
@@ -361,10 +411,8 @@ export interface Jackpot extends BaseContract {
 
   claim: TypedContractMethod<
     [
-      projectName: string,
       participantAddress: AddressLike,
-      winningRound: BigNumberish,
-      jackpotHashToClaim: BytesLike
+      claimParams: IJackpot.ClaimParamsStruct[]
     ],
     [void],
     "nonpayable"
@@ -376,7 +424,31 @@ export interface Jackpot extends BaseContract {
     "nonpayable"
   >;
 
+  getProjectRewardAmount: TypedContractMethod<
+    [projectName: string, charMatched: BigNumberish[]],
+    [bigint[]],
+    "view"
+  >;
+
+  getProjectRoundData: TypedContractMethod<
+    [projectName: string, round: BigNumberish],
+    [[bigint, string] & { drawCount: bigint; winningHash: string }],
+    "view"
+  >;
+
+  getProjectRoundParticipantHashes: TypedContractMethod<
+    [projectName: string, round: BigNumberish, participantAddress: AddressLike],
+    [string[]],
+    "view"
+  >;
+
   initialize: TypedContractMethod<[owner: AddressLike], [void], "nonpayable">;
+
+  isJackpotHashClaimed: TypedContractMethod<
+    [projectName: string, jackpotHash: BytesLike],
+    [boolean],
+    "view"
+  >;
 
   owner: TypedContractMethod<[], [string], "view">;
 
@@ -461,10 +533,8 @@ export interface Jackpot extends BaseContract {
     nameOrSignature: "claim"
   ): TypedContractMethod<
     [
-      projectName: string,
       participantAddress: AddressLike,
-      winningRound: BigNumberish,
-      jackpotHashToClaim: BytesLike
+      claimParams: IJackpot.ClaimParamsStruct[]
     ],
     [void],
     "nonpayable"
@@ -473,8 +543,36 @@ export interface Jackpot extends BaseContract {
     nameOrSignature: "drawJackpotHash"
   ): TypedContractMethod<[projectName: string], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "getProjectRewardAmount"
+  ): TypedContractMethod<
+    [projectName: string, charMatched: BigNumberish[]],
+    [bigint[]],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getProjectRoundData"
+  ): TypedContractMethod<
+    [projectName: string, round: BigNumberish],
+    [[bigint, string] & { drawCount: bigint; winningHash: string }],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getProjectRoundParticipantHashes"
+  ): TypedContractMethod<
+    [projectName: string, round: BigNumberish, participantAddress: AddressLike],
+    [string[]],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "initialize"
   ): TypedContractMethod<[owner: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "isJackpotHashClaimed"
+  ): TypedContractMethod<
+    [projectName: string, jackpotHash: BytesLike],
+    [boolean],
+    "view"
+  >;
   getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
