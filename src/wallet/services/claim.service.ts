@@ -656,7 +656,9 @@ export class ClaimService implements OnModuleInit {
       // check if there is any pending claim
       const lastClaimWalletTx = await queryRunner.manager
         .createQueryBuilder(WalletTx, 'walletTx')
-        .where('walletTx.txType = :txType', { txType: WalletTxType.CLAIM })
+        .where('walletTx.txType = :txType', {
+          txType: WalletTxType.CLAIM_JACKPOT,
+        })
         .andWhere('walletTx.userWalletId = :userWalletId', {
           userWalletId: userWallet.id,
         })
@@ -686,7 +688,7 @@ export class ClaimService implements OnModuleInit {
 
       // create a new walletTx for claim jackpot
       const walletTx = new WalletTx();
-      walletTx.txType = WalletTxType.CLAIM;
+      walletTx.txType = WalletTxType.CLAIM_JACKPOT;
       walletTx.status = TxStatus.PENDING;
       walletTx.userWalletId = userWallet.id;
       walletTx.note = 'Jackpot Claim';
