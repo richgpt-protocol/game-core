@@ -228,6 +228,15 @@ Today date: ${new Date().toDateString()}.`;
           functionResponse = await functionToCall();
         }
 
+        messages.push({
+          tool_call_id: toolCall.id,
+          role: 'tool',
+          content:
+            functionName === 'getImage'
+              ? functionArgs.keyword
+              : JSON.stringify(functionResponse),
+        });
+
         if (functionName === 'getImage') {
           // functionResponse is image in base64, save into database
           await this.chatLogRepository.save(
@@ -237,33 +246,21 @@ Today date: ${new Date().toDateString()}.`;
               content: functionResponse,
             }),
           );
-          // and add into messages
-          // first message is responding to tool_calls, which is a compulsory for now
-          messages.push({
-            tool_call_id: toolCall.id,
-            role: 'tool',
-            content: '', // should be image in base64 but will throw error because too large to process
-          });
-          // second message
-          // here treat as user ask bot what is in the image
-          messages.push({
-            role: 'user',
-            content: [
-              {
-                type: 'image_url',
-                image_url: { url: `data:image/png;base64,${functionResponse}` },
-              },
-            ],
-          });
-        } else {
-          // function response is object, add into messages
-          // bot will create reply based on the object
-          messages.push({
-            tool_call_id: toolCall.id,
-            role: 'tool',
-            content: JSON.stringify(functionResponse),
-          });
         }
+      }
+
+      const imageResponse = replies.find((r) => r.type === 'image')?.content;
+      if (imageResponse) {
+        // here treat as user ask bot what is in the image
+        messages.push({
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: `data:image/png;base64,${imageResponse}` },
+            },
+          ],
+        });
       }
 
       // submit messages with functionResponse to chatCompletion
