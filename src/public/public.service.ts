@@ -655,6 +655,19 @@ export class PublicService {
     return await this.claimService.claimJackpot(user.id);
   }
 
+  async getJackpotTicketList(payload: SquidGameTicketListDto) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    return await this.walletService.getUserJackpotTicket(
+      user.id,
+      payload.page,
+      payload.limit,
+    );
+  }
+
   private async addXP(
     xpAmount: number,
     txType: PointTxType,

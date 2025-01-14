@@ -397,4 +397,22 @@ export class PublicController {
       message: 'Success',
     };
   }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('get-jackpot-tickets')
+  @ApiResponse({
+    status: 200,
+    description: 'Get user jackpot tickets',
+    type: ResponseVo,
+  })
+  async getUserJackpotTickers(
+    @Body() payload: SquidGameTicketListDto,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getJackpotTicketList(payload);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
 }
