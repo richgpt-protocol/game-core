@@ -1025,15 +1025,12 @@ export class BetService implements OnModuleInit {
         })
         .getOne();
 
-      console.log('jackpot', jackpot);
-
       const participant = await queryRunner.manager
         .createQueryBuilder(SquidGameParticipant, 'participant')
         .where('participant.userId = :userId', {
           userId: userWallet.user.id,
         })
         .getOne();
-      console.log('participant', participant);
 
       // check if the user is eligible to participate in the jackpot
       if (
@@ -1044,7 +1041,6 @@ export class BetService implements OnModuleInit {
           participant &&
           participant.lastStage < 2)
       ) {
-        console.log('in');
         return;
       }
 
