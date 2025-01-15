@@ -24,24 +24,31 @@ const _abi = [
     name: "claim",
     inputs: [
       {
-        name: "projectName",
-        type: "string",
-        internalType: "string",
-      },
-      {
         name: "participantAddress",
         type: "address",
         internalType: "address",
       },
       {
-        name: "winningRound",
-        type: "uint256",
-        internalType: "uint256",
-      },
-      {
-        name: "jackpotHashToClaim",
-        type: "bytes32",
-        internalType: "bytes32",
+        name: "claimParams",
+        type: "tuple[]",
+        internalType: "struct IJackpot.ClaimParams[]",
+        components: [
+          {
+            name: "projectName",
+            type: "string",
+            internalType: "string",
+          },
+          {
+            name: "winningRound",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "jackpotHashToClaim",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+        ],
       },
     ],
     outputs: [],
@@ -62,6 +69,88 @@ const _abi = [
   },
   {
     type: "function",
+    name: "getProjectRewardAmount",
+    inputs: [
+      {
+        name: "projectName",
+        type: "string",
+        internalType: "string",
+      },
+      {
+        name: "charMatched",
+        type: "uint256[]",
+        internalType: "uint256[]",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint256[]",
+        internalType: "uint256[]",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getProjectRoundData",
+    inputs: [
+      {
+        name: "projectName",
+        type: "string",
+        internalType: "string",
+      },
+      {
+        name: "round",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "drawCount",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "winningHash",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getProjectRoundParticipantHashes",
+    inputs: [
+      {
+        name: "projectName",
+        type: "string",
+        internalType: "string",
+      },
+      {
+        name: "round",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "participantAddress",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32[]",
+        internalType: "bytes32[]",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "initialize",
     inputs: [
       {
@@ -72,6 +161,30 @@ const _abi = [
     ],
     outputs: [],
     stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "isJackpotHashClaimed",
+    inputs: [
+      {
+        name: "projectName",
+        type: "string",
+        internalType: "string",
+      },
+      {
+        name: "jackpotHash",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
   },
   {
     type: "function",
@@ -646,6 +759,11 @@ const _abi = [
   {
     type: "error",
     name: "ROUND_NOT_ENDED",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "SIGNATURE_USED",
     inputs: [],
   },
   {

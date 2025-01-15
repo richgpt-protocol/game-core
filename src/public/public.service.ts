@@ -52,6 +52,7 @@ import { BetDto } from 'src/game/dto/Bet.dto';
 import { WithdrawService } from 'src/wallet/services/withdraw.service';
 import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
+import { ClaimService } from 'src/wallet/services/claim.service';
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -80,6 +81,7 @@ export class PublicService {
     private betService: BetService,
     private campaignService: CampaignService,
     private withdrawService: WithdrawService,
+    private claimService: ClaimService,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
       'DEPOSIT_BOT_ADDRESS',
@@ -581,10 +583,15 @@ export class PublicService {
     );
 
     const squidGameInfo = await this.campaignService.getSquidGameData();
+    const revivalAmount =
+      await this.campaignService.getSquidGameParticipantRevivalData(user.id);
 
     return {
       participantInfo,
       squidGameInfo,
+      revivalAmount: revivalAmount
+        ? revivalAmount.amountRequiredToCurrentStage
+        : 0,
     };
   }
 
@@ -637,6 +644,28 @@ export class PublicService {
       isClaimedWithOne,
       isClaimedWithTen,
     };
+  }
+
+  async claimJackpotRewards(uid: string) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    return await this.claimService.claimJackpot(user.id);
+  }
+
+  async getJackpotTicketList(payload: SquidGameTicketListDto) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    return await this.walletService.getUserJackpotTicket(
+      user.id,
+      payload.page,
+      payload.limit,
+    );
   }
 
   private async addXP(

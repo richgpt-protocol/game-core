@@ -1039,12 +1039,15 @@ export class BetService implements OnModuleInit {
           !participant) ||
         (jackpot.projectName === 'FUYO X SQUID GAME - STAGE 4' &&
           participant &&
-          participant.lastStage !== 3)
+          participant.lastStage < 2)
       ) {
         return;
       }
 
-      if (jackpot && gameUsdTx.amount >= jackpot.minimumBetAmount) {
+      if (
+        jackpot &&
+        Number(gameUsdTx.amount) >= Number(jackpot.minimumBetAmount)
+      ) {
         // create jackpotTx record with status pending
         const jackpotTx = new JackpotTx();
         jackpotTx.status = TxStatus.PENDING;
@@ -1668,7 +1671,7 @@ export class BetService implements OnModuleInit {
       error,
     );
 
-    if (job.attemptsMade > job.opts.attempts) {
+    if (job.attemptsMade >= job.opts.attempts) {
       jackpotTx.status = TxStatus.FAILED;
     } else {
       jackpotTx.retryCount++;

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Game } from 'src/game/entities/game.entity';
 import { DataSource, In, Not, Repository } from 'typeorm';
@@ -8,7 +8,7 @@ import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { WalletTx } from '../entities/wallet-tx.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { ethers } from 'ethers';
-import { Core__factory } from 'src/contract';
+import { Core__factory, Jackpot__factory } from 'src/contract';
 import { ICore } from 'src/contract/Core';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
@@ -19,6 +19,14 @@ import { MPC } from 'src/shared/mpc';
 import { PointTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
+import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
+import { Jackpot } from 'src/game/entities/jackpot.entity';
+import { IJackpot } from 'src/contract/Jackpot';
+import { ConfigService } from 'src/config/config.service';
+import { ClaimJackpotDetail } from '../entities/claim-jackpot-detail.entity';
+import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
+import { QueueService } from 'src/queue/queue.service';
+import { Job } from 'bullmq';
 
 type ClaimResponse = {
   error: string;
@@ -33,9 +41,16 @@ type ClaimEvent = {
   betOrderIds: number[];
 };
 
+type HandleClaimJackpotPayload = {
+  claimParams: IJackpot.ClaimParamsStruct[];
+  walletTxId: number;
+  gameUsdTxId: number;
+};
+
 @Injectable()
-export class ClaimService {
+export class ClaimService implements OnModuleInit {
   provider = new ethers.JsonRpcProvider(process.env.OPBNB_PROVIDER_RPC_URL);
+  private readonly logger = new Logger(ClaimService.name);
 
   constructor(
     @InjectRepository(UserWallet)
@@ -60,7 +75,20 @@ export class ClaimService {
     private adminNotificationService: AdminNotificationService,
     private eventEmitter: EventEmitter2,
     private userService: UserService,
+    private configService: ConfigService,
+    private queueService: QueueService,
   ) {}
+
+  onModuleInit() {
+    this.queueService.registerHandler(
+      QueueName.CLAIM,
+      QueueType.CLAIM_JACKPOT,
+      {
+        jobHandler: this.handleClaimJackpot.bind(this),
+        failureHandler: this.onClaimJackpotFailed.bind(this),
+      },
+    );
+  }
 
   async claim(userId: number): Promise<ClaimResponse> {
     // claim is not available within 5 minutes after last game ended
@@ -361,7 +389,7 @@ export class ClaimService {
         false,
         walletTx.id,
       );
-      return { error: err.message, data: null };
+      return { error: 'Unable to process claim at the moment', data: null };
     } finally {
       await queryRunner.release();
     }
@@ -612,5 +640,283 @@ export class ClaimService {
       bigForecastWinAmount,
       smallForecastWinAmount,
     };
+  }
+
+  async claimJackpot(userId: number): Promise<any> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const userWallet = await queryRunner.manager
+        .createQueryBuilder(UserWallet, 'userWallet')
+        .where('userWallet.userId = :userId', { userId })
+        .getOne();
+
+      // check if there is any pending claim
+      const lastClaimWalletTx = await queryRunner.manager
+        .createQueryBuilder(WalletTx, 'walletTx')
+        .where('walletTx.txType = :txType', {
+          txType: WalletTxType.CLAIM_JACKPOT,
+        })
+        .andWhere('walletTx.userWalletId = :userWalletId', {
+          userWalletId: userWallet.id,
+        })
+        .andWhere('walletTx.status = :status', { status: TxStatus.PENDING })
+        .getOne();
+      if (lastClaimWalletTx) {
+        return { error: 'Claim is in pending', data: null };
+      }
+
+      // fetch all available claim jackpot txs
+      const jackpotTxs = await queryRunner.manager
+        .createQueryBuilder(JackpotTx, 'jackpotTx')
+        .where('jackpotTx.availableClaim = :availableClaim', {
+          availableClaim: true,
+        })
+        .andWhere('jackpotTx.isClaimed = :isClaimed', {
+          isClaimed: false,
+        })
+        .andWhere('jackpotTx.status = :status', {
+          status: TxStatus.SUCCESS,
+        })
+        .getMany();
+
+      if (jackpotTxs.length === 0) {
+        return { error: 'No jackpot to claim', data: null };
+      }
+
+      // create a new walletTx for claim jackpot
+      const walletTx = new WalletTx();
+      walletTx.txType = WalletTxType.CLAIM_JACKPOT;
+      walletTx.status = TxStatus.PENDING;
+      walletTx.userWalletId = userWallet.id;
+      walletTx.note = 'Jackpot Claim';
+      await queryRunner.manager.save(walletTx);
+
+      // construct claimParams for on-chain claim
+      let amountToClaim = 0;
+      const claimParams: IJackpot.ClaimParamsStruct[] = [];
+      for (const jackpotTx of jackpotTxs) {
+        amountToClaim += jackpotTx.payoutAmount;
+
+        const jackpot = await queryRunner.manager
+          .createQueryBuilder(Jackpot, 'jackpot')
+          .where('jackpot.id = :jackpotId', { jackpotId: jackpotTx.jackpotId })
+          .getOne();
+
+        claimParams.push({
+          projectName: jackpot.projectName,
+          winningRound: jackpot.round,
+          jackpotHashToClaim: jackpotTx.randomHash,
+        });
+      }
+
+      walletTx.txAmount = amountToClaim;
+      await queryRunner.manager.save(walletTx);
+
+      // create gameUsdTx for claim jackpot
+      const gameUsdTx = new GameUsdTx();
+      gameUsdTx.amount = amountToClaim;
+      gameUsdTx.chainId = Number(this.configService.get('BASE_CHAIN_ID'));
+      gameUsdTx.status = TxStatus.PENDING;
+      gameUsdTx.senderAddress = this.configService.get(
+        'FEE_AND_REWARD_CONTRACT_ADDRESS',
+      );
+      gameUsdTx.receiverAddress = userWallet.walletAddress;
+      gameUsdTx.walletTxId = walletTx.id;
+      await queryRunner.manager.save(gameUsdTx);
+
+      walletTx.gameUsdTx = gameUsdTx;
+      await queryRunner.manager.save(walletTx);
+
+      await queryRunner.commitTransaction();
+
+      // add job to claim jackpot on-chain
+      const jobId = `handleClaimJackpot-${gameUsdTx.id}`;
+      await this.queueService.addJob(QueueName.CLAIM, jobId, {
+        claimParams,
+        walletTxId: walletTx.id,
+        gameUsdTxId: gameUsdTx.id,
+        queueType: QueueType.CLAIM_JACKPOT,
+      } as HandleClaimJackpotPayload);
+
+      return { error: null, data: { walletTx: walletTx } };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error('Error in claimJackpot', error);
+      await this.adminNotificationService.setAdminNotification(
+        `Transaction in claim.service.claimJackpot had been rollback, error: ${error}`,
+        'rollbackTxError',
+        'Transaction Rollbacked',
+        true,
+        true,
+      );
+      return {
+        error: 'Unable to process claim jackpot at the moment',
+        data: null,
+      };
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async handleClaimJackpot(job: Job<HandleClaimJackpotPayload>) {
+    const { claimParams, walletTxId, gameUsdTxId } = job.data;
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // fetch walletTx
+      const walletTx = await queryRunner.manager
+        .createQueryBuilder(WalletTx, 'walletTx')
+        .where('walletTx.id = :walletTxId', { walletTxId })
+        .getOne();
+
+      // fetch userWallet
+      const userWallet = await queryRunner.manager
+        .createQueryBuilder(UserWallet, 'userWallet')
+        .where('userWallet.id = :userWalletId', {
+          userWalletId: walletTx.userWalletId,
+        })
+        .getOne();
+
+      // fetch user signer
+      const userSigner = new ethers.Wallet(
+        await MPC.retrievePrivateKey(userWallet.walletAddress),
+        this.provider,
+      );
+
+      // fetch jackpot contract
+      const jackpotContract = Jackpot__factory.connect(
+        this.configService.get('JACKPOT_CONTRACT_ADDRESS'),
+        userSigner,
+      );
+
+      const estimatedGas = await jackpotContract.claim.estimateGas(
+        userWallet.walletAddress,
+        claimParams,
+      );
+
+      const txResponse = await jackpotContract.claim(
+        userWallet.walletAddress,
+        claimParams,
+        {
+          gasLimit:
+            (estimatedGas * ethers.toBigInt(130)) / ethers.toBigInt(100),
+        },
+      );
+      const txReceipt = await txResponse.wait();
+      if (txReceipt.status === 0) {
+        throw new Error('Claim Jackpot on-chain failed');
+      }
+
+      for (const claimParam of claimParams) {
+        // update jackpotTx to claimed
+        const jackpotTx = await queryRunner.manager
+          .createQueryBuilder(JackpotTx, 'jackpotTx')
+          .where('jackpotTx.randomHash = :randomHash', {
+            randomHash: claimParam.jackpotHashToClaim,
+          })
+          .getOne();
+        jackpotTx.isClaimed = true;
+        await queryRunner.manager.save(jackpotTx);
+
+        // calculate matchedCount
+        let matchedCount = 0;
+        const jackpot = await queryRunner.manager
+          .createQueryBuilder(Jackpot, 'jackpot')
+          .where('jackpot.id = :jackpotId', { jackpotId: jackpotTx.jackpotId })
+          .getOne();
+        for (let i = 1; i < 7; i++) {
+          if (
+            jackpot.jackpotHash[jackpot.jackpotHash.length - i] ===
+            jackpotTx.randomHash[jackpotTx.randomHash.length - i]
+          ) {
+            matchedCount++;
+          } else {
+            break;
+          }
+        }
+
+        // create new claimJackpotDetail record
+        const claimJackpotDetail = new ClaimJackpotDetail();
+        claimJackpotDetail.matchedCharCount = matchedCount;
+        claimJackpotDetail.claimAmount = jackpotTx.payoutAmount;
+        claimJackpotDetail.walletTxId = walletTx.id;
+        claimJackpotDetail.jackpotId = jackpot.id;
+        claimJackpotDetail.jackpotTxId = jackpotTx.id;
+        await queryRunner.manager.save(claimJackpotDetail);
+      }
+
+      // update walletTx
+      walletTx.txHash = txReceipt.hash;
+      walletTx.status = TxStatus.SUCCESS;
+      walletTx.startingBalance = userWallet.walletBalance;
+      walletTx.endingBalance =
+        Number(walletTx.startingBalance) + Number(walletTx.txAmount);
+      await queryRunner.manager.save(walletTx);
+
+      // update userWallet balance
+      userWallet.walletBalance =
+        Number(userWallet.walletBalance) + Number(walletTx.txAmount);
+      await queryRunner.manager.save(userWallet);
+
+      // update gameUsdTx
+      const gameUsdTx = await queryRunner.manager
+        .createQueryBuilder(GameUsdTx, 'gameUsdTx')
+        .where('gameUsdTx.id = :gameUsdTxId', { gameUsdTxId })
+        .getOne();
+      gameUsdTx.status = TxStatus.SUCCESS;
+      gameUsdTx.txHash = txReceipt.hash;
+      await queryRunner.manager.save(gameUsdTx);
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw new Error(`Error in handleClaimJackpot: ${error}`);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  private async onClaimJackpotFailed(
+    job: Job<HandleClaimJackpotPayload>,
+    error: Error,
+  ) {
+    const { walletTxId, gameUsdTxId } = job.data;
+    this.logger.error(error);
+
+    // update walletTx to failed
+    if (job.attemptsMade >= job.opts.attempts) {
+      await this.walletTxRepository.update(
+        { id: walletTxId },
+        { status: TxStatus.FAILED },
+      );
+
+      // update gameUsdTx to failed
+      await this.gameUsdTxRepository.update(
+        { id: gameUsdTxId },
+        { status: TxStatus.FAILED },
+      );
+
+      // inform admin
+      await this.adminNotificationService.setAdminNotification(
+        `Claim Jackpot failed 5 times for walletTx id: ${walletTxId}`,
+        'CLAIM_JACKPOT_FAILED',
+        'Claim Jackpot failed',
+        true,
+        true,
+        walletTxId,
+      );
+    } else {
+      const gameUsdTx = await this.gameUsdTxRepository
+        .createQueryBuilder('gameUsdTx')
+        .where('gameUsdTx.id = :gameUsdTxId', { gameUsdTxId })
+        .getOne();
+      gameUsdTx.retryCount++;
+      await this.gameUsdTxRepository.save(gameUsdTx);
+    }
   }
 }

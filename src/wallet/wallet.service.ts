@@ -361,28 +361,35 @@ export class WalletService {
 
   async getUserJackpotTicket(userId: number, page: number, limit: number) {
     const skip = (page - 1) * limit;
-    const jackpotTx = await this.jackpotTxRepository
+    const [jackpotTx, totalCount] = await this.jackpotTxRepository
       .createQueryBuilder('jackpotTx')
       .leftJoinAndSelect('jackpotTx.walletTx', 'walletTx')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .leftJoinAndSelect('userWallet.user', 'user')
+      .leftJoinAndSelect('jackpotTx.jackpot', 'jackpot')
       .where('user.id = :userId', { userId })
       .andWhere('jackpotTx.status = :status', { status: TxStatus.SUCCESS })
+      .andWhere('jackpot.id != :jackpotId', { jackpotId: 1 })
       .orderBy('jackpotTx.id', 'DESC')
       .skip(skip)
       .take(limit)
-      .getMany();
+      .getManyAndCount();
 
-    return jackpotTx.map((jackpotTx) => {
-      return {
-        id: jackpotTx.id,
-        hashGenerated: jackpotTx.randomHash,
-        createdTime: jackpotTx.createdDate,
-        explorerUrl: `${this.configService.get(
-          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
-        )}/tx/${jackpotTx.txHash}`,
-        availableClaim: jackpotTx.availableClaim,
-      };
-    });
+    return {
+      data: jackpotTx.map((jackpotTx) => {
+        return {
+          id: jackpotTx.id,
+          hashGenerated: jackpotTx.randomHash,
+          createdTime: jackpotTx.createdDate,
+          explorerUrl: `${this.configService.get(
+            `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+          )}/tx/${jackpotTx.txHash}`,
+          availableClaim: jackpotTx.availableClaim,
+          payoutAmount: Number(jackpotTx.payoutAmount),
+        };
+      }),
+      totalCount,
+      currentPage: page,
+    };
   }
 }
