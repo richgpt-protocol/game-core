@@ -1039,7 +1039,10 @@ export class BetService implements OnModuleInit {
           !participant) ||
         (jackpot.projectName === 'FUYO X SQUID GAME - STAGE 4' &&
           participant &&
-          participant.lastStage !== 3)
+          participant.lastStage !== 3) ||
+        (jackpot.projectName === 'FUYO X SQUID GAME - STAGE 4' &&
+          participant &&
+          participant.lastStage !== 4)
       ) {
         return;
       }
