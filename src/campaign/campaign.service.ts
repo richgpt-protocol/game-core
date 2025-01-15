@@ -454,6 +454,8 @@ export class CampaignService {
           key: `SQUID_GAME_REVIVAL_STAGE_${stage}`,
         })
         .getOne();
+
+      console.log('squidGameRevivalStage', squidGameRevivalStage);
       if (squidGameRevivalStage) {
         const squidGameRevivalStageData = JSON.parse(
           squidGameRevivalStage.value,
@@ -570,6 +572,8 @@ export class CampaignService {
     try {
       const currentRevivalStage = await this.getSquidGameRevivalStage();
       const squidGameData = await this.getSquidGameData();
+
+      console.log('currentRevivalStage', currentRevivalStage);
 
       if (!currentRevivalStage) {
         // revival stage not in progress
