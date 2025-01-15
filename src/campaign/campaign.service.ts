@@ -454,14 +454,16 @@ export class CampaignService {
           key: `SQUID_GAME_REVIVAL_STAGE_${stage}`,
         })
         .getOne();
-      const squidGameRevivalStageData = JSON.parse(
-        squidGameRevivalStage.value,
-      ) as SQUID_GAME_REVIVAL;
-      if (
-        new Date(squidGameRevivalStageData.startTime) <= currentTime &&
-        new Date(squidGameRevivalStageData.endTime) >= currentTime
-      ) {
-        return stage;
+      if (squidGameRevivalStage) {
+        const squidGameRevivalStageData = JSON.parse(
+          squidGameRevivalStage.value,
+        ) as SQUID_GAME_REVIVAL;
+        if (
+          new Date(squidGameRevivalStageData.startTime) <= currentTime &&
+          new Date(squidGameRevivalStageData.endTime) >= currentTime
+        ) {
+          return stage;
+        }
       }
     }
 
@@ -480,8 +482,10 @@ export class CampaignService {
       .leftJoinAndSelect('jackpotTx.walletTx', 'walletTx')
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .leftJoinAndSelect('userWallet.user', 'user')
+      .leftJoinAndSelect('jackpotTx.jackpot', 'jackpot')
       .where('user.id = :userId', { userId })
       .andWhere('jackpotTx.status = :status', { status: TxStatus.SUCCESS })
+      .andWhere('jackpot.id = :jackpotId', { jackpotId: 1 })
       .orderBy('jackpotTx.id', 'DESC')
       .skip(skip)
       .take(limit)
@@ -564,140 +568,85 @@ export class CampaignService {
     await queryRunner.startTransaction();
 
     try {
-      const currentTime = new Date(Date.now());
-      let stage1RevivalData: SQUID_GAME_REVIVAL | null = null;
-      let stage2RevivalData: SQUID_GAME_REVIVAL | null = null;
-      let stage3RevivalData: SQUID_GAME_REVIVAL | null = null;
+      const currentRevivalStage = await this.getSquidGameRevivalStage();
+      const squidGameData = await this.getSquidGameData();
+
+      if (!currentRevivalStage) {
+        // revival stage not in progress
+        return;
+      }
 
       // get participant record(might not exist)
       const participant = await queryRunner.manager
         .createQueryBuilder(SquidGameParticipant, 'participant')
         .where('participant.userId = :userId', { userId })
         .getOne();
-
-      // stage 1 revival
-      const stage1Revival = await queryRunner.manager
-        .createQueryBuilder(Setting, 'setting')
-        .where('setting.key = :key', {
-          key: `SQUID_GAME_REVIVAL_STAGE_1`,
-        })
-        .getOne();
-      if (stage1Revival) {
-        stage1RevivalData = JSON.parse(
-          stage1Revival.value,
-        ) as SQUID_GAME_REVIVAL;
-
-        if (
-          currentTime >= new Date(stage1RevivalData.startTime) &&
-          currentTime <= new Date(stage1RevivalData.endTime) &&
-          !participant
-        ) {
-          // this is stage 1 revival, because user don't have participant record
-          await this._squidGameStage1Revival(
-            userId,
-            amount,
-            stage1RevivalData.amountRequired,
-            isReferral,
-            queryRunner,
-          );
-        }
+      if (participant && participant.lastStage === currentRevivalStage) {
+        // participant already in current stage, no need to revive
+        return;
       }
 
-      // stage 2 revival
-      const stage2Revival = await queryRunner.manager
-        .createQueryBuilder(Setting, 'setting')
-        .where('setting.key = :key', {
-          key: `SQUID_GAME_REVIVAL_STAGE_2`,
-        })
-        .getOne();
-      if (stage2Revival) {
-        stage2RevivalData = JSON.parse(
-          stage2Revival.value,
-        ) as SQUID_GAME_REVIVAL;
+      // create new revival record
+      const squidGameRevival = new SquidGameRevival();
+      squidGameRevival.userId = userId;
+      squidGameRevival.stageNumber = currentRevivalStage;
+      isReferral
+        ? (squidGameRevival.amountReferred = amount)
+        : (squidGameRevival.amountPaid = amount);
+      await queryRunner.manager.save(squidGameRevival);
 
-        if (
-          currentTime >= new Date(stage2RevivalData.startTime) &&
-          currentTime <= new Date(stage2RevivalData.endTime)
-        ) {
-          if (!participant) {
-            // user don't have participant record, need to revive stage 1 first
-            await this._squidGameStage1Revival(
-              userId,
-              amount,
-              stage1RevivalData.amountRequired,
-              isReferral,
-              queryRunner,
-            );
-            return;
-          }
+      // get all revival records for particular user
+      const squidGameRevivals = await queryRunner.manager
+        .createQueryBuilder(SquidGameRevival, 'revival')
+        .where('revival.userId = :userId', { userId })
+        .getMany();
+      // calculate total amount deposited + amount referred
+      const totalAmountPaid = squidGameRevivals.reduce(
+        (total, revival) => total + revival.amountPaid + revival.amountReferred,
+        0,
+      );
 
-          // participant already in stage 2, no need to revive
-          if (participant.lastStage === 2) return;
-
-          await this._squidGameStage2Revival(
-            userId,
-            amount,
-            stage2RevivalData.amountRequired,
-            participant,
-            isReferral,
-            queryRunner,
-          );
-        }
+      // check if user meet criteria for next/latest stage
+      let userStageToUpdate = 0;
+      if (
+        currentRevivalStage === 3 &&
+        totalAmountPaid >=
+          squidGameData.stage1RevivalData.amountRequired +
+            squidGameData.stage2RevivalData.amountRequired +
+            squidGameData.stage3RevivalData.amountRequired
+      ) {
+        userStageToUpdate = 3;
+      } else if (
+        currentRevivalStage === 2 &&
+        totalAmountPaid >=
+          squidGameData.stage1RevivalData.amountRequired +
+            squidGameData.stage2RevivalData.amountRequired
+      ) {
+        userStageToUpdate = 2;
+      } else if (
+        currentRevivalStage === 1 &&
+        totalAmountPaid >= squidGameData.stage1RevivalData.amountRequired
+      ) {
+        userStageToUpdate = 1;
       }
 
-      // stage 3 revival
-      const stage3Revival = await queryRunner.manager
-        .createQueryBuilder(Setting, 'setting')
-        .where('setting.key = :key', {
-          key: `SQUID_GAME_REVIVAL_STAGE_3`,
-        })
-        .getOne();
-      if (stage3Revival) {
-        stage3RevivalData = JSON.parse(
-          stage3Revival.value,
-        ) as SQUID_GAME_REVIVAL;
+      if (userStageToUpdate === 0) {
+        // user not meet criteria for any stage
+        return;
+      }
 
-        if (
-          currentTime >= new Date(stage3RevivalData.startTime) &&
-          currentTime <= new Date(stage3RevivalData.endTime)
-        ) {
-          if (!participant) {
-            // user don't have participant record, need to revive stage 1 first
-            await this._squidGameStage1Revival(
-              userId,
-              amount,
-              stage1RevivalData.amountRequired,
-              isReferral,
-              queryRunner,
-            );
-            return;
-          }
-
-          if (participant.lastStage === 1) {
-            // user still in stage 1, need to revive stage 2 first
-            await this._squidGameStage2Revival(
-              userId,
-              amount,
-              stage2RevivalData.amountRequired,
-              participant,
-              isReferral,
-              queryRunner,
-            );
-            return;
-          }
-
-          // participant already in stage 3, no need to revive
-          if (participant.lastStage === 3) return;
-
-          await this._squidGameStage3Revival(
-            userId,
-            amount,
-            stage3RevivalData.amountRequired,
-            participant,
-            isReferral,
-            queryRunner,
-          );
-        }
+      if (!participant) {
+        // user never participate in squid game, need to create new participant record
+        const newParticipant = new SquidGameParticipant();
+        newParticipant.userId = userId;
+        newParticipant.lastStage = userStageToUpdate;
+        newParticipant.participantStatus = `SQUID_GAME_STAGE_${currentRevivalStage.toString()}_REVIVED`;
+        await queryRunner.manager.save(newParticipant);
+      } else {
+        // update lastStage of existing participant record
+        participant.lastStage = userStageToUpdate;
+        participant.participantStatus = `SQUID_GAME_STAGE_${currentRevivalStage.toString()}_REVIVED`;
+        await queryRunner.manager.save(participant);
       }
 
       await queryRunner.commitTransaction();
@@ -716,289 +665,57 @@ export class CampaignService {
     // queryRunner will be released by the parent function
   }
 
-  private async _squidGameStage1Revival(
-    userId: number,
-    amount: number,
-    amountRequired: number,
-    isReferral: boolean,
-    queryRunner: QueryRunner,
-  ) {
-    // create new revival record
-    const squidGameRevival = new SquidGameRevival();
-    squidGameRevival.userId = userId;
-    squidGameRevival.stageNumber = 1;
-    isReferral
-      ? (squidGameRevival.amountReferred = amount)
-      : (squidGameRevival.amountPaid = amount);
-    await queryRunner.manager.save(squidGameRevival);
-
-    // check if participant is eligible for next stage
-    await this._updateParticipantStage(
-      userId,
-      1,
-      amountRequired,
-      null,
-      queryRunner,
-    );
-  }
-
-  private async _squidGameStage2Revival(
-    userId: number,
-    amount: number,
-    amountRequired: number,
-    participant: SquidGameParticipant,
-    isReferral: boolean,
-    queryRunner: QueryRunner,
-  ) {
-    // create new revival record
-    const squidGameRevival = new SquidGameRevival();
-    squidGameRevival.userId = userId;
-    squidGameRevival.stageNumber = 2;
-    isReferral
-      ? (squidGameRevival.amountReferred = amount)
-      : (squidGameRevival.amountPaid = amount);
-    await queryRunner.manager.save(squidGameRevival);
-
-    // check if participant is eligible for next stage
-    await this._updateParticipantStage(
-      userId,
-      2,
-      amountRequired,
-      participant,
-      queryRunner,
-    );
-  }
-
-  private async _squidGameStage3Revival(
-    userId: number,
-    amount: number,
-    amountRequired: number,
-    participant: SquidGameParticipant,
-    isReferral: boolean,
-    queryRunner: QueryRunner,
-  ) {
-    // create new revival record
-    const squidGameRevival = new SquidGameRevival();
-    squidGameRevival.userId = userId;
-    squidGameRevival.stageNumber = 3;
-    isReferral
-      ? (squidGameRevival.amountReferred = amount)
-      : (squidGameRevival.amountPaid = amount);
-    await queryRunner.manager.save(squidGameRevival);
-
-    // check if participant is eligible for next stage
-    await this._updateParticipantStage(
-      userId,
-      3,
-      amountRequired,
-      participant,
-      queryRunner,
-    );
-  }
-
-  private async _updateParticipantStage(
-    userId: number,
-    stage: number,
-    amountRequired: number,
-    participant: SquidGameParticipant | null,
-    queryRunner: QueryRunner,
-  ) {
-    // get all revival records for particular user and stage
-    const squidGameRevivals = await queryRunner.manager
-      .createQueryBuilder(SquidGameRevival, 'revival')
-      .where('revival.userId = :userId', { userId })
-      .andWhere('revival.stageNumber = :stageNumber', {
-        stageNumber: stage,
-      })
-      .getMany();
-    // calculate total amount deposited
-    const totalAmountPaid = squidGameRevivals.reduce(
-      (total, revival) => total + revival.amountPaid + revival.amountReferred,
-      0,
-    );
-    // check if total amount deposited meet criteria, if so, update participant stage
-    if (totalAmountPaid >= amountRequired) {
-      if (!participant) {
-        // update for stage 1: create new participant record
-        const newParticipant = new SquidGameParticipant();
-        newParticipant.userId = userId;
-        newParticipant.lastStage = stage;
-        newParticipant.participantStatus = `SQUID_GAME_STAGE_${stage.toString()}_REVIVED`;
-        await queryRunner.manager.save(newParticipant);
-      } else {
-        // update for stage 2, 3: update participant record
-        participant.lastStage = stage;
-        participant.participantStatus = `SQUID_GAME_STAGE_${stage.toString()}_REVIVED`;
-        await queryRunner.manager.save(participant);
-      }
-    }
-  }
-
   async getSquidGameParticipantRevivalData(userId: number): Promise<{
-    amountRequiredToStage1: number;
-    amountRequiredToStage2: number;
-    amountRequiredToStage3: number;
+    amountRequiredToCurrentStage: number;
   }> {
     const currentRevivalStage = await this.getSquidGameRevivalStage();
     const squidGameData = await this.getSquidGameData();
+
+    if (!currentRevivalStage) {
+      return {
+        amountRequiredToCurrentStage: 0,
+      };
+    }
 
     const participant = await this.squidGameParticipantRepository
       .createQueryBuilder('participant')
       .where('participant.userId = :userId', { userId })
       .getOne();
 
+    if (participant && participant.lastStage === currentRevivalStage) {
+      return {
+        amountRequiredToCurrentStage: 0,
+      };
+    }
+
+    const squidGameRevival = await this.squidGameRevivalRepository
+      .createQueryBuilder('revival')
+      .where('revival.userId = :userId', { userId })
+      .getMany();
+    const totalAmount = squidGameRevival.reduce(
+      (total, revival) => total + revival.amountPaid + revival.amountReferred,
+      0,
+    );
+
+    let amountRequiredToLatestStage = 0;
     if (currentRevivalStage === 1) {
-      if (!participant) {
-        const squidGameRevivalStage1 = await this.squidGameRevivalRepository
-          .createQueryBuilder('revival')
-          .where('revival.userId = :userId', { userId })
-          .andWhere('revival.stageNumber = :stageNumber', {
-            stageNumber: 1,
-          })
-          .getMany();
-        const totalAmount = squidGameRevivalStage1.reduce(
-          (total, revival) =>
-            total + revival.amountPaid + revival.amountReferred,
-          0,
-        );
-
-        return {
-          amountRequiredToStage1:
-            squidGameData.stage1RevivalData.amountRequired - totalAmount,
-          amountRequiredToStage2: 0,
-          amountRequiredToStage3: 0,
-        };
-      }
-    }
-
-    if (currentRevivalStage === 2) {
-      if (!participant) {
-        const squidGameRevivalStage1 = await this.squidGameRevivalRepository
-          .createQueryBuilder('revival')
-          .where('revival.userId = :userId', { userId })
-          .andWhere('revival.stageNumber = :stageNumber', {
-            stageNumber: 1,
-          })
-          .getMany();
-        const totalAmount = squidGameRevivalStage1.reduce(
-          (total, revival) =>
-            total + revival.amountPaid + revival.amountReferred,
-          0,
-        );
-
-        return {
-          amountRequiredToStage1:
-            squidGameData.stage1RevivalData.amountRequired - totalAmount,
-          amountRequiredToStage2:
-            squidGameData.stage2RevivalData.amountRequired,
-          amountRequiredToStage3: 0,
-        };
-      } else if (participant.lastStage === 1) {
-        const squidGameRevivalStage2 = await this.squidGameRevivalRepository
-          .createQueryBuilder('revival')
-          .where('revival.userId = :userId', { userId })
-          .andWhere('revival.stageNumber = :stageNumber', {
-            stageNumber: 2,
-          })
-          .getMany();
-        const totalAmount = squidGameRevivalStage2.reduce(
-          (total, revival) =>
-            total + revival.amountPaid + revival.amountReferred,
-          0,
-        );
-
-        return {
-          amountRequiredToStage1: 0,
-          amountRequiredToStage2:
-            squidGameData.stage2RevivalData.amountRequired - totalAmount,
-          amountRequiredToStage3: 0,
-        };
-      }
-
-      return {
-        amountRequiredToStage1: 0,
-        amountRequiredToStage2: 0,
-        amountRequiredToStage3: 0,
-      };
-    }
-
-    if (currentRevivalStage === 3) {
-      if (!participant) {
-        const squidGameRevivalStage1 = await this.squidGameRevivalRepository
-          .createQueryBuilder('revival')
-          .where('revival.userId = :userId', { userId })
-          .andWhere('revival.stageNumber = :stageNumber', {
-            stageNumber: 1,
-          })
-          .getMany();
-        const totalAmount = squidGameRevivalStage1.reduce(
-          (total, revival) =>
-            total + revival.amountPaid + revival.amountReferred,
-          0,
-        );
-
-        return {
-          amountRequiredToStage1:
-            squidGameData.stage1RevivalData.amountRequired - totalAmount,
-          amountRequiredToStage2:
-            squidGameData.stage2RevivalData.amountRequired,
-          amountRequiredToStage3:
-            squidGameData.stage3RevivalData.amountRequired,
-        };
-      } else if (participant.lastStage === 1) {
-        const squidGameRevivalStage2 = await this.squidGameRevivalRepository
-          .createQueryBuilder('revival')
-          .where('revival.userId = :userId', { userId })
-          .andWhere('revival.stageNumber = :stageNumber', {
-            stageNumber: 2,
-          })
-          .getMany();
-        const totalAmount = squidGameRevivalStage2.reduce(
-          (total, revival) =>
-            total + revival.amountPaid + revival.amountReferred,
-          0,
-        );
-
-        return {
-          amountRequiredToStage1: 0,
-          amountRequiredToStage2:
-            squidGameData.stage2RevivalData.amountRequired - totalAmount,
-          amountRequiredToStage3:
-            squidGameData.stage3RevivalData.amountRequired,
-        };
-      } else if (participant.lastStage === 2) {
-        const squidGameRevivalStage3 = await this.squidGameRevivalRepository
-          .createQueryBuilder('revival')
-          .where('revival.userId = :userId', { userId })
-          .andWhere('revival.stageNumber = :stageNumber', {
-            stageNumber: 3,
-          })
-          .getMany();
-        const totalAmount = squidGameRevivalStage3.reduce(
-          (total, revival) =>
-            total + revival.amountPaid + revival.amountReferred,
-          0,
-        );
-
-        return {
-          amountRequiredToStage1: 0,
-          amountRequiredToStage2: 0,
-          amountRequiredToStage3:
-            squidGameData.stage3RevivalData.amountRequired - totalAmount,
-        };
-      }
-
-      return {
-        amountRequiredToStage1: 0,
-        amountRequiredToStage2: 0,
-        amountRequiredToStage3: 0,
-      };
+      amountRequiredToLatestStage =
+        squidGameData.stage1RevivalData.amountRequired - totalAmount;
+    } else if (currentRevivalStage === 2) {
+      amountRequiredToLatestStage =
+        squidGameData.stage1RevivalData.amountRequired +
+        squidGameData.stage2RevivalData.amountRequired -
+        totalAmount;
+    } else if (currentRevivalStage === 3) {
+      amountRequiredToLatestStage =
+        squidGameData.stage1RevivalData.amountRequired +
+        squidGameData.stage2RevivalData.amountRequired +
+        squidGameData.stage3RevivalData.amountRequired -
+        totalAmount;
     }
 
     return {
-      amountRequiredToStage1: 0,
-      amountRequiredToStage2: 0,
-      amountRequiredToStage3: 0,
+      amountRequiredToCurrentStage: amountRequiredToLatestStage,
     };
   }
 }

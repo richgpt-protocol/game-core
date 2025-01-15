@@ -605,7 +605,7 @@ export class DepositService implements OnModuleInit {
     job: Job<{ depositTxId: number }>,
     error: Error,
   ) {
-    if (job.attemptsMade > job.opts.attempts) {
+    if (job.attemptsMade >= job.opts.attempts) {
       const queryRunner = this.dataSource.createQueryRunner();
 
       try {
@@ -768,7 +768,7 @@ export class DepositService implements OnModuleInit {
         },
       });
 
-      if (job.attemptsMade > job.opts.attempts) {
+      if (job.attemptsMade >= job.opts.attempts) {
         gameUsdTx.status = TxStatus.FAILED;
         await queryRunner.manager.save(gameUsdTx);
         // set walletTx status to failed

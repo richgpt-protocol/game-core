@@ -104,11 +104,52 @@ export class WalletController {
   async claim(@Req() req: any): Promise<ResponseVo<any>> {
     try {
       const res = await this.claimService.claim(Number(req.user.userId));
-      if (!res.error || res.data) {
+      if (!res.error) {
         return {
           statusCode: HttpStatus.OK,
           data: res.data,
           message: 'claim success',
+        };
+      } else {
+        return {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          data: null,
+          message: res.error,
+        };
+      }
+    } catch (error) {
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        data: null,
+        message: error.message,
+      };
+    }
+  }
+
+  @Secure(null, UserRole.USER)
+  @Post('claim-jackpot')
+  @ApiHeader({
+    name: 'x-custom-lang',
+    description: 'Custom Language',
+  })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'Claim Successful.',
+    type: ResponseVo,
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Bad Request',
+    type: ErrorResponseVo,
+  })
+  async claimJackpot(@Req() req: any): Promise<ResponseVo<any>> {
+    try {
+      const res = await this.claimService.claimJackpot(Number(req.user.userId));
+      if (!res.error) {
+        return {
+          statusCode: HttpStatus.OK,
+          data: res.data,
+          message: 'claim jackpot success',
         };
       } else {
         return {
@@ -151,7 +192,7 @@ export class WalletController {
         Number(req.user.userId),
         payload,
       );
-      if (!res.error || res.data) {
+      if (!res.error) {
         return {
           statusCode: HttpStatus.OK,
           data: res.data,
@@ -199,7 +240,7 @@ export class WalletController {
         Number(req.user.userId),
         payload,
       );
-      if (!res.error || res.data) {
+      if (!res.error) {
         return {
           statusCode: HttpStatus.OK,
           data: res.data,

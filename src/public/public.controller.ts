@@ -20,6 +20,7 @@ import { GetOttDto } from './dtos/get-ott.dto';
 import { LiteBetDto } from './dtos/lite-bet.dto';
 import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
+import { ClaimJackpotDto } from './dtos/claim.dto';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
@@ -372,6 +373,42 @@ export class PublicController {
     @Param('uid') uid: string,
   ): Promise<ResponseVo<any>> {
     const data = await this.publicService.getDepositTaskInfo(uid);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('claim-jackpot')
+  @ApiResponse({
+    status: 201,
+    description: 'Claim Jackpot',
+    type: ResponseVo,
+  })
+  async claimJackpot(
+    @Body() payload: ClaimJackpotDto,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.claimJackpotRewards(payload.uid);
+    return {
+      statusCode: HttpStatus.CREATED,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('get-jackpot-tickets')
+  @ApiResponse({
+    status: 200,
+    description: 'Get user jackpot tickets',
+    type: ResponseVo,
+  })
+  async getUserJackpotTickers(
+    @Body() payload: SquidGameTicketListDto,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getJackpotTicketList(payload);
     return {
       statusCode: HttpStatus.OK,
       data,

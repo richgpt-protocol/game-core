@@ -1025,12 +1025,15 @@ export class BetService implements OnModuleInit {
         })
         .getOne();
 
+      console.log('jackpot', jackpot);
+
       const participant = await queryRunner.manager
         .createQueryBuilder(SquidGameParticipant, 'participant')
         .where('participant.userId = :userId', {
           userId: userWallet.user.id,
         })
         .getOne();
+      console.log('participant', participant);
 
       // check if the user is eligible to participate in the jackpot
       if (
@@ -1039,12 +1042,16 @@ export class BetService implements OnModuleInit {
           !participant) ||
         (jackpot.projectName === 'FUYO X SQUID GAME - STAGE 4' &&
           participant &&
-          participant.lastStage !== 3)
+          participant.lastStage < 2)
       ) {
+        console.log('in');
         return;
       }
 
-      if (jackpot && gameUsdTx.amount >= jackpot.minimumBetAmount) {
+      if (
+        jackpot &&
+        Number(gameUsdTx.amount) >= Number(jackpot.minimumBetAmount)
+      ) {
         // create jackpotTx record with status pending
         const jackpotTx = new JackpotTx();
         jackpotTx.status = TxStatus.PENDING;
@@ -1668,7 +1675,7 @@ export class BetService implements OnModuleInit {
       error,
     );
 
-    if (job.attemptsMade > job.opts.attempts) {
+    if (job.attemptsMade >= job.opts.attempts) {
       jackpotTx.status = TxStatus.FAILED;
     } else {
       jackpotTx.retryCount++;

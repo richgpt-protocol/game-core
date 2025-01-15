@@ -13,8 +13,6 @@ const stage3RevivalStartTime: Date = new Date('2025-01-19T00:00:00Z'); // in UTC
 const stage3RevivalEndTime: Date = new Date('2025-01-25T23:59:59Z'); // in UTC
 const stage3RevivalAmountRequired: number = 100; // 100 means 100 USDT/GameUSD
 
-// for example,
-
 export type SQUID_GAME_REVIVAL = {
   startTime: Date;
   endTime: Date;

@@ -7,6 +7,7 @@ export enum WalletTxType {
   INTERNAL_TRANSFER = 'INTERNAL_TRANSFER',
   CAMPAIGN = 'CAMPAIGN',
   GAME_TRANSACTION = 'GAME_TRANSACTION',
+  CLAIM_JACKPOT = 'CLAIM_JACKPOT',
 }
 
 export enum ReferralTxType {
