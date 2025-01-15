@@ -560,7 +560,7 @@ export class ClaimService implements OnModuleInit {
 
     const allWalletTxs = [...walletTxs, ...creditWalletTxs];
 
-    let betOrders: BetOrder[] = [];
+    const betOrders: BetOrder[] = [];
     for (const walletTx of allWalletTxs) {
       const _betOrders = await this.betOrderRepository
         .createQueryBuilder('betOrder')
@@ -579,7 +579,14 @@ export class ClaimService implements OnModuleInit {
         })
         .getMany();
 
-      betOrders = [...betOrders, ..._betOrders];
+      // if a betOrder contains both walletTxs and creditWalletTxs,
+      // there will be two same betOrder(with the same id) in allWalletTxs
+      // below filter out the duplicate betOrders
+      for (const _betOrder of _betOrders) {
+        if (!betOrders.some((betOrder) => betOrder.id === _betOrder.id)) {
+          betOrders.push(_betOrder);
+        }
+      }
     }
 
     return {
