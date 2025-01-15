@@ -409,21 +409,27 @@ export class GameService implements OnModuleInit {
           .getMany();
         // there might be more than 1 betOrder that numberPair matched
         for (const betOrder of betOrders) {
-          betOrder.availableClaim = true;
-          await queryRunner.manager.save(betOrder);
-
           try {
             const { bigForecastWinAmount, smallForecastWinAmount } =
               this.claimService.calculateWinningAmount(betOrder, drawResult);
             const totalAmount =
               Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
+            if (totalAmount > 0) {
+              betOrder.availableClaim = true;
+              await queryRunner.manager.save(betOrder);
 
-            const jobId = `processWinReferralBonus_${betOrder.id}`;
-            await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
-              prizeAmount: totalAmount,
-              betOrderId: betOrder.id,
-              queueType: QueueType.WINNING_REFERRAL_BONUS,
-            });
+              const jobId = `processWinReferralBonus_${betOrder.id}`;
+              await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
+                prizeAmount: totalAmount,
+                betOrderId: betOrder.id,
+                queueType: QueueType.WINNING_REFERRAL_BONUS,
+              });
+            } else {
+              // totalAmount === 0 means, although the betOrder.numberPair matched the drawResult.numberPair,
+              // but only betOrder.smallForecastAmount > 0 and smallForecastWinAmount
+              // due to the drawResult.prizeCategory is not first, second or third
+              // (special & consolation no reward for small forecast)
+            }
           } catch (error) {
             this.logger.error('Error in processWinReferralBonus', error);
           }
