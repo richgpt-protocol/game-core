@@ -29,7 +29,8 @@ export class WalletTx {
   id: number;
 
   @Column({
-    comment: 'DEPOSIT, PLAY, CLAIM, REDEEM, REFERRAL, INTERNAL_TRANSFER',
+    comment:
+      'DEPOSIT, PLAY, CLAIM, REDEEM, REFERRAL, INTERNAL_TRANSFER, CAMPAIGN, GAME_TRANSACTION, CLAIM_JACKPOT',
   })
   txType:
     | WalletTxType.DEPOSIT
@@ -39,7 +40,8 @@ export class WalletTx {
     | WalletTxType.REFERRAL
     | WalletTxType.INTERNAL_TRANSFER
     | WalletTxType.CAMPAIGN
-    | WalletTxType.GAME_TRANSACTION;
+    | WalletTxType.GAME_TRANSACTION
+    | WalletTxType.CLAIM_JACKPOT;
 
   @Column({
     type: 'decimal',

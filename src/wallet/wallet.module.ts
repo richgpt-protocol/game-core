@@ -44,6 +44,8 @@ import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participant.entity';
 import { SquidGameRevival } from 'src/campaign/entities/squidGame.revival.entity';
 import { HttpModule } from '@nestjs/axios';
+import { ClaimJackpotDetail } from './entities/claim-jackpot-detail.entity';
+import { Jackpot } from 'src/game/entities/jackpot.entity';
 
 @Module({
   imports: [
@@ -71,6 +73,8 @@ import { HttpModule } from '@nestjs/axios';
       Campaign,
       SquidGameParticipant,
       SquidGameRevival,
+      ClaimJackpotDetail,
+      Jackpot,
     ]),
     PermissionModule,
     SharedModule,

@@ -164,9 +164,14 @@ export class CampaignController {
         await this.campaignService.getSquidGameParticipantRevivalData(
           req.user.userId,
         );
+      const currentStage =
+        await this.campaignService.getSquidGameRevivalStage();
       return {
         statusCode: HttpStatus.OK,
-        data: data,
+        data: {
+          currentStage: currentStage,
+          amountRequiredToCurrentStage: data.amountRequiredToCurrentStage,
+        },
         message: 'get user squid game revival data success',
       };
     } catch (error) {
