@@ -8,6 +8,7 @@ import { AdminNotificationService } from './admin-notification.service';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { UserStatus } from '../enum/status.enum';
 import axios from 'axios';
+import { ChatbotTelegram } from 'src/chatbot/chatbot.telegram';
 
 @Injectable()
 export class TelegramService {
@@ -15,12 +16,14 @@ export class TelegramService {
   fuyoBot: TelegramBot;
   telegramOTPBotUserName: string;
   fuyoBotWebhookSecret: string;
+  isUserRegisteredInFuyoCache: boolean = false;
 
   constructor(
     private readonly configService: ConfigService,
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private adminNotificationService: AdminNotificationService,
+    private chatbotTelegram: ChatbotTelegram,
   ) {
     const telegramOTPBotToken = this.configService.get(
       'TELEGRAM_OTP_BOT_TOKEN',
@@ -42,6 +45,14 @@ export class TelegramService {
     });
 
     this.fuyoBot.onText(/\/start/, (msg) => this.handleStartFuyoBot(msg));
+    this.fuyoBot.on('callback_query', async (callbackQuery) => {
+      if (callbackQuery.data === 'chat_with_ai') {
+        await this.handleChatWithAIButton(callbackQuery);
+      }
+    });
+    this.fuyoBot.on('message', async (msg) => {
+      await this.handleChatWithAIMessage(msg);
+    });
   }
 
   private handleStartFuyoBot(msg) {
@@ -62,6 +73,12 @@ export class TelegramService {
             {
               text: '📖 Win a Share of 50k USDT',
               url: 'https://medium.com/@fuyoapp/fuyo-beta-mainnet-launch-the-4d-lottery-game-you-didnt-know-you-needed-until-now-50-000-usdt-60f10d4dad64',
+            },
+          ],
+          [
+            {
+              text: '🗣Chat with Professor Fuyo',
+              callback_data: 'chat_with_ai',
             },
           ],
         ],
@@ -258,5 +275,41 @@ export class TelegramService {
         'APP_NAME',
       )} user registration.`,
     );
+  }
+
+  private async handleChatWithAIButton(callbackQuery) {
+    // console.log('callbackQuery', callbackQuery);
+    const tgId = callbackQuery.from.id;
+    // TODO: check if user is registered in FUYO
+    // TODO: if not, send message and url to user to register in FUYO
+    this.isUserRegisteredInFuyoCache = true;
+    return await this.fuyoBot.sendMessage(
+      callbackQuery.message.chat.id,
+      'You had registered in FUYO, you can start chatting with Professor Fuyo now.',
+    );
+  }
+
+  private async handleChatWithAIMessage(msg) {
+    const user = await this.userRepository.findOne({
+      where: { tgId: msg.from.id },
+    });
+
+    if (!this.isUserRegisteredInFuyoCache) {
+      return;
+      /*
+        comment above return and uncomment below code will let user to chat directly
+        without need to click 'Chat with Professor Fuyo' button
+        if user is already registered in Fuyo app
+      */
+      //   if (!user) return;
+      //   this.isUserRegisteredInFuyoCache = true;
+    }
+
+    await this.chatbotTelegram.handleChatWithAIMessage({
+      fuyoBot: this.fuyoBot,
+      message: msg.text,
+      userId: user.id,
+      chatId: msg.chat.id,
+    });
   }
 }
