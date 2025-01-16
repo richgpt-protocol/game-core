@@ -17,11 +17,13 @@ import { GasService } from './services/gas.service';
 import { ReloadTx } from 'src/wallet/entities/reload-tx.entity';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { User } from 'src/user/entities/user.entity';
+import { ChatbotModule } from 'src/chatbot/chatbot.module';
 
 @Module({
   imports: [
     ConfigModule,
     HttpModule,
+    ChatbotModule,
     TypeOrmModule.forFeature([
       User,
       EmailLogs,

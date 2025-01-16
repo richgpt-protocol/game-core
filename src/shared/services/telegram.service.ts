@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from 'src/config/config.service';
 import { User } from 'src/user/entities/user.entity';
@@ -8,19 +8,23 @@ import { AdminNotificationService } from './admin-notification.service';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { UserStatus } from '../enum/status.enum';
 import axios from 'axios';
+import { ChatbotTelegram } from 'src/chatbot/chatbot.telegram';
 
 @Injectable()
 export class TelegramService {
+  private readonly logger = new Logger(TelegramService.name);
   telegramOTPBot: Telegraf;
   fuyoBot: TelegramBot;
   telegramOTPBotUserName: string;
   fuyoBotWebhookSecret: string;
+  isUserRegisteredInFuyoCache: boolean = false;
 
   constructor(
     private readonly configService: ConfigService,
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private adminNotificationService: AdminNotificationService,
+    private chatbotTelegram: ChatbotTelegram,
   ) {
     const telegramOTPBotToken = this.configService.get(
       'TELEGRAM_OTP_BOT_TOKEN',
@@ -42,13 +46,20 @@ export class TelegramService {
     });
 
     this.fuyoBot.onText(/\/start/, (msg) => this.handleStartFuyoBot(msg));
+    this.fuyoBot.on('callback_query', async (callbackQuery) => {
+      if (callbackQuery.data === 'chat_with_ai') {
+        await this.handleChatWithAIButton(callbackQuery);
+      }
+    });
+    this.fuyoBot.on('message', async (msg) => {
+      await this.handleChatWithAIMessage(msg);
+    });
   }
 
   private handleStartFuyoBot(msg) {
     const senderId = msg.from?.id || 0;
     const chatId = msg.chat.id;
-    const photoUrl =
-      'https://storage.googleapis.com/fuyo-assets/photo_2025-01-03%2018.33.32.jpeg';
+    const photoUrl = 'https://storage.googleapis.com/fuyo-assets/IMG_2883.jpg';
 
     // Define the inline keyboard
     const inlineKeyboard = {
@@ -64,13 +75,25 @@ export class TelegramService {
               url: 'https://medium.com/@fuyoapp/fuyo-beta-mainnet-launch-the-4d-lottery-game-you-didnt-know-you-needed-until-now-50-000-usdt-60f10d4dad64',
             },
           ],
+          [
+            {
+              text: '🍀 Chat w/ Fuyo AI to Get My Lucky Number',
+              callback_data: 'chat_with_ai',
+            },
+          ],
+          [
+            {
+              text: '📖 Learn How Fuyo AI Works',
+              url: 'https://docs.fuyo.lol/',
+            },
+          ],
         ],
       },
     };
 
     this.fuyoBot.sendPhoto(chatId, photoUrl, {
       caption:
-        '<b>🔥 1 BTC. 1 Winner. Will it be YOU? 🔥</b> \n\n🏆 4 Stage campaign.\n💀 Last Man Standing.\n💸 Win 1 $BTC.\n\nJoin #FuyoSquidGame 🦑\n\n<b>Fuyo is revolutionising the lottery gaming with blockchain, AI & ChatGPT!</b>\n\n🤑 Play 4D bet for 6500x win!\n🚀 Gain XP = future $FUYO airdrop\n\nGet rich. #GetFuyo.',
+        '<b>Welcome to Fuyo AI - Your Personal AI Agent for GambleFi!🤖💰</b>\n\n<b>🎰Bet smarter and win bigger!</b>\n\n<b>💰Earn XP for $FUYO airdrops!</b>\n\n<b>🔥Double chance of winning - 4D lottery with up to 6500x returns and seasonal Jackpots!</b>\n\n<b>Get rich. #GetFuyoAI!🤑</b>\n\n<b>👇Tap a button to get started:</b>',
       parse_mode: 'HTML',
       ...inlineKeyboard,
     });
@@ -92,12 +115,12 @@ export class TelegramService {
           },
         },
       );
-      console.log('Response:', response.data);
+      this.logger.log('Response:', response.data);
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
-        console.error('Error response:', error.response.data);
+        this.logger.error('Error response:', error.response.data);
       } else {
-        console.error('Error message:', (error as any).message);
+        this.logger.error('Error message:', (error as any).message);
       }
     }
   }
@@ -187,7 +210,7 @@ export class TelegramService {
         );
       }
     } catch (error) {
-      console.log('error', error);
+      this.logger.error('error', error);
       this.adminNotificationService.setAdminNotification(
         `Error in telegram bot: ${error}`,
         'telegramBotError',
@@ -244,7 +267,13 @@ export class TelegramService {
       // user.phoneNumber != contact.phone_number
       phone != tgPhone
     ) {
-      console.log('Invalid Data: ', user, id, username, contact.phone_number);
+      this.logger.log(
+        'Invalid Data: ',
+        user,
+        id,
+        username,
+        contact.phone_number,
+      );
       user.tgUsername = null;
       user.tgId = null;
       await this.userRepository.save(user);
@@ -258,5 +287,64 @@ export class TelegramService {
         'APP_NAME',
       )} user registration.`,
     );
+  }
+
+  private async handleChatWithAIButton(
+    callbackQuery: TelegramBot.CallbackQuery,
+  ) {
+    const tgId = callbackQuery.from.id;
+
+    const user = await this.userRepository.findOne({
+      where: { tgId: tgId.toString() },
+    });
+    if (!user) {
+      const tgUserName = callbackQuery.message.chat.first_name
+        ? callbackQuery.message.chat.first_name
+        : callbackQuery.message.chat.username
+          ? callbackQuery.message.chat.username
+          : 'Lucky Seeker';
+      return await this.fuyoBot.sendMessage(
+        callbackQuery.message.chat.id,
+        `💸 WANT TO MAKE MONEY? 💸
+
+Hi ${tgUserName}! Ready to win big with <b>Fuyo AI</b>? 🏆
+
+<b>Chat with our AI</b> to predict your lucky 4D number. 🔥
+
+🔥 Start making real money today! 👉 https://app.fuyo.lol/
+`,
+        { parse_mode: 'HTML' },
+      );
+    }
+
+    this.isUserRegisteredInFuyoCache = true;
+    return await this.fuyoBot.sendMessage(
+      callbackQuery.message.chat.id,
+      'You had registered in FUYO, you can start chatting with Fuyo AI now.',
+    );
+  }
+
+  private async handleChatWithAIMessage(msg) {
+    const user = await this.userRepository.findOne({
+      where: { tgId: msg.from.id },
+    });
+
+    if (!this.isUserRegisteredInFuyoCache) {
+      return;
+      /*
+        comment above return and uncomment below code will let user to chat directly
+        without need to click 'Chat with Professor Fuyo' button
+        if user is already registered in Fuyo app
+      */
+      //   if (!user) return;
+      //   this.isUserRegisteredInFuyoCache = true;
+    }
+
+    await this.chatbotTelegram.handleChatWithAIMessage({
+      fuyoBot: this.fuyoBot,
+      message: msg.text,
+      userId: user.id,
+      chatId: msg.chat.id,
+    });
   }
 }
