@@ -320,7 +320,7 @@ Hi ${tgUserName}! Ready to win big with <b>Fuyo AI</b>? 🏆
     this.isUserRegisteredInFuyoCache = true;
     return await this.fuyoBot.sendMessage(
       callbackQuery.message.chat.id,
-      'You had registered in FUYO, you can start chatting with Fuyo AI now.',
+      `Hey! 👋 I’m your FUYO AI buddy. Got questions about 4D draws, results, or just wanna chat about lucky numbers? Let’s talk—I’m here for you! 🍀`,
     );
   }
 
