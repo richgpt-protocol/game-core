@@ -311,7 +311,7 @@ Hi ${tgUserName}! Ready to win big with <b>Fuyo AI</b>? 🏆
 
 <b>Chat with our AI</b> to predict your lucky 4D number. 🔥
 
-🔥 Start making real money today! 👉 https://app.fuyo.lol/
+🔥 Start making real money today! 👉 https://t.me/fuyo_game_bot/fuyo_game
 `,
         { parse_mode: 'HTML' },
       );
