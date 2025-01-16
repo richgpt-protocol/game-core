@@ -9,7 +9,7 @@ import { ChatLog } from './entities/chatLog.entity';
 import { Repository } from 'typeorm';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
-import { UserService } from 'src/user/user.service';
+// import { UserService } from 'src/user/user.service';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { PointTxType } from 'src/shared/enum/txType.enum';
 import axios from 'axios';
@@ -42,7 +42,7 @@ export class ChatbotService {
     private userWalletRepository: Repository<UserWallet>,
     @InjectRepository(PointTx)
     private pointTxRepository: Repository<PointTx>,
-    private userService: UserService,
+    // private userService: UserService,
     private configService: ConfigService,
   ) {}
 
@@ -202,8 +202,10 @@ Today date: ${new Date().toDateString()}.`;
     // add assistantMessage into messages
     messages.push(assistantMessage);
 
-    let replies: Array<{ type: 'text' | 'image' | 'speech'; content: string }> =
-      [];
+    const replies: Array<{
+      type: 'text' | 'image' | 'speech';
+      content: string;
+    }> = [];
     const toolCalls = assistantMessage.tool_calls;
     if (toolCalls) {
       // this message is to call functions
@@ -228,6 +230,15 @@ Today date: ${new Date().toDateString()}.`;
           functionResponse = await functionToCall();
         }
 
+        messages.push({
+          tool_call_id: toolCall.id,
+          role: 'tool',
+          content:
+            functionName === 'getImage'
+              ? functionArgs.keyword
+              : JSON.stringify(functionResponse),
+        });
+
         if (functionName === 'getImage') {
           // functionResponse is image in base64, save into database
           await this.chatLogRepository.save(
@@ -237,33 +248,21 @@ Today date: ${new Date().toDateString()}.`;
               content: functionResponse,
             }),
           );
-          // and add into messages
-          // first message is responding to tool_calls, which is a compulsory for now
-          messages.push({
-            tool_call_id: toolCall.id,
-            role: 'tool',
-            content: '', // should be image in base64 but will throw error because too large to process
-          });
-          // second message
-          // here treat as user ask bot what is in the image
-          messages.push({
-            role: 'user',
-            content: [
-              {
-                type: 'image_url',
-                image_url: { url: `data:image/png;base64,${functionResponse}` },
-              },
-            ],
-          });
-        } else {
-          // function response is object, add into messages
-          // bot will create reply based on the object
-          messages.push({
-            tool_call_id: toolCall.id,
-            role: 'tool',
-            content: JSON.stringify(functionResponse),
-          });
         }
+      }
+
+      const imageResponse = replies.find((r) => r.type === 'image')?.content;
+      if (imageResponse) {
+        // here treat as user ask bot what is in the image
+        messages.push({
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: `data:image/png;base64,${imageResponse}` },
+            },
+          ],
+        });
       }
 
       // submit messages with functionResponse to chatCompletion
@@ -304,17 +303,19 @@ Today date: ${new Date().toDateString()}.`;
     }
 
     // convert assistant reply into speech
-    const speech = await openai.audio.speech.create({
-      model: 'tts-1',
-      voice: 'nova',
-      input: replies[replies.length - 1].content,
-      speed: 1,
-    });
-    const speechInBuffer = Buffer.from(await speech.arrayBuffer());
-    replies.push({
-      type: 'speech',
-      content: speechInBuffer.toString('base64'),
-    });
+    if (payload.source === 'fuyoapp') {
+      const speech = await openai.audio.speech.create({
+        model: 'tts-1',
+        voice: 'nova',
+        input: replies[replies.length - 1].content,
+        speed: 1,
+      });
+      const speechInBuffer = Buffer.from(await speech.arrayBuffer());
+      replies.push({
+        type: 'speech',
+        content: speechInBuffer.toString('base64'),
+      });
+    }
 
     // 3 conversation daily get xp
     // loop backward and check all the chats that over 00:00 UTC today
@@ -339,10 +340,10 @@ Today date: ${new Date().toDateString()}.`;
     if (userMessageCount === 2 && assistantMessageCount >= 2) {
       const userWallet = await this.userWalletRepository.findOneBy({ userId });
 
-      const lastPointTx = await this.pointTxRepository.findOne({
-        where: { walletId: userWallet.id },
-        order: { id: 'DESC' },
-      });
+      // const lastPointTx = await this.pointTxRepository.findOne({
+      //   where: { walletId: userWallet.id },
+      //   order: { id: 'DESC' },
+      // });
 
       const pointAmount = 10;
       const pointTx = this.pointTxRepository.create({
@@ -358,13 +359,13 @@ Today date: ${new Date().toDateString()}.`;
       userWallet.pointBalance = Number(userWallet.pointBalance) + pointAmount;
       await this.userWalletRepository.save(userWallet);
 
-      // inform user
-      await this.userService.setUserNotification(userWallet.id, {
-        type: 'getXpNotification',
-        title: 'XP Reward Get',
-        message: `You get ${pointAmount} XP reward from daily conversation with Professor Fuyo.`,
-        walletTxId: null,
-      });
+      // // inform user
+      // await this.userService.setUserNotification(userWallet.id, {
+      //   type: 'getXpNotification',
+      //   title: 'XP Reward Get',
+      //   message: `You get ${pointAmount} XP reward from daily conversation with Professor Fuyo.`,
+      //   walletTxId: null,
+      // });
     }
 
     return replies;
@@ -508,14 +509,13 @@ Today date: ${new Date().toDateString()}.`;
       },
     );
     const results = res.data.results;
-    let titleAndDescription = results.map((result: any) => {
+    const titleAndDescription = results.map((result: any) => {
       return {
         title: result.title,
         description: result.description,
         date: result.page_age,
       };
     });
-    console.log('titleAndDescription:', titleAndDescription);
     return JSON.stringify(titleAndDescription);
   }
 
