@@ -10,8 +10,9 @@ import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { Notification } from 'src/notification/entities/notification.entity';
 import { Admin } from 'src/admin/entities/admin.entity';
-import { UserModule } from 'src/user/user.module';
+// import { UserModule } from 'src/user/user.module';
 import { ConfigService } from 'src/config/config.service';
+import { ChatbotTelegram } from './chatbot.telegram';
 
 @Module({
   imports: [
@@ -24,11 +25,11 @@ import { ConfigService } from 'src/config/config.service';
       Admin,
     ]),
     PermissionModule,
-    UserModule,
-    CacheModule.register()
+    // UserModule,
+    CacheModule.register(),
   ],
-  providers: [ChatbotService, ConfigService],
+  providers: [ChatbotService, ConfigService, ChatbotTelegram],
   controllers: [ChatbotController],
-  exports: [],
+  exports: [ChatbotService, ChatbotTelegram],
 })
 export class ChatbotModule {}

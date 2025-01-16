@@ -608,25 +608,26 @@ export class CampaignService {
 
       // check if user meet criteria for next/latest stage
       let userStageToUpdate = 0;
-      if (
-        currentRevivalStage === 3 &&
-        totalAmountPaid >=
-          squidGameData.stage1RevivalData.amountRequired +
-            squidGameData.stage2RevivalData.amountRequired +
-            squidGameData.stage3RevivalData.amountRequired
-      ) {
-        userStageToUpdate = 3;
-      } else if (
-        currentRevivalStage === 2 &&
-        totalAmountPaid >=
-          squidGameData.stage1RevivalData.amountRequired +
-            squidGameData.stage2RevivalData.amountRequired
-      ) {
-        userStageToUpdate = 2;
-      } else if (
-        currentRevivalStage === 1 &&
-        totalAmountPaid >= squidGameData.stage1RevivalData.amountRequired
-      ) {
+      const stage1Amount = squidGameData.stage1RevivalData.amountRequired;
+      const stage2Amount = squidGameData.stage2RevivalData.amountRequired;
+      const stage3Amount = squidGameData.stage3RevivalData.amountRequired;
+
+      // User can progress up to the current revival stage
+      if (currentRevivalStage === 3) {
+        if (totalAmountPaid >= stage1Amount + stage2Amount + stage3Amount) {
+          userStageToUpdate = 3;
+        } else if (totalAmountPaid >= stage1Amount + stage2Amount) {
+          userStageToUpdate = 2;
+        } else if (totalAmountPaid >= stage1Amount) {
+          userStageToUpdate = 1;
+        }
+      } else if (currentRevivalStage === 2) {
+        if (totalAmountPaid >= stage1Amount + stage2Amount) {
+          userStageToUpdate = 2;
+        } else if (totalAmountPaid >= stage1Amount) {
+          userStageToUpdate = 1;
+        }
+      } else if (currentRevivalStage === 1 && totalAmountPaid >= stage1Amount) {
         userStageToUpdate = 1;
       }
 
