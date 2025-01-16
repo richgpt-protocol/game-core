@@ -8,5 +8,6 @@ export class SendMessageDto {
   message: string;
 
   @ApiProperty()
+  @IsString()
   source: 'fuyoapp' | 'telegram';
 }
