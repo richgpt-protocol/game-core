@@ -17,7 +17,6 @@ export class TelegramService {
   fuyoBot: TelegramBot;
   telegramOTPBotUserName: string;
   fuyoBotWebhookSecret: string;
-  isUserRegisteredInFuyoCache: boolean = false;
 
   constructor(
     private readonly configService: ConfigService,
@@ -52,6 +51,8 @@ export class TelegramService {
       }
     });
     this.fuyoBot.on('message', async (msg) => {
+      if (msg.text && msg.text.startsWith('/')) return;
+
       await this.handleChatWithAIMessage(msg);
     });
   }
@@ -306,7 +307,6 @@ Hi ${tgUserName}! Ready to win big with <b>Fuyo AI</b>? 🏆
       );
     }
 
-    this.isUserRegisteredInFuyoCache = true;
     return await this.fuyoBot.sendMessage(
       callbackQuery.message.chat.id,
       `Hey! 👋 I’m your FUYO AI buddy. Got questions about 4D draws, results, or just wanna chat about lucky numbers? Let’s talk—I’m here for you! 🍀`,
@@ -317,19 +317,8 @@ Hi ${tgUserName}! Ready to win big with <b>Fuyo AI</b>? 🏆
     const user = await this.userRepository.findOne({
       where: { tgId: msg.from.id },
     });
+    if (!user) return; // not telegram registered user
 
-    if (!this.isUserRegisteredInFuyoCache) {
-      return;
-      /*
-        comment above return and uncomment below code will let user to chat directly
-        without need to click 'Chat with Professor Fuyo' button
-        if user is already registered in Fuyo app
-      */
-      //   if (!user) return;
-      //   this.isUserRegisteredInFuyoCache = true;
-    }
-
-    // temporary solution
     try {
       await this.chatbotTelegram.handleChatWithAIMessage({
         fuyoBot: this.fuyoBot,
