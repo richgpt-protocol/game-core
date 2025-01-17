@@ -329,11 +329,19 @@ Hi ${tgUserName}! Ready to win big with <b>Fuyo AI</b>? 🏆
       //   this.isUserRegisteredInFuyoCache = true;
     }
 
-    await this.chatbotTelegram.handleChatWithAIMessage({
-      fuyoBot: this.fuyoBot,
-      message: msg.text,
-      userId: user.id,
-      chatId: msg.chat.id,
-    });
+    // temporary solution
+    try {
+      await this.chatbotTelegram.handleChatWithAIMessage({
+        fuyoBot: this.fuyoBot,
+        message: msg.text,
+        userId: user.id,
+        chatId: msg.chat.id,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Error in telegram.service.handleChatWithAIMessage:',
+        error,
+      );
+    }
   }
 }
