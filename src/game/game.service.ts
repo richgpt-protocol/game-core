@@ -49,6 +49,7 @@ import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { projectName, endTime } from 'src/database/seeds/jackpot.seed';
 import { Jackpot } from './entities/jackpot.entity';
+import { BetService } from './bet.service';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -82,6 +83,7 @@ export class GameService implements OnModuleInit {
     private settingRepository: Repository<Setting>,
     @InjectRepository(Jackpot)
     private jackpotRepository: Repository<Jackpot>,
+    private betService: BetService,
   ) {}
 
   // process of closing bet for current epoch, set draw result, announce draw result, set available claim and process referral bonus
@@ -281,6 +283,18 @@ export class GameService implements OnModuleInit {
         for (const data of referralQueueData) {
           const jobId = `handleBetReferral-${data.gameUsdTxId}`;
           await this.queueService.addJob(QueueName.BET, jobId, data);
+        }
+
+        // process jackpot
+        for (const betOrder of betOrders) {
+          await this.betService.processJackpot(
+            betOrder.walletTx.userWallet,
+            betOrder.gameUsdTx,
+            // here passing independent betOrder as array,
+            // because queried betOrders might contains betOrder created by different user
+            [betOrder],
+            queryRunner,
+          );
         }
       } else {
         // tx failed
