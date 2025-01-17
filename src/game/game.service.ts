@@ -315,11 +315,13 @@ export class GameService implements OnModuleInit {
         );
       }
     } catch (err) {
+      this.logger.error('Error in game.service.setBetClose:', err);
       // inform admin
       await this.adminNotificationService.setAdminNotification(
         `Error occur in game.service.setBetClose, error: ${err}`,
         'ExecutionError',
         'Execution Error in setBetClose()',
+        true,
         true,
       );
     } finally {
