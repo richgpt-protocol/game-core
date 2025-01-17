@@ -1539,7 +1539,7 @@ export class BetService implements OnModuleInit {
           // create jackpotTx record with status pending
           const jackpotTx = new JackpotTx();
           jackpotTx.status = TxStatus.PENDING;
-          jackpotTx.walletTxId = gameUsdTx.walletTxs[0].id;
+          jackpotTx.walletTxId = betOrder.walletTxId;
           jackpotTx.jackpotId = jackpot.id;
           await queryRunner.manager.save(jackpotTx);
           await queryRunner.commitTransaction();
