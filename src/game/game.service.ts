@@ -287,6 +287,9 @@ export class GameService implements OnModuleInit {
 
         // process jackpot
         for (const betOrder of betOrders) {
+          // only process jackpot for walletTx(use real USDT to bet)
+          if (!betOrder.walletTx) continue;
+
           await this.betService.processJackpot(
             betOrder.walletTx.userWallet,
             betOrder.gameUsdTx,
