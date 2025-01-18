@@ -405,7 +405,7 @@ export class InternalTransferService {
           await this.fcmService.sendUserFirebase_TelegramNotification(
             receiverUserWallet.userId,
             'Internal Transfer Received',
-            `You have received ${senderWalletTx.txAmount} USDT from ${senderWalletTx.id}.`,
+            `You have received ${senderWalletTx.txAmount} USDT from ${senderWalletTx.userWallet.userId}.`,
           );
 
           this.eventEmitter.emit(

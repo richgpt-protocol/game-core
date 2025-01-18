@@ -361,23 +361,12 @@ Today date: ${new Date().toDateString()}.`;
 
       // inform user
 
-      await this.userService.setUserNotification(
-        userWallet.id,
-        {
-          type: 'getXpNotification',
-          title: 'XP Reward Get',
-          message: 'You get 1 xp reward from daily conversation with Professor Rich.',
-          walletTxId: null,
-        }
-      );
-
-      await this.userService.setUserNotification(userWallet.id, {
-        type: 'getXpNotification',
-        title: 'XP Reward Get',
-        message: `You get ${pointAmount} XP reward from daily conversation with Professor Fuyo.`,
-        walletTxId: null,
-      });
-
+      // await this.userService.setUserNotification(userWallet.id, {
+      //   type: 'getXpNotification',
+      //   title: 'XP Reward Get',
+      //   message: `You get ${pointAmount} XP reward from daily conversation with Professor Fuyo.`,
+      //   walletTxId: null,
+      // });
     }
 
     return replies;
