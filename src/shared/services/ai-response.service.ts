@@ -2,7 +2,7 @@ import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { MongoClient } from 'mongodb';
 
-var similarity = require('compute-cosine-similarity'); // pure js lib, use import will cause error
+var similarity = require('compute-cosine-similarity');
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { Repository } from 'typeorm';
@@ -17,22 +17,23 @@ import * as dotenv from 'dotenv';
 import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 
 dotenv.config();
-
-const client = new MongoClient(process.env.MONGODB_URI); // for number recommendation based on input
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const model = 'gpt-4o-mini';
 
 @Injectable()
 export class AiResponseService {
+  private cachedAiMessage: string | null = null;
   constructor(
     @InjectRepository(ChatLog)
     private chatLogRepository: Repository<ChatLog>,
   ) {}
 
+  private contentGenerateInactiveUserNotification(): string {
+    return `Help me create a short, clear, polite, and funny message with emojis to encourage inactive users to return and join a bet.`;
+  }
 
-
-  async generateInactiveUserNotification(userId: number, content: string): Promise<string> {
-    const initialContent = content;
+  async generateInactiveUserNotification(): Promise<string> {
+    const initialContent = this.contentGenerateInactiveUserNotification();
 
     const messages: ChatCompletionMessageParam[] = [
       { role: 'system', content: initialContent },
@@ -49,24 +50,16 @@ export class AiResponseService {
 
     const assistantMessage = completion.choices[0].message.content;
 
-    await this.chatLogRepository.save(
-      this.chatLogRepository.create({
-        userId,
-        role: 'system',
-        content: initialContent,
-      }),
-    );
+    return assistantMessage;
+  }
 
+  async saveAiMessageToChatLog(userId: number, message: string): Promise<void> {
     await this.chatLogRepository.save(
       this.chatLogRepository.create({
         userId,
         role: 'assistant',
-        content: assistantMessage,
+        content: message,
       }),
     );
-
-    return assistantMessage;
   }
-
-
 }

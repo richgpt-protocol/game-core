@@ -69,7 +69,7 @@ export class GameService implements OnModuleInit {
     @InjectRepository(BetOrder)
     private betOrderRepository: Repository<BetOrder>,
     private fcmService: FCMService,
-    private aiesponseService: AiResponseService,
+    private airesponseService: AiResponseService,
   ) {}
 
   // process of closing bet for current epoch, set draw result, announce draw result, set available claim and process referral bonus
@@ -1029,8 +1029,11 @@ export class GameService implements OnModuleInit {
       const betOrders = await queryRunner.manager
         .createQueryBuilder(BetOrder, 'betOrder')
         .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
+        .leftJoinAndSelect('creditUserWallet.user', 'creditUser') 
         .where('betOrder.gameId = :gameId', { gameId: currentGame.id })
         .getMany();
 
@@ -1064,36 +1067,34 @@ export class GameService implements OnModuleInit {
       const usersWithBalance = await queryRunner.manager
         .createQueryBuilder(UserWallet, 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
-        .where('userWallet.balance > 0')
         .getMany();
+
+      const aiMessage = await this.airesponseService.generateInactiveUserNotification();
+      const usersToNotify = [];
 
       for (const userWallet of usersWithBalance) {
         const recentPointTx = await queryRunner.manager
           .createQueryBuilder(PointTx, 'pointTx')
           .where('pointTx.walletId = :walletId', { walletId: userWallet.id })
-          .andWhere('pointTx.updatedDate > :threeDaysAgo', { threeDaysAgo })
+          .andWhere('pointTx.createDate > :threeDaysAgo', { threeDaysAgo })
+          .andWhere('pointTx.status = :status', { status: 'S' })
           .getOne();
 
         if (!recentPointTx) {
-          const content =
-            'Help me create a short, clear, polite, and funny message with emojis to encourage inactive users to return and join a bet.';
-          const aiMessage =
-            await this.aiesponseService.generateInactiveUserNotification(
-              userWallet.user.id,
-              content,
-            );
-
-          await this.fcmService.sendUserFirebase_TelegramNotification(
-            userWallet.user.id,
-            'Bet Reminder 🕹️',
-            aiMessage,
-          );
-
-          this.logger.log(
-            `Notification sent to user ID: ${userWallet.user.id}`,
-          );
+          usersToNotify.push(userWallet.user.id);
         }
       }
+
+      for (const userId of usersToNotify) {
+        await this.fcmService.sendUserFirebase_TelegramNotification(
+          userId,
+          'Bet Reminder 🕹️',
+          aiMessage,
+        );
+        await this.airesponseService.saveAiMessageToChatLog(userId, aiMessage);
+        this.logger.log(`Notification sent to user ID: ${userId}`);
+      }
+
     } catch (error) {
       this.logger.error('Error in notifyUsersWithoutBet:', error.message);
     } finally {
