@@ -179,6 +179,7 @@ export class GameService implements OnModuleInit {
         .leftJoinAndSelect('creditTxUserWallet.user', 'creditTxUser')
         .where('betOrder.gameId = :gameId', { gameId: game.id })
         .andWhere('betOrder.isMasked = :isMasked', { isMasked: true })
+        .andWhere('gameUsdTx.maskingTxHash IS NULL')
         .getMany();
 
       if (betOrders.length === 0) return; // no masked betOrder to submit
@@ -286,16 +287,28 @@ export class GameService implements OnModuleInit {
         }
 
         // process jackpot
+        // betOrders may created by multiple users for multiple times(i.e. permutation)
+        const validBetOrdersByTxId: Record<string, BetOrder[]> = {};
         for (const betOrder of betOrders) {
-          // only process jackpot for walletTx(use real USDT to bet)
+          // betOrder without walletTx is not eligible for jackpot(only use credit to bet)
           if (!betOrder.walletTx) continue;
 
+          const txId = betOrder.gameUsdTx.id;
+          if (!validBetOrdersByTxId[txId]) {
+            validBetOrdersByTxId[txId] = [];
+          }
+          validBetOrdersByTxId[txId].push(betOrder);
+        }
+        // convert into array
+        const allValidBetOrders = Object.values(validBetOrdersByTxId);
+        // loop through each group of betOrders(created within same gameUsdTx)
+        for (const validBetOrders of allValidBetOrders) {
+          if (validBetOrders.length === 0) continue; // just in case
+
           await this.betService.processJackpot(
-            betOrder.walletTx.userWallet,
-            betOrder.gameUsdTx,
-            // here passing independent betOrder as array,
-            // because queried betOrders might contains betOrder created by different user
-            [betOrder],
+            validBetOrders[0].walletTx.userWallet,
+            validBetOrders[0].gameUsdTx,
+            validBetOrders,
             queryRunner,
           );
         }
