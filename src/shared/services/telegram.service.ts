@@ -65,28 +65,17 @@ export class TelegramService {
     const inlineKeyboard = {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🎮 Play Now', web_app: { url: 'https://game.fuyo.lol/' } }],
-          [{ text: '📲 Download FUYO', url: 'https://app.fuyo.lol/' }],
-          [{ text: '🐦 Follow us on X', url: 'https://x.com/fuyoapp' }],
+          [{ text: '🤖 Fuyo AI', callback_data: 'chat_with_ai' }],
+          [
+            {
+              text: '🎮 Fuyo TG Game',
+              web_app: { url: 'https://game.fuyo.lol/' },
+            },
+          ],
+          [{ text: '🐦 Follow us on X', url: 'https://x.com/FuyoAI' }],
           [{ text: '💬 Join the Community', url: 'https://t.me/fuyoapp' }],
-          [
-            {
-              text: '📖 Win a Share of 50k USDT',
-              url: 'https://medium.com/@fuyoapp/fuyo-beta-mainnet-launch-the-4d-lottery-game-you-didnt-know-you-needed-until-now-50-000-usdt-60f10d4dad64',
-            },
-          ],
-          [
-            {
-              text: '🍀 Chat w/ Fuyo AI to Get My Lucky Number',
-              callback_data: 'chat_with_ai',
-            },
-          ],
-          [
-            {
-              text: '📖 Learn How Fuyo AI Works',
-              url: 'https://docs.fuyo.lol/',
-            },
-          ],
+          [{ text: '📲 Download Fuyo App', url: 'https://app.fuyo.lol/' }],
+          [{ text: '📖 Learn More', url: 'https://docs.fuyo.lol/' }],
         ],
       },
     };
@@ -340,11 +329,19 @@ Hi ${tgUserName}! Ready to win big with <b>Fuyo AI</b>? 🏆
       //   this.isUserRegisteredInFuyoCache = true;
     }
 
-    await this.chatbotTelegram.handleChatWithAIMessage({
-      fuyoBot: this.fuyoBot,
-      message: msg.text,
-      userId: user.id,
-      chatId: msg.chat.id,
-    });
+    // temporary solution
+    try {
+      await this.chatbotTelegram.handleChatWithAIMessage({
+        fuyoBot: this.fuyoBot,
+        message: msg.text,
+        userId: user.id,
+        chatId: msg.chat.id,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Error in telegram.service.handleChatWithAIMessage:',
+        error,
+      );
+    }
   }
 }
