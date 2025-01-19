@@ -53,6 +53,7 @@ import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { JackpotTx } from './entities/jackpot-tx.entity';
 import { Jackpot } from './entities/jackpot.entity';
 import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participant.entity';
+import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 
 interface SubmitBetJobDTO {
   userWalletId: number;
@@ -98,6 +99,7 @@ export class BetService implements OnModuleInit {
     private readonly queueService: QueueService,
     @InjectRepository(JackpotTx)
     private jackpotTxRepository: Repository<JackpotTx>,
+    private readonly adminNotificationService: AdminNotificationService,
   ) {}
   onModuleInit() {
     // Executed when distributing referral rewards for betting
@@ -1011,73 +1013,8 @@ export class BetService implements OnModuleInit {
         0, // no delay
       );
 
-      // jackpot
-      await queryRunner.startTransaction();
-      // get current jackpot record
-      const currentTime = new Date(Date.now());
-      const jackpot = await queryRunner.manager
-        .createQueryBuilder(Jackpot, 'jackpot')
-        .where('jackpot.startTime <= :currentTime', {
-          currentTime: currentTime,
-        })
-        .andWhere('jackpot.endTime >= :currentTime', {
-          currentTime: currentTime,
-        })
-        .getOne();
-
-      const participant = await queryRunner.manager
-        .createQueryBuilder(SquidGameParticipant, 'participant')
-        .where('participant.userId = :userId', {
-          userId: userWallet.user.id,
-        })
-        .getOne();
-
-      // check if the user is eligible to participate in the jackpot
-      if (
-        (jackpot &&
-          jackpot.projectName === 'FUYO X SQUID GAME - STAGE 2' &&
-          !participant) ||
-        (jackpot.projectName === 'FUYO X SQUID GAME - STAGE 4' &&
-          participant &&
-          participant.lastStage < 2)
-      ) {
-        return;
-      }
-
-      if (
-        jackpot &&
-        Number(gameUsdTx.amount) >= Number(jackpot.minimumBetAmount)
-      ) {
-        // create jackpotTx record with status pending
-        const jackpotTx = new JackpotTx();
-        jackpotTx.status = TxStatus.PENDING;
-        jackpotTx.walletTxId = gameUsdTx.walletTxs[0].id;
-        jackpotTx.jackpotId = jackpot.id;
-        await queryRunner.manager.save(jackpotTx);
-        await queryRunner.commitTransaction();
-
-        // add job to participate jackpot
-        await this.queueService.addDynamicQueueJob(
-          `${QueueName.BET}_${userWallet.walletAddress}`,
-          `participateJackpot-${gameUsdTx.id}`,
-          {
-            jobHandler: this.handleParticipateJackpot.bind(this),
-            failureHandler: this.onParticipateJackpotFailed.bind(this),
-          },
-          {
-            walletAddress: userWallet.walletAddress,
-            uid: userWallet.user.uid,
-            ticketId: gameUsdTx.id,
-            feeTokenAddress: jackpot.feeTokenAddress,
-            feeAmount: ethers
-              .parseEther(jackpot.feeAmount.toString())
-              .toString(),
-            jackpotId: jackpot.id,
-            jackpotTxId: jackpotTx.id,
-            queueType: QueueType.PARTICIPATE_JACKPOT,
-          } as ParticipateJackpotDTO,
-        );
-      }
+      // process jackpot
+      await this.processJackpot(userWallet, gameUsdTx, betOrders, queryRunner);
     } catch (error) {
       this.logger.error(error);
       await queryRunner.rollbackTransaction();
@@ -1551,6 +1488,100 @@ export class BetService implements OnModuleInit {
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
+  }
+
+  async processJackpot(
+    userWallet: UserWallet,
+    gameUsdTx: GameUsdTx,
+    betOrders: BetOrder[],
+    queryRunner: QueryRunner,
+  ) {
+    await queryRunner.startTransaction();
+    try {
+      // get current jackpot record
+      const currentTime = new Date(Date.now());
+      const jackpot = await queryRunner.manager
+        .createQueryBuilder(Jackpot, 'jackpot')
+        .where('jackpot.startTime <= :currentTime', {
+          currentTime: currentTime,
+        })
+        .andWhere('jackpot.endTime >= :currentTime', {
+          currentTime: currentTime,
+        })
+        .getOne();
+
+      const participant = await queryRunner.manager
+        .createQueryBuilder(SquidGameParticipant, 'participant')
+        .where('participant.userId = :userId', {
+          userId: userWallet.user.id,
+        })
+        .getOne();
+
+      // check if the user is eligible to participate in the jackpot
+      if (
+        (jackpot &&
+          jackpot.projectName === 'FUYO X SQUID GAME - STAGE 2' &&
+          !participant) ||
+        (jackpot.projectName === 'FUYO X SQUID GAME - STAGE 4' &&
+          participant &&
+          participant.lastStage < 2)
+      ) {
+        return;
+      }
+
+      // check if any numberPair in betOrders is greater than minimumBetAmount
+      for (const betOrder of betOrders) {
+        if (
+          Number(betOrder.bigForecastAmount) +
+            Number(betOrder.smallForecastAmount) >=
+          Number(jackpot.minimumBetAmount)
+        ) {
+          // create jackpotTx record with status pending
+          const jackpotTx = new JackpotTx();
+          jackpotTx.status = TxStatus.PENDING;
+          jackpotTx.walletTxId = betOrder.walletTxId;
+          jackpotTx.jackpotId = jackpot.id;
+          await queryRunner.manager.save(jackpotTx);
+          await queryRunner.commitTransaction();
+
+          // add job to participate jackpot
+          await this.queueService.addDynamicQueueJob(
+            `${QueueName.BET}_${userWallet.walletAddress}`,
+            `participateJackpot-${gameUsdTx.id}`,
+            {
+              jobHandler: this.handleParticipateJackpot.bind(this),
+              failureHandler: this.onParticipateJackpotFailed.bind(this),
+            },
+            {
+              walletAddress: userWallet.walletAddress,
+              uid: userWallet.user.uid,
+              ticketId: gameUsdTx.id,
+              feeTokenAddress: jackpot.feeTokenAddress,
+              feeAmount: ethers
+                .parseEther(jackpot.feeAmount.toString())
+                .toString(),
+              jackpotId: jackpot.id,
+              jackpotTxId: jackpotTx.id,
+              queueType: QueueType.PARTICIPATE_JACKPOT,
+            } as ParticipateJackpotDTO,
+          );
+          break;
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error in processJackpot', error);
+      await queryRunner.rollbackTransaction();
+      // inform admin
+      await this.adminNotificationService.setAdminNotification(
+        `Error occur in bet.service.processJackpot, error: ${error}`,
+        'TRANSACTION_ROLLBACK',
+        'Transaction Rollback When Process Jackpot',
+        true,
+        true,
+        gameUsdTx.walletTxId,
+      );
+    }
+    // queryRunner release in parent function
   }
 
   async handleParticipateJackpot(job: Job<ParticipateJackpotDTO>) {
