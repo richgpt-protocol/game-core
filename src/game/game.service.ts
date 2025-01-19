@@ -337,19 +337,30 @@ export class GameService implements OnModuleInit {
         .leftJoinAndSelect('userWallet.user', 'user')
         .where('betOrder.gameId = :gameId', { gameId })
         .getMany();
-
-      const message = `🎉 The results for Game ${game.epoch} are out! Check now to see if you're a winner! 🏆`;
-      for (const betOrder of betOrders) {
-        const user = betOrder.walletTx?.userWallet?.user;
-        if (user) {
+        const winners = new Set(winningNumberPairs);
+        for (const betOrder of betOrders) {
+          const user = betOrder.walletTx?.userWallet?.user;
+          if (!user) continue;
+  
+          const isWinner = winners.has(betOrder.numberPair);
+          const message = isWinner
+            ? `🎉 Congratulations! You won in Game ${game.epoch}! 🏆`
+            : `😢 Better luck next time! You didn't win in Game ${game.epoch}.`;
+  
+          const title = isWinner ? 'You Won! 🎊' : 'Game Results 📢';
+  
           await this.fcmService.sendUserFirebase_TelegramNotification(
             user.id,
-            'Game Results Announced 🎊',
+            title,
             message,
           );
-          this.logger.log(`Notification sent to user ID: ${user.id}`);
+  
+          this.logger.log(
+            `Notification sent to user ID: ${user.id}, Status: ${
+              isWinner ? 'WINNER' : 'LOSER'
+            }`,
+          );
         }
-      }
       } else {
         // on-chain tx failed
         game.drawTxStatus = TxStatus.FAILED;
