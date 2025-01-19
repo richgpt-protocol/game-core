@@ -80,7 +80,7 @@ export class BetService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
     private readonly pointService: PointService,
     private readonly userService: UserService,
-    private readonly queueService: QueueService
+    private readonly queueService: QueueService,
   ) {}
   onModuleInit() {
     // Executed when distributing referral rewards for betting
@@ -1164,7 +1164,6 @@ export class BetService implements OnModuleInit {
         message: 'Your Buy has been successfully processed',
         gameUsdTxId: gameUsdTx.id,
       });
-
     } catch (error) {
       this.logger.error(error);
       await queryRunner.rollbackTransaction();
