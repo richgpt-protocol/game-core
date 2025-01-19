@@ -38,6 +38,7 @@ import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { CreditService } from './services/credit.service';
 import { AddCreditBackofficeDto } from './dto/credit.dto';
 import { DataSource } from 'typeorm';
+import { Throttle } from '@nestjs/throttler';
 
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
@@ -167,6 +168,7 @@ export class WalletController {
     }
   }
 
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Secure(null, UserRole.USER)
   @Post('request-redeem')
   @ApiHeader({

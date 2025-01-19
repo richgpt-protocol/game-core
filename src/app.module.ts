@@ -2,7 +2,7 @@ import { Logger, Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UserModule } from './user/user.module';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   I18nModule,
@@ -33,6 +33,7 @@ import { PublicModule } from './public/public.module';
 // import { BullModule } from '@nestjs/bullmq';
 import { QueueModule } from './queue/queue.module';
 import { AppDataSource } from './data-source';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 // import { QueueOptions } from 'bullmq';
 
 @Module({
@@ -92,6 +93,12 @@ import { AppDataSource } from './data-source';
     PointModule,
     PublicModule,
     QueueModule,
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 60,
+      },
+    ]),
   ],
   controllers: [AppController],
   providers: [
@@ -100,6 +107,10 @@ import { AppDataSource } from './data-source';
     {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })
