@@ -359,8 +359,7 @@ Today date: ${new Date().toDateString()}.`;
       userWallet.pointBalance = Number(userWallet.pointBalance) + pointAmount;
       await this.userWalletRepository.save(userWallet);
 
-      // inform user
-
+      // // inform user
       // await this.userService.setUserNotification(userWallet.id, {
       //   type: 'getXpNotification',
       //   title: 'XP Reward Get',

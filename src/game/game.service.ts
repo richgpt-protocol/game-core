@@ -1075,7 +1075,7 @@ export class GameService implements OnModuleInit {
       for (const userWallet of usersWithBalance) {
         const recentPointTx = await queryRunner.manager
           .createQueryBuilder(PointTx, 'pointTx')
-          .where('pointTx.walletId = :walletId', { walletId: userWallet.id })
+          .where('pointTx.walletId = :walletId', { walletId: userWallet.id }) 
           .andWhere('pointTx.createDate > :threeDaysAgo', { threeDaysAgo })
           .andWhere('pointTx.status = :status', { status: 'S' })
           .getOne();
