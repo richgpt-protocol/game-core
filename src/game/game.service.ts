@@ -329,6 +329,27 @@ export class GameService implements OnModuleInit {
         game.drawTxHash = txReceipt.hash;
         await queryRunner.manager.save(game);
         await queryRunner.commitTransaction();
+
+       const betOrders = await queryRunner.manager
+        .createQueryBuilder(BetOrder, 'betOrder')
+        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .where('betOrder.gameId = :gameId', { gameId })
+        .getMany();
+
+      const message = `🎉 The results for Game ${game.epoch} are out! Check now to see if you're a winner! 🏆`;
+      for (const betOrder of betOrders) {
+        const user = betOrder.walletTx?.userWallet?.user;
+        if (user) {
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            user.id,
+            'Game Results Announced 🎊',
+            message,
+          );
+          this.logger.log(`Notification sent to user ID: ${user.id}`);
+        }
+      }
       } else {
         // on-chain tx failed
         game.drawTxStatus = TxStatus.FAILED;
