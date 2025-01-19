@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, DataSource, In, LessThan, Repository } from 'typeorm';
+import { Between, Brackets, DataSource, In, LessThan, Repository } from 'typeorm';
 import { Game } from './entities/game.entity';
 import { DrawResult } from './entities/draw-result.entity';
 import { BetOrder } from './entities/bet-order.entity';
@@ -339,13 +339,25 @@ export class GameService implements OnModuleInit {
         .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
         .leftJoinAndSelect('creditUserWallet.user', 'creditUser') 
         .where('betOrder.gameId = :gameId', { gameId })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('walletTx.status = :status', { status: TxStatus.SUCCESS })
+              .orWhere('creditWalletTx.status = :status', { status: TxStatus.SUCCESS });
+          }),
+        )
         .getMany();
         const winners = new Set(winningNumberPairs);
+        const notifiedUsers = new Set<number>(); 
+        
         for (const betOrder of betOrders) {
           const user = betOrder.walletTx?.userWallet?.user || betOrder.creditWalletTx?.userWallet?.user;
-          if (!user) continue;
-  
+          if (!user) continue; 
+
+          if (notifiedUsers.has(user.id)) continue;
+          notifiedUsers.add(user.id);
+
           const isWinner = winners.has(betOrder.numberPair);
+          
           const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
           const message = isWinner
             ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${game.epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
