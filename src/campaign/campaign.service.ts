@@ -608,9 +608,15 @@ export class CampaignService {
 
       // check if user meet criteria for next/latest stage
       let userStageToUpdate = 0;
-      const stage1Amount = squidGameData.stage1RevivalData.amountRequired;
-      const stage2Amount = squidGameData.stage2RevivalData.amountRequired;
-      const stage3Amount = squidGameData.stage3RevivalData.amountRequired;
+      const stage1Amount = squidGameData.stage1RevivalData
+        ? squidGameData.stage1RevivalData.amountRequired
+        : 0;
+      const stage2Amount = squidGameData.stage2RevivalData
+        ? squidGameData.stage2RevivalData.amountRequired
+        : 0;
+      const stage3Amount = squidGameData.stage3RevivalData
+        ? squidGameData.stage3RevivalData.amountRequired
+        : 0;
 
       // User can progress up to the current revival stage
       if (currentRevivalStage === 3) {
