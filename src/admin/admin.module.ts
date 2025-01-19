@@ -9,13 +9,14 @@ import { SseModule } from './sse/sse.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Admin]), 
+    TypeOrmModule.forFeature([Admin]),
     forwardRef(() => AuditLogModule),
     forwardRef(() => PermissionModule),
     SseModule,
   ],
   providers: [AdminService],
   exports: [AdminService],
+
 
   controllers: [AdminController],
 })
