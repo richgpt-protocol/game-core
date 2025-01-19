@@ -188,6 +188,9 @@ export class WalletController {
     @Body() payload: RedeemDto,
   ): Promise<ResponseVo<any>> {
     try {
+      console.log('request redeem', JSON.stringify(payload));
+      console.log('request redeem', req.user.userId);
+
       const res = await this.withdrawService.requestRedeem(
         Number(req.user.userId),
         payload,
