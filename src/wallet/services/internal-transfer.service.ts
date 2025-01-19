@@ -21,6 +21,7 @@ import { User } from 'src/user/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { WalletTxType } from 'src/shared/enum/txType.enum';
 import { TxStatus } from 'src/shared/enum/status.enum';
+import { FCMService } from 'src/shared/services/fcm.service';
 
 @Injectable()
 export class InternalTransferService {
@@ -42,6 +43,7 @@ export class InternalTransferService {
     private walletService: WalletService,
     private userService: UserService,
     private adminNotificationService: AdminNotificationService,
+    private fcmService: FCMService,
     private configService: ConfigService,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
@@ -389,6 +391,7 @@ export class InternalTransferService {
             walletTxId: senderWalletTx.id,
           });
 
+
           await this.userService.setUserNotification(
             receiverUserWallet.userId,
             {
@@ -397,6 +400,12 @@ export class InternalTransferService {
               message: 'You have received GameUSD',
               walletTxId: receiverWalletTx.id,
             },
+          );
+
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            receiverUserWallet.userId,
+            'Internal Transfer Received',
+            `You have received ${senderWalletTx.txAmount} USDT from ${senderWalletTx.userWallet.userId}.`,
           );
 
           this.eventEmitter.emit(

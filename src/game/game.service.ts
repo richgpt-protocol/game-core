@@ -49,6 +49,9 @@ import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { projectName, endTime } from 'src/database/seeds/jackpot.seed';
 import { Jackpot } from './entities/jackpot.entity';
+import { FCMService } from 'src/shared/services/fcm.service';
+import { AiResponseService } from 'src/shared/services/ai-response.service';
+import { PointTx } from 'src/point/entities/point-tx.entity';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -82,6 +85,8 @@ export class GameService implements OnModuleInit {
     private settingRepository: Repository<Setting>,
     @InjectRepository(Jackpot)
     private jackpotRepository: Repository<Jackpot>,
+    private fcmService: FCMService,
+    private airesponseService: AiResponseService,
   ) {}
 
   // process of closing bet for current epoch, set draw result, announce draw result, set available claim and process referral bonus
@@ -1305,6 +1310,106 @@ export class GameService implements OnModuleInit {
         true,
         true,
       );
+    }
+  }
+
+  @Cron('58 * * * *')
+  async notifyUsersBeforeResult(): Promise<void> {
+    this.logger.log('notifyUsersBeforeResult started');
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      const currentGame = await queryRunner.manager
+        .createQueryBuilder(Game, 'game')
+        .where('game.isClosed = false')
+        .orderBy('game.startDate', 'DESC')
+        .getOne();
+
+      if (!currentGame) {
+        this.logger.warn('No active game found');
+        return;
+      }
+
+      const timeLeft = currentGame.endDate.getTime() - Date.now();
+      if (timeLeft > 60000 || timeLeft <= 0) {
+        return;
+      }
+
+      const betOrders = await queryRunner.manager
+        .createQueryBuilder(BetOrder, 'betOrder')
+        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
+        .where('betOrder.gameId = :gameId', { gameId: currentGame.id })
+        .getMany();
+
+      for (const betOrder of betOrders) {
+        const user = betOrder.walletTx.userWallet.user;
+        const message = `Only 1 minute left until the results are announced! ⏳ Check it out now and see if you're a winner! 🏆`;
+        await this.fcmService.sendUserFirebase_TelegramNotification(
+          user.id,
+          'Result Announcement Reminder 🕒',
+          message,
+        );
+        this.logger.log(`Notification sent to user ID: ${user.id}`);
+      }
+    } catch (error) {
+      this.logger.error('Error in notifyUsersBeforeResult:', error.message);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  @Cron('0 0 0 * * *')
+  async notifyUsersWithoutBet(): Promise<void> {
+    this.logger.log('notifyUsersWithoutBet started');
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+
+      const usersWithBalance = await queryRunner.manager
+        .createQueryBuilder(UserWallet, 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .getMany();
+
+      const aiMessage =
+        await this.airesponseService.generateInactiveUserNotification();
+      const usersToNotify = [];
+
+      for (const userWallet of usersWithBalance) {
+        const recentPointTx = await queryRunner.manager
+          .createQueryBuilder(PointTx, 'pointTx')
+          .where('pointTx.walletId = :walletId', { walletId: userWallet.id })
+          .andWhere('pointTx.createDate > :threeDaysAgo', { threeDaysAgo })
+          .andWhere('pointTx.status = :status', { status: 'S' })
+          .getOne();
+
+        if (!recentPointTx) {
+          usersToNotify.push(userWallet.user.id);
+        }
+      }
+
+      for (const userId of usersToNotify) {
+        await this.fcmService.sendUserFirebase_TelegramNotification(
+          userId,
+          'Bet Reminder 🕹️',
+          aiMessage,
+        );
+        await this.airesponseService.saveAiMessageToChatLog(userId, aiMessage);
+        this.logger.log(`Notification sent to user ID: ${userId}`);
+      }
+    } catch (error) {
+      this.logger.error('Error in notifyUsersWithoutBet:', error.message);
+    } finally {
+      await queryRunner.release();
     }
   }
 }

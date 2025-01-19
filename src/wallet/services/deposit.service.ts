@@ -44,6 +44,7 @@ import { CampaignService } from 'src/campaign/campaign.service';
 import { CreditService } from './credit.service';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
+import { FCMService } from 'src/shared/services/fcm.service';
 
 /**
  * How deposit works
@@ -74,6 +75,7 @@ export class DepositService implements OnModuleInit {
     private queueService: QueueService,
     private campaignService: CampaignService,
     private creditService: CreditService,
+    private fcmService: FCMService,
   ) {}
   onModuleInit() {
     this.queueService.registerHandler(
@@ -945,6 +947,11 @@ export class DepositService implements OnModuleInit {
         message: 'Your Deposit has been successfully processed',
         walletTxId: walletTx.id,
       });
+      await this.fcmService.sendUserFirebase_TelegramNotification(
+        walletTx.userWallet.userId,
+        'Deposit Successful',
+        `You have received ${walletTx.txAmount} USDT in your wallet. Check your app wallet to view your updated balance.`,
+      );
     } catch (error) {
       this.logger.error(
         'handleGameUsdTxHash() error within queryRunner, error:',

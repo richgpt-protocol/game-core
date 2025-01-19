@@ -39,6 +39,7 @@ import { CreditWalletTxType } from 'src/shared/enum/txType.enum';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import axios from 'axios';
 
+import { FCMService } from 'src/shared/services/fcm.service';
 @Injectable()
 export class CreditService {
   private readonly logger = new Logger(CreditService.name);
@@ -62,6 +63,7 @@ export class CreditService {
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
     private readonly queueService: QueueService,
+    private fcmService: FCMService,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR =
       this.configService.get('CREDIT_BOT_ADDRESS');
@@ -532,6 +534,11 @@ export class CreditService {
             message: 'Your Credit has been added successfully',
             walletTxId: creditWalletTx.id,
           },
+        );
+        await this.fcmService.sendUserFirebase_TelegramNotification(
+          creditWalletTx.userWallet.userId,
+          'Credit Added',
+          `You have received ${gameUsdTx.amount} as a credit. Check your app wallet to view your updated balance.`,
         );
       }
 
