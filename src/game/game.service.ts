@@ -49,6 +49,7 @@ import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { projectName, endTime } from 'src/database/seeds/jackpot.seed';
 import { Jackpot } from './entities/jackpot.entity';
+import { BetService } from './bet.service';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -82,6 +83,7 @@ export class GameService implements OnModuleInit {
     private settingRepository: Repository<Setting>,
     @InjectRepository(Jackpot)
     private jackpotRepository: Repository<Jackpot>,
+    private betService: BetService,
   ) {}
 
   // process of closing bet for current epoch, set draw result, announce draw result, set available claim and process referral bonus
@@ -177,6 +179,7 @@ export class GameService implements OnModuleInit {
         .leftJoinAndSelect('creditTxUserWallet.user', 'creditTxUser')
         .where('betOrder.gameId = :gameId', { gameId: game.id })
         .andWhere('betOrder.isMasked = :isMasked', { isMasked: true })
+        .andWhere('gameUsdTx.maskingTxHash IS NULL')
         .getMany();
 
       if (betOrders.length === 0) return; // no masked betOrder to submit
@@ -282,6 +285,33 @@ export class GameService implements OnModuleInit {
           const jobId = `handleBetReferral-${data.gameUsdTxId}`;
           await this.queueService.addJob(QueueName.BET, jobId, data);
         }
+
+        // process jackpot
+        // betOrders may created by multiple users for multiple times(i.e. permutation)
+        const validBetOrdersByTxId: Record<string, BetOrder[]> = {};
+        for (const betOrder of betOrders) {
+          // betOrder without walletTx is not eligible for jackpot(only use credit to bet)
+          if (!betOrder.walletTx) continue;
+
+          const txId = betOrder.gameUsdTx.id;
+          if (!validBetOrdersByTxId[txId]) {
+            validBetOrdersByTxId[txId] = [];
+          }
+          validBetOrdersByTxId[txId].push(betOrder);
+        }
+        // convert into array
+        const allValidBetOrders = Object.values(validBetOrdersByTxId);
+        // loop through each group of betOrders(created within same gameUsdTx)
+        for (const validBetOrders of allValidBetOrders) {
+          if (validBetOrders.length === 0) continue; // just in case
+
+          await this.betService.processJackpot(
+            validBetOrders[0].walletTx.userWallet,
+            validBetOrders[0].gameUsdTx,
+            validBetOrders,
+            queryRunner,
+          );
+        }
       } else {
         // tx failed
         for (const betOrder of betOrders) {
@@ -301,11 +331,13 @@ export class GameService implements OnModuleInit {
         );
       }
     } catch (err) {
+      this.logger.error('Error in game.service.setBetClose:', err);
       // inform admin
       await this.adminNotificationService.setAdminNotification(
         `Error occur in game.service.setBetClose, error: ${err}`,
         'ExecutionError',
         'Execution Error in setBetClose()',
+        true,
         true,
       );
     } finally {
