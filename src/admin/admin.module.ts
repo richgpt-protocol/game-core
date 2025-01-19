@@ -16,8 +16,6 @@ import { SseModule } from './sse/sse.module';
   ],
   providers: [AdminService],
   exports: [AdminService],
-
-
   controllers: [AdminController],
 })
 export class AdminModule {}
