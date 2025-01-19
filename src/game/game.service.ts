@@ -347,34 +347,17 @@ export class GameService implements OnModuleInit {
         )
         .getMany();
         const winners = new Set(winningNumberPairs);
-        const notifiedUsers = new Set<number>(); 
-        
         for (const betOrder of betOrders) {
           const user = betOrder.walletTx?.userWallet?.user || betOrder.creditWalletTx?.userWallet?.user;
           if (!user) continue; 
 
-          if (notifiedUsers.has(user.id)) continue;
-          notifiedUsers.add(user.id);
-
           const isWinner = winners.has(betOrder.numberPair);
-
-          const isWalletBet = !!betOrder.walletTx;
-          const isCreditBet = !!betOrder.creditWalletTx;
-          let betSource = '';
-        
-          if (isWalletBet && isCreditBet) {
-            betSource = 'both Wallet and Credit balance';
-          } else if (isWalletBet) {
-            betSource = 'Wallet balance';
-          } else if (isCreditBet) {
-            betSource = 'Credit balance';
-          }
-        
+          
           const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
           const message = isWinner
-            ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${game.epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🎯 Your winning bet was placed using: **${betSource}**\n\n🍀 Luck is on your side—why not try your luck again?`
+            ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${game.epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
             : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${game.epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
-        
+  
           await this.fcmService.sendUserFirebase_TelegramNotification(
             user.id,
             title,
