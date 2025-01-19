@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable ,Logger} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from 'src/config/config.service';
 import { User } from 'src/user/entities/user.entity';
@@ -6,12 +6,13 @@ import { Telegraf } from 'telegraf';
 import { Repository } from 'typeorm';
 import { AdminNotificationService } from './admin-notification.service';
 import { UserStatus } from '../enum/status.enum';
-
+import * as TelegramBot from 'node-telegram-bot-api';
 @Injectable()
 export class TelegramService {
   telegramOTPBot: Telegraf;
   telegramOTPBotUserName: string;
-
+  private fuyoBot: TelegramBot;
+  private readonly logger = new Logger(TelegramService.name);
   constructor(
     private readonly configService: ConfigService,
     @InjectRepository(User)
@@ -23,6 +24,13 @@ export class TelegramService {
     );
     this.telegramOTPBotUserName = this.configService.get(
       'TELEGRAM_OTP_BOT_USERNAME',
+    );
+
+    this.fuyoBot = new TelegramBot(
+      this.configService.get('FUYO_BOT_TOKEN'),
+      {
+        polling: false,
+      },
     );
 
     this.telegramOTPBot = new Telegraf(telegramOTPBotToken);
@@ -187,5 +195,14 @@ export class TelegramService {
         'APP_NAME',
       )} user registration.`,
     );
+  }
+
+  
+  public async sendOneTelegram(chatId: string, message: string) {
+    try {
+      await this.fuyoBot.sendMessage(chatId, message);
+    } catch (error) {
+      this.logger.error('Error sending message to telegram', error);
+    }
   }
 }
