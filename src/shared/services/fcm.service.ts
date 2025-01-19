@@ -4,7 +4,7 @@ import { User } from 'src/user/entities/user.entity';
 import { DataSource, Repository } from 'typeorm';
 import { ConfigService } from 'src/config/config.service';
 import * as admin from 'firebase-admin';
-import { AdminNotificationService } from './admin-notification.service';
+import { TelegramService } from './telegram.service';
 
 @Injectable()
 export class FCMService {
@@ -15,7 +15,7 @@ export class FCMService {
     private userRepository: Repository<User>,
     private dataSource: DataSource,
     private configService: ConfigService,
-    private adminnotifications: AdminNotificationService,
+    private telegramnotifications: TelegramService,
   ) {
     this.initializeFirebase();
   }
@@ -69,7 +69,7 @@ export class FCMService {
       }
       if (user.tgId && user.tgId.trim().length > 0) {
         try {
-          await this.adminnotifications.sendOneTelegram(user.tgId, message);
+          await this.telegramnotifications.sendOneTelegram(user.tgId, message);
           this.logger.log(`Telegram notification sent to tgId: ${user.tgId}`);
         } catch (telegramError) {
           this.logger.error(

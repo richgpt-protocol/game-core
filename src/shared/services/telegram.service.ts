@@ -333,4 +333,12 @@ Hi ${tgUserName}! Ready to win big with <b>Fuyo AI</b>? 🏆
       );
     }
   }
+
+  public async sendOneTelegram(chatId: string, message: string) {
+    try {
+      await this.fuyoBot.sendMessage(chatId, message);
+    } catch (error) {
+      this.logger.error('Error sending message to telegram', error);
+    }
+  }
 }
