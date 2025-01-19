@@ -116,8 +116,6 @@ TELEGRAM_OTP_BOT_TOKEN= #token of Bot that sends telegram OTP
 TELEGRAM_OTP_BOT_USERNAME= #Bot's Username that sends telegram OTP
 TG_LOGIN_WIDGET_BOT_TOKEN= # Bot token for login widget bot
 
-FUYO_BOT_TOKEN=
-
 # live bet
 EXPLORER_BASE_URL=
 
@@ -140,7 +138,6 @@ SLACK_CHANNEL_ID=
 FUYO_BOT_WEBHOOK_SECRET=
 FUYO_BOT_TOKEN=
 FUYO_BOT_WEBHOOK_URL=
-
 
 # block explorer url
 BLOCK_EXPLORER_URL_56=https://bscscan.com
