@@ -333,8 +333,11 @@ export class GameService implements OnModuleInit {
        const betOrders = await queryRunner.manager
         .createQueryBuilder(BetOrder, 'betOrder')
         .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+        .leftJoinAndSelect('creditUserWallet.user', 'creditUser') 
         .where('betOrder.gameId = :gameId', { gameId })
         .getMany();
         const winners = new Set(winningNumberPairs);
