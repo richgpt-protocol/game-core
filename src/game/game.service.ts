@@ -342,7 +342,7 @@ export class GameService implements OnModuleInit {
         .getMany();
         const winners = new Set(winningNumberPairs);
         for (const betOrder of betOrders) {
-          const user = betOrder.walletTx?.userWallet?.user;
+          const user = betOrder.walletTx?.userWallet?.user || betOrder.creditWalletTx?.userWallet?.user;
           if (!user) continue;
   
           const isWinner = winners.has(betOrder.numberPair);
@@ -1072,7 +1072,7 @@ export class GameService implements OnModuleInit {
         .getMany();
 
       for (const betOrder of betOrders) {
-        const user = betOrder.walletTx.userWallet.user;
+        const user = betOrder.walletTx?.userWallet?.user || betOrder.creditWalletTx?.userWallet?.user;
         const message = `Only 1 minute left until the results are announced! ⏳ Check it out now and see if you're a winner! 🏆`;
         await this.fcmService.sendUserFirebase_TelegramNotification(
           user.id,
