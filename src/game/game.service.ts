@@ -449,6 +449,7 @@ export class GameService implements OnModuleInit {
         );
       }
     } catch (err) {
+      console.log(err);
       this.logger.error('Error in game.service.submitDrawResult:', err);
 
       // await this.adminNotificationService.setAdminNotification(
@@ -1405,12 +1406,16 @@ export class GameService implements OnModuleInit {
         .orderBy('game.startDate', 'DESC')
         .getOne();
 
+      this.logger.log(`Current game: ${currentGame?.epoch}`);
+
       if (!currentGame) {
         this.logger.warn('No active game found');
         return;
       }
 
       const timeLeft = currentGame.endDate.getTime() - Date.now();
+
+      this.logger.log(`Time left: ${timeLeft}`);
       if (timeLeft > 60000 || timeLeft <= 0) {
         return;
       }
@@ -1425,6 +1430,8 @@ export class GameService implements OnModuleInit {
         .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
         .where('betOrder.gameId = :gameId', { gameId: currentGame.id })
         .getMany();
+
+      this.logger.log(`Number of bet orders: ${betOrders.length}`);
 
       for (const betOrder of betOrders) {
         const user =
@@ -1454,15 +1461,22 @@ export class GameService implements OnModuleInit {
 
     try {
       const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      this.logger.log(`Three days ago: ${threeDaysAgo}`);
 
       const usersWithBalance = await queryRunner.manager
         .createQueryBuilder(UserWallet, 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
         .getMany();
 
+      this.logger.log(
+        `Number of users with balance: ${usersWithBalance.length}`,
+      );
+
       const aiMessage =
         await this.airesponseService.generateInactiveUserNotification();
       const usersToNotify = [];
+
+      this.logger.log(`AI message: ${aiMessage}`);
 
       for (const userWallet of usersWithBalance) {
         const recentPointTx = await queryRunner.manager
@@ -1476,6 +1490,8 @@ export class GameService implements OnModuleInit {
           usersToNotify.push(userWallet.user.id);
         }
       }
+
+      this.logger.log(`Number of users to notify: ${usersToNotify.length}`);
 
       for (const userId of usersToNotify) {
         await this.fcmService.sendUserFirebase_TelegramNotification(

@@ -79,6 +79,8 @@ export class GameGateway {
         .where('game.startDate < :lastHourUTC', { lastHourUTC })
         .andWhere('game.endDate > :lastHourUTC', { lastHourUTC })
         .getOne();
+
+      this.logger.log(`lastGame: ${JSON.stringify(lastGame)}`);
       let drawResults = lastGame.drawResult;
 
       // fallback method if drawResults.length === 0 for some reason i.e. set draw result bot/server down
@@ -126,6 +128,8 @@ export class GameGateway {
           return;
         }
         try {
+          this.logger.log('submitDrawResult is starting');
+
           await this.gameService.submitDrawResult(drawResults, lastGame.id);
           // no error, success
           break;
@@ -135,14 +139,19 @@ export class GameGateway {
           attempts++;
         }
       }
+
+      this.logger.log('Draw result submitted to Core contract');
       await queryRunner.commitTransaction();
 
+      this.logger.log('setAvailableClaimAndProcessReferralBonus is starting');
       await this.gameService.setAvailableClaimAndProcessReferralBonus(
         drawResults,
         lastGame.id,
         queryRunner,
       );
+      this.logger.log('setAvailableClaimAndProcessReferralBonus ended');
     } catch (err) {
+      console.log(err);
       this.logger.error(err);
       // inform admin
       await this.adminNotificationService.setAdminNotification(
