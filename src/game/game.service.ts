@@ -1050,17 +1050,12 @@ export class GameService implements OnModuleInit {
     try {
       const currentGame = await queryRunner.manager
         .createQueryBuilder(Game, 'game')
-        .where('game.isClosed = false')
+        .where('game.isClosed = :isClosed', { isClosed: false })
         .orderBy('game.startDate', 'DESC')
         .getOne();
 
       if (!currentGame) {
         this.logger.warn('No active game found');
-        return;
-      }
-
-      const timeLeft = currentGame.endDate.getTime() - Date.now();
-      if (timeLeft > 60000 || timeLeft <= 0) {
         return;
       }
 
@@ -1074,7 +1069,7 @@ export class GameService implements OnModuleInit {
         .leftJoinAndSelect('creditUserWallet.user', 'creditUser') 
         .where('betOrder.gameId = :gameId', { gameId: currentGame.id })
         .getMany();
-
+        
       for (const betOrder of betOrders) {
         const user = betOrder.walletTx?.userWallet?.user || betOrder.creditWalletTx?.userWallet?.user;
         const message = `Only 1 minute left until the results are announced! ⏳ Check it out now and see if you're a winner! 🏆`;
@@ -1139,4 +1134,5 @@ export class GameService implements OnModuleInit {
       await queryRunner.release();
     }
   }
+
 }
