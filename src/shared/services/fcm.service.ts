@@ -57,6 +57,7 @@ export class FCMService {
     message: string,
   ) {
     try {
+      this.logger.log(`Sending notification to user ID: ${userId}`);
       const queryRunner = this.dataSource.createQueryRunner();
       const user = await queryRunner.manager.findOne(User, {
         where: {

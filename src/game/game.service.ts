@@ -427,32 +427,33 @@ export class GameService implements OnModuleInit {
     await queryRunner.startTransaction();
     try {
       const winners = new Set(drawResults.map((result) => result.numberPair));
-      const notifiedUsers = new Set<number>(); 
 
       for (const drawResult of drawResults) {
         const betOrders = await queryRunner.manager
-        .createQueryBuilder(BetOrder, 'betOrder')
-        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
-        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
-        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
-        .leftJoinAndSelect('userWallet.user', 'user')
-        .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
-        .where('betOrder.gameId = :gameId', { gameId })
-        .andWhere('betOrder.numberPair = :numberPair', {
-          numberPair: drawResult.numberPair,
-        })
-        .andWhere(
-          new Brackets((qb) => {
-            qb.where('walletTx.status = :status', {
-              status: TxStatus.SUCCESS,
-            }).orWhere('creditWalletTx.status = :status', {
-              status: TxStatus.SUCCESS,
-            });
-          }),
-        )
+          .createQueryBuilder(BetOrder, 'betOrder')
+          .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+          .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+          .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+          .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+          .leftJoinAndSelect('userWallet.user', 'user')
+          .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
+          .where('betOrder.gameId = :gameId', { gameId })
+          .andWhere('betOrder.numberPair = :numberPair', {
+            numberPair: drawResult.numberPair,
+          })
+          .andWhere(
+            new Brackets((qb) => {
+              qb.where('walletTx.status = :status', {
+                status: TxStatus.SUCCESS,
+              }).orWhere('creditWalletTx.status = :status', {
+                status: TxStatus.SUCCESS,
+              });
+            }),
+          )
           .getMany();
         // there might be more than 1 betOrder that numberPair matched
+
+        this.logger.log('betOrders length: ' + betOrders.length);
         for (const betOrder of betOrders) {
           try {
             const { bigForecastWinAmount, smallForecastWinAmount } =
@@ -480,37 +481,35 @@ export class GameService implements OnModuleInit {
           }
 
           const user =
-          betOrder.walletTx?.userWallet?.user ||
-          betOrder.creditWalletTx?.userWallet?.user;
-        if (!user){
-          continue;
-        } 
+            betOrder.walletTx?.userWallet?.user ||
+            betOrder.creditWalletTx?.userWallet?.user;
+          if (!user) {
+            continue;
+          }
 
-        if (notifiedUsers.has(user.id)) {
-          continue; 
-        }
-        notifiedUsers.add(user.id);
+          this.logger.log('User ID: ' + user.id);
 
-        const isWinner = winners.has(betOrder.numberPair);
+          const isWinner = winners.has(betOrder.numberPair);
 
-        const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
-        const message = isWinner
-          ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${gameId}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
-          : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${gameId}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
+          const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
+          const message = isWinner
+            ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${gameId}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
+            : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${gameId}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
 
-        await this.fcmService.sendUserFirebase_TelegramNotification(
-          user.id,
-          title,
-          message,
-        );
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            user.id,
+            title,
+            message,
+          );
 
-        this.logger.log(
-          `Notification sent to user ID: ${user.id}, Status: ${isWinner ? 'WINNER' : 'LOSER'}`
-        );
+          this.logger.log(
+            `Notification sent to user ID: ${user.id}, Status: ${isWinner ? 'WINNER' : 'LOSER'}`,
+          );
         }
       }
       await queryRunner.commitTransaction();
     } catch (error) {
+      console.log(error);
       this.logger.error(
         'Error in setAvailableClaimAndProcessReferralBonus',
         error,
@@ -1414,10 +1413,14 @@ export class GameService implements OnModuleInit {
         .where('betOrder.gameId = :gameId', { gameId: currentGame.id })
         .getMany();
 
+      this.logger.log(`Number of bet orders: ${betOrders.length}`);
+
       for (const betOrder of betOrders) {
         const user =
           betOrder.walletTx?.userWallet?.user ||
           betOrder.creditWalletTx?.userWallet?.user;
+
+        this.logger.log(`User ID: ${user.id}`);
         const message = `Only 1 minute left until the results are announced! ⏳ Check it out now and see if you're a winner! 🏆`;
         await this.fcmService.sendUserFirebase_TelegramNotification(
           user.id,
@@ -1489,5 +1492,4 @@ export class GameService implements OnModuleInit {
       await queryRunner.release();
     }
   }
-
 }
