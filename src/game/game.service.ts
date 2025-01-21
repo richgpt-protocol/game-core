@@ -468,7 +468,7 @@ export class GameService implements OnModuleInit {
             }`
           );
         }
-        
+
       }
       await queryRunner.commitTransaction();
     } catch (error) {
@@ -1080,8 +1080,8 @@ export class GameService implements OnModuleInit {
     });
   }
 
-  // @Cron('58 * * * *')
-  @Cron('* * * * *')
+  @Cron('58 * * * *')
+  // @Cron('* * * * *')
   async notifyUsersBeforeResult(): Promise<void> {
     this.logger.log('notifyUsersBeforeResult started');
 
