@@ -6,3 +6,8 @@ export type ChatWithAIMessage = {
   userId: number;
   chatId: number;
 };
+
+export type Replies = {
+  type: 'text' | 'image' | 'speech' | 'bet';
+  content: string;
+};
