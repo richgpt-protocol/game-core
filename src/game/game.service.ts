@@ -387,7 +387,33 @@ export class GameService implements OnModuleInit {
         .andWhere('betOrder.numberPair = :numberPair', {
           numberPair: drawResult.numberPair,
         })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('walletTx.status = :status', {
+              status: TxStatus.SUCCESS,
+            }).orWhere('creditWalletTx.status = :status', {
+              status: TxStatus.SUCCESS,
+            });
+          }),
+        )
+        .getMany();
+
+
+          const notificationbetOrders = await queryRunner.manager
+          .createQueryBuilder(BetOrder, 'betOrder')
+          .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+          .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+          .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+          .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+          .leftJoinAndSelect('userWallet.user', 'user')
+          .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
+          .where('betOrder.gameId = :gameId', { gameId })
+          .andWhere('betOrder.numberPair = :numberPair', {
+            numberPair: drawResult.numberPair,
+          })
           .getMany();
+
+
         // there might be more than 1 betOrder that numberPair matched
         for (const betOrder of betOrders) {
           betOrder.availableClaim = true;
@@ -408,36 +434,41 @@ export class GameService implements OnModuleInit {
           } catch (error) {
             this.logger.error('Error in processWinReferralBonus', error);
           }
+        }
 
+        for (const betOrder of notificationbetOrders) {
           const user =
-          betOrder.walletTx?.userWallet?.user ||
-          betOrder.creditWalletTx?.userWallet?.user;
-        if (!user){
-          continue;
-        } 
-
-        if (notifiedUsers.has(user.id)) {
-          continue; 
+            betOrder.walletTx?.userWallet?.user ||
+            betOrder.creditWalletTx?.userWallet?.user;
+          if (!user) {
+            continue;
+          }
+  
+          if (notifiedUsers.has(user.id)) {
+            continue;
+          }
+          notifiedUsers.add(user.id);
+  
+          const isWinner = winners.has(betOrder.numberPair);
+  
+          const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
+          const message = isWinner
+            ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
+            : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
+  
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            user.id,
+            title,
+            message,
+          );
+  
+          this.logger.log(
+            `Notification sent to user ID: ${user.id}, Status: ${
+              isWinner ? 'WINNER' : 'LOSER'
+            }`
+          );
         }
-        notifiedUsers.add(user.id);
-
-        const isWinner = winners.has(betOrder.numberPair);
-
-        const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
-        const message = isWinner
-          ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
-          : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
-
-        await this.fcmService.sendUserFirebase_TelegramNotification(
-          user.id,
-          title,
-          message,
-        );
-
-        this.logger.log(
-          `Notification sent to user ID: ${user.id}, Status: ${isWinner ? 'WINNER' : 'LOSER'}`
-        );
-        }
+        
       }
       await queryRunner.commitTransaction();
     } catch (error) {
@@ -1048,8 +1079,9 @@ export class GameService implements OnModuleInit {
       where: { gameId },
     });
   }
-  @Cron('* * * * *')
+
   // @Cron('58 * * * *')
+  @Cron('* * * * *')
   async notifyUsersBeforeResult(): Promise<void> {
     this.logger.log('notifyUsersBeforeResult started');
 
