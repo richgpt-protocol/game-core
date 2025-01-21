@@ -64,12 +64,10 @@ export class FCMService {
           this.logger.warn(`User with ID ${userId} not found.`);
           return;
         }            
-        let notificationSent = false;
         if (user.tgId && user.tgId.trim().length > 0) {
           try {
             await this.telegramnotifications.sendOneTelegram(user.tgId, message);
             this.logger.log(`Telegram notification sent to tgId: ${user.tgId}`);
-            notificationSent = true;
           } catch (telegramError) {
             this.logger.error(
               `Error sending Telegram notification to tgId: ${user.tgId}`,
