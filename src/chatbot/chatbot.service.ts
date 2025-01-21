@@ -1,9 +1,7 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { SendMessageDto } from './dto/sendMessage.dto';
 import { MongoClient } from 'mongodb';
-import { QztWzt } from './chatbot.interface';
-var similarity = require('compute-cosine-similarity'); // pure js lib, use import will cause error
 import { InjectRepository } from '@nestjs/typeorm';
 import { ChatLog } from './entities/chatLog.entity';
 import { Repository } from 'typeorm';
@@ -12,29 +10,17 @@ import { PointTx } from 'src/point/entities/point-tx.entity';
 // import { UserService } from 'src/user/user.service';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { PointTxType } from 'src/shared/enum/txType.enum';
-import axios from 'axios';
+import { ChatbotTools } from './chatbot.tools';
 import { ConfigService } from 'src/config/config.service';
-import * as dotenv from 'dotenv';
-
-dotenv.config();
-
-const client = new MongoClient(process.env.MONGODB_URI); // for number recommendation based on input
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const model = 'gpt-4o-mini';
+import { Replies } from './chatbot.types';
 
 @Injectable()
 export class ChatbotService {
   private readonly logger = new Logger(ChatbotService.name);
 
-  availableFunctions: { [key: string]: Function } = {
-    getNumberRecommendation: (message: string) =>
-      this.getNumberRecommendation(message),
-    getImage: (keyword?: string) => this.getImage(keyword),
-    getFuyoDocumentation: (question: string) =>
-      this.getFuyoDocumentation(question),
-    searchForNews: (searchKeywords: string) =>
-      this.searchForNews(searchKeywords),
-  };
+  client: MongoClient;
+  openai: OpenAI;
+  model: string;
 
   constructor(
     @InjectRepository(ChatLog)
@@ -45,7 +31,14 @@ export class ChatbotService {
     private pointTxRepository: Repository<PointTx>,
     // private userService: UserService,
     private configService: ConfigService,
-  ) {}
+    private chatbotTools: ChatbotTools,
+  ) {
+    this.client = new MongoClient(this.configService.get('MONGODB_URI'));
+    this.openai = new OpenAI({
+      apiKey: this.configService.get('OPENAI_API_KEY'),
+    });
+    this.model = 'gpt-4o-mini';
+  }
 
   async sendMessage(
     userId: number,
@@ -53,10 +46,12 @@ export class ChatbotService {
   ): Promise<Array<{ type: string; content: string }>> {
     const chatLog = await this.chatLogRepository.findBy({ userId });
     // extract chat completion message from chatLog
-    // @ts-ignore
     let messages: Array<ChatCompletionMessageParam> = chatLog
-      .map((log) => ({ role: log.role, content: log.content }))
-      .filter((log) => log.role !== 'tool');
+      .filter((log) => log.role !== 'tool')
+      .map((log) => ({
+        role: log.role as 'system' | 'user' | 'assistant',
+        content: log.content,
+      }));
 
     const initialContent = `You are a human named Professor Fuyo, live in Fuyo app and Fuyo mini game. Please reply in casual conversation in simple English under 3 sentences.
 Fuyo app is a revolutionizing 4D lottery gaming with blockchain, AI, and chatGPT.
@@ -80,7 +75,7 @@ Today date: ${new Date().toDateString()}.`;
         {
           role: 'assistant',
           content:
-            "Hello there, lucky seeker! I'm Professor Fuyo, Ready to turn your dreams into numbers?",
+            "Hey! 👋 I'm your FUYO AI buddy. Got questions about 4D draws, results, or just wanna chat about lucky numbers? Let's talk—I'm here for you! 🍀",
         },
       ];
 
@@ -121,80 +116,10 @@ Today date: ${new Date().toDateString()}.`;
     });
 
     // submit to chatCompletion
-    const completion = await openai.chat.completions.create({
+    const completion = await this.openai.chat.completions.create({
       messages,
-      model: model,
-      tools: [
-        {
-          type: 'function',
-          function: {
-            name: 'getNumberRecommendation',
-            description:
-              'input message and get number recommendation from Wang Zi Tu',
-            parameters: {
-              type: 'object',
-              properties: {
-                message: {
-                  type: 'string',
-                  description: 'message i.e. I dream a car',
-                },
-              },
-              required: ['message'],
-            },
-          },
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'getImage',
-            description: 'get any image based on keywords',
-            parameters: {
-              type: 'object',
-              properties: {
-                keyword: {
-                  type: 'string',
-                  description: 'keyword from user message',
-                },
-              },
-              required: ['keyword'],
-            },
-          },
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'getFuyoDocumentation',
-            description: 'get Documentation for Fuyo App and Fuyo Mini Game',
-            parameters: {
-              type: 'object',
-              properties: {
-                question: {
-                  type: 'string',
-                  description: 'question i.e. How to bet',
-                },
-              },
-              required: ['question'],
-            },
-          },
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'searchForNews',
-            description: 'get latest news / information about the topic',
-            parameters: {
-              type: 'object',
-              properties: {
-                searchKeywords: {
-                  type: 'string',
-                  description: 'search keywords',
-                },
-              },
-              required: ['searchKeywords'],
-            },
-          },
-        },
-      ],
+      model: this.model,
+      tools: this.chatbotTools.availableTools,
       // https://platform.openai.com/docs/guides/text-generation/how-should-i-set-the-temperature-parameter
       temperature: 1.2, // 0.0 to 2.0
     });
@@ -203,32 +128,35 @@ Today date: ${new Date().toDateString()}.`;
     // add assistantMessage into messages
     messages.push(assistantMessage);
 
-    const replies: Array<{
-      type: 'text' | 'image' | 'speech';
-      content: string;
-    }> = [];
+    const replies: Array<Replies> = [];
     const toolCalls = assistantMessage.tool_calls;
     if (toolCalls) {
       // this message is to call functions
       for (const toolCall of toolCalls) {
         const functionName = toolCall.function.name;
-        const functionToCall = this.availableFunctions[functionName];
         const functionArgs = JSON.parse(toolCall.function.arguments); // possible empty {}
-        let functionResponse;
+        let functionResponse: any;
 
         if (functionName === 'getNumberRecommendation') {
-          functionResponse = await functionToCall(functionArgs.message);
+          functionResponse = await this.chatbotTools.getNumberRecommendation(
+            functionArgs.message,
+          );
         } else if (functionName === 'getImage') {
-          functionResponse = await functionToCall(functionArgs.keyword);
+          functionResponse = await this.chatbotTools.getImage(
+            functionArgs.keyword,
+          );
           // add into bot replies(to user)
           replies.push({ type: 'image', content: functionResponse });
         } else if (functionName === 'getFuyoDocumentation') {
-          functionResponse = await functionToCall(functionArgs.question);
+          functionResponse = await this.chatbotTools.getFuyoDocumentation(
+            functionArgs.question,
+          );
         } else if (functionName === 'searchForNews') {
-          functionResponse = await functionToCall(functionArgs.searchKeywords);
+          functionResponse = await this.chatbotTools.searchForNews(
+            functionArgs.searchKeywords,
+          );
         } else {
-          // all other functions (without argument)
-          functionResponse = await functionToCall();
+          throw new Error('Unknown function name');
         }
 
         messages.push({
@@ -267,8 +195,8 @@ Today date: ${new Date().toDateString()}.`;
       }
 
       // submit messages with functionResponse to chatCompletion
-      const response = await openai.chat.completions.create({
-        model: model,
+      const response = await this.openai.chat.completions.create({
+        model: this.model,
         messages,
       });
       const assistantReplyBasedOnFunctionResponse = response.choices[0].message;
@@ -305,7 +233,7 @@ Today date: ${new Date().toDateString()}.`;
 
     // convert assistant reply into speech
     if (payload.source === 'fuyoapp') {
-      const speech = await openai.audio.speech.create({
+      const speech = await this.openai.audio.speech.create({
         model: 'tts-1',
         voice: 'nova',
         input: replies[replies.length - 1].content,
@@ -370,154 +298,6 @@ Today date: ${new Date().toDateString()}.`;
     }
 
     return replies;
-  }
-
-  async getNumberRecommendation(
-    message: string,
-  ): Promise<{ recommendedNumber: string; meaning: string }> {
-    let qztwzt: QztWzt[];
-
-    // fetch all number:embedding(text) recommendation from mongodb
-    try {
-      await client.connect();
-      const db = client.db('fdgpt').collection('qztwzt');
-      const cursor = db.find();
-      qztwzt = <QztWzt[]>await cursor.toArray();
-    } catch (e) {
-      this.logger.error(e);
-      throw new HttpException(
-        'Cannot connect to qztwzt database',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    } finally {
-      await client.close();
-    }
-
-    // create embedding for input message
-    const resp = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: message,
-    });
-    const queryEmbedding = resp.data[0].embedding;
-
-    // find the nearest number:embedding pair
-    let largestSimilarity = 0;
-    let nearestIndex = 0;
-    for (let i = 0; i < qztwzt.length; i++) {
-      const embedding = qztwzt[i].embedding;
-      const s = similarity(embedding, queryEmbedding);
-      if (s && s > largestSimilarity) {
-        largestSimilarity = s;
-        nearestIndex = i;
-      }
-    }
-
-    // return the nearest number and its meaning
-    const obj = {
-      recommendedNumber: qztwzt[nearestIndex].number,
-      meaning: qztwzt[nearestIndex].english,
-    };
-    return obj;
-  }
-
-  async getImage(keyword?: string): Promise<string> {
-    const image = await openai.images.generate({
-      prompt: keyword ?? 'any image',
-      model: 'dall-e-2',
-      n: 1,
-      quality: 'standard',
-      response_format: 'b64_json',
-      size: '256x256',
-    });
-    return image.data[0].b64_json;
-  }
-
-  async getFuyoDocumentation(question: string): Promise<string> {
-    let fuyoDocs = [];
-    try {
-      await client.connect();
-      const db = client.db('fdgpt').collection('fuyoDocs');
-      const cursor = db.find();
-      fuyoDocs = await cursor.toArray();
-    } catch (e) {
-      this.logger.error(e);
-      throw new HttpException(
-        'Cannot connect to fuyoDocs database',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    } finally {
-      await client.close();
-    }
-
-    // create embedding for input message
-    const resp = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: question,
-    });
-    const queryEmbedding = resp.data[0].embedding;
-
-    // // find the nearest
-    // let largestSimilarity = 0;
-    // let nearestIndex = 0;
-    // for (let i = 0; i < fuyoDocs.length; i++) {
-    //   const embedding = fuyoDocs[i].embedding;
-    //   const s = similarity(embedding, queryEmbedding);
-    //   if (s && s > largestSimilarity) {
-    //     largestSimilarity = s;
-    //     console.log('similarity:', s, fuyoDocs[i].url);
-    //     nearestIndex = i;
-    //   }
-    // }
-
-    // find the 2 nearest
-    let largestSimilarity = 0;
-    let secondLargestSimilarity = 0;
-    let nearestIndex = -1;
-    let secondNearestIndex = -1;
-    for (let i = 0; i < fuyoDocs.length; i++) {
-      const embedding = fuyoDocs[i].embedding;
-      const s = similarity(embedding, queryEmbedding);
-      if (s && s > largestSimilarity) {
-        // Shift the largest to the second largest
-        secondLargestSimilarity = largestSimilarity;
-        secondNearestIndex = nearestIndex;
-        // Update the largest similarity and index
-        largestSimilarity = s;
-        nearestIndex = i;
-      } else if (s && s > secondLargestSimilarity) {
-        // Update the second largest similarity and index
-        secondLargestSimilarity = s;
-        secondNearestIndex = i;
-      }
-    }
-
-    return (
-      fuyoDocs[nearestIndex].docs + '\n' + fuyoDocs[secondNearestIndex].docs
-    );
-  }
-
-  async searchForNews(searchKeywords: string): Promise<string> {
-    const res = await axios.get(
-      `https://api.search.brave.com/res/v1/news/search?q=${searchKeywords}&count=5&freshness=pw`,
-      {
-        headers: {
-          Accept: 'application/json',
-          'Accept-Encoding': 'gzip',
-          'X-Subscription-Token': this.configService.get(
-            'BRAVE_SEARCH_API_KEY',
-          ),
-        },
-      },
-    );
-    const results = res.data.results;
-    const titleAndDescription = results.map((result: any) => {
-      return {
-        title: result.title,
-        description: result.description,
-        date: result.page_age,
-      };
-    });
-    return JSON.stringify(titleAndDescription);
   }
 
   async getHistoricalMessage(
