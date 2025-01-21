@@ -313,9 +313,9 @@ Hi ${tgUserName}! Ready to win big with <b>Fuyo AI</b>? 🏆
     );
   }
 
-  private async handleChatWithAIMessage(msg) {
+  private async handleChatWithAIMessage(msg: TelegramBot.Message) {
     const user = await this.userRepository.findOne({
-      where: { tgId: msg.from.id },
+      where: { tgId: msg.from.id.toString() },
     });
     if (!user) return; // not telegram registered user
 
