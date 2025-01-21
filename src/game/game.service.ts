@@ -362,6 +362,15 @@ export class GameService implements OnModuleInit {
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      const game = await queryRunner.manager
+      .createQueryBuilder(Game, 'game')
+      .where('game.id = :id', { id: gameId })
+      .getOne();
+    
+      if (!game) {
+        throw new Error(`Game with ID ${gameId} not found`);
+      }
+      const epoch = game.epoch;
       const winners = new Set(drawResults.map((result) => result.numberPair));
       const notifiedUsers = new Set<number>(); 
 
@@ -416,8 +425,8 @@ export class GameService implements OnModuleInit {
 
         const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
         const message = isWinner
-          ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${gameId}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
-          : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${gameId}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
+          ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
+          : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
 
         await this.fcmService.sendUserFirebase_TelegramNotification(
           user.id,
@@ -1039,8 +1048,8 @@ export class GameService implements OnModuleInit {
       where: { gameId },
     });
   }
-
-  @Cron('58 * * * *')
+  @Cron('* * * * *')
+  // @Cron('58 * * * *')
   async notifyUsersBeforeResult(): Promise<void> {
     this.logger.log('notifyUsersBeforeResult started');
 
@@ -1068,6 +1077,7 @@ export class GameService implements OnModuleInit {
         .leftJoinAndSelect('userWallet.user', 'user')
         .leftJoinAndSelect('creditUserWallet.user', 'creditUser') 
         .where('betOrder.gameId = :gameId', { gameId: currentGame.id })
+        .where('betOrder.type = :type', { type: 'S' })
         .getMany();
         
       for (const betOrder of betOrders) {
