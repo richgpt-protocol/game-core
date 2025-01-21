@@ -14,6 +14,7 @@ import { Admin } from 'src/admin/entities/admin.entity';
 import { ConfigService } from 'src/config/config.service';
 import { ChatbotTelegram } from './chatbot.telegram';
 import { User } from 'src/user/entities/user.entity';
+import { ChatbotTools } from './chatbot.tools';
 
 @Module({
   imports: [
@@ -30,7 +31,7 @@ import { User } from 'src/user/entities/user.entity';
     // UserModule,
     CacheModule.register(),
   ],
-  providers: [ChatbotService, ConfigService, ChatbotTelegram],
+  providers: [ChatbotService, ConfigService, ChatbotTelegram, ChatbotTools],
   controllers: [ChatbotController],
   exports: [ChatbotService, ChatbotTelegram],
 })
