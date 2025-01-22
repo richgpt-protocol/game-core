@@ -115,13 +115,10 @@ export class GasService {
         order: { id: 'ASC' },
       });
       if (reloadTxs.length === 0) return;
-      this.logger.log('multiCallContractAddress', multiCallContractAddress);
-      this.logger.log('reloadTxs.length', reloadTxs.length);
 
       const provider_rpc_url = this.configService.get(
         `PROVIDER_RPC_URL_${chainId.toString()}`,
       );
-      this.logger.log('provider_rpc_url', provider_rpc_url);
       const provider = new ethers.JsonRpcProvider(provider_rpc_url);
       const supplyAccount = new ethers.Wallet(
         await MPC.retrievePrivateKey(
@@ -129,36 +126,30 @@ export class GasService {
         ),
         provider,
       );
-      this.logger.log('supplyAccount.address', supplyAccount.address);
-      // const multiCallContract = MultiCall__factory.connect(
-      //   multiCallContractAddress,
-      //   supplyAccount,
-      // );
-      // const target: Array<string> = [];
-      // const data: Array<string> = [];
-      // const values: Array<bigint> = [];
-      // for (const reloadTx of reloadTxs) {
-      //   target.push(reloadTx.userWallet.walletAddress);
-      //   data.push('0x');
-      //   values.push(ethers.parseEther('0.001'));
-      // }
-      // // sum up values
-      // const txResponse = await multiCallContract.multicall(
-      //   target,
-      //   data,
-      //   values,
-      //   {
-      //     value: values.reduce((acc, cur) => acc + cur, 0n),
-      //   },
-      // );
-      // const txReceipt = await txResponse.wait();
+      const multiCallContract = MultiCall__factory.connect(
+        multiCallContractAddress,
+        supplyAccount,
+      );
+      const target: Array<string> = [];
+      const data: Array<string> = [];
+      const values: Array<bigint> = [];
       for (const reloadTx of reloadTxs) {
-        const txResponse = await supplyAccount.sendTransaction({
-          to: reloadTx.userWallet.walletAddress,
-          value: ethers.parseEther('0.001'),
-        });
-        const txReceipt = await txResponse.wait();
-        this.logger.log('txReceipt.hash', txReceipt.hash);
+        target.push(reloadTx.userWallet.walletAddress);
+        data.push('0x');
+        values.push(ethers.parseEther('0.001'));
+      }
+      // sum up values
+      const txResponse = await multiCallContract.multicall(
+        target,
+        data,
+        values,
+        {
+          value: values.reduce((acc, cur) => acc + cur, 0n),
+        },
+      );
+      const txReceipt = await txResponse.wait();
+
+      for (const reloadTx of reloadTxs) {
         reloadTx.txHash = txReceipt.hash;
         if (txReceipt.status === 1) {
           reloadTx.status = TxStatus.SUCCESS;
