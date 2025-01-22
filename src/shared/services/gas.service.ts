@@ -106,15 +106,23 @@ export class GasService {
     await queryRunner.startTransaction();
 
     try {
-      const reloadTxs = await queryRunner.manager.find(ReloadTx, {
-        where: {
-          status: TxStatus.PENDING,
-          chainId: chainId,
-        },
-        relations: { userWallet: true },
-        order: { id: 'ASC' },
-      });
+      // const reloadTxs = await queryRunner.manager.find(ReloadTx, {
+      //   where: {
+      //     status: TxStatus.PENDING,
+      //     chainId: chainId,
+      //   },
+      //   relations: { userWallet: true },
+      //   order: { id: 'ASC' },
+      // });
+      const reloadTxs = await queryRunner.manager
+        .createQueryBuilder(ReloadTx, 'reloadTx')
+        .leftJoinAndSelect('reloadTx.userWallet', 'userWallet')
+        .where('reloadTx.status = :status', { status: TxStatus.PENDING })
+        .andWhere('reloadTx.chainId = :chainId', { chainId })
+        .orderBy('reloadTx.id', 'ASC')
+        .getMany();
       if (reloadTxs.length === 0) return;
+      this.logger.log(`reloadTxs.length: ${reloadTxs.length}`);
 
       const provider_rpc_url = this.configService.get(
         `PROVIDER_RPC_URL_${chainId.toString()}`,
@@ -150,9 +158,9 @@ export class GasService {
       const txReceipt = await txResponse.wait();
 
       for (const reloadTx of reloadTxs) {
-        reloadTx.txHash = txReceipt.hash;
-        if (txReceipt.status === 1) {
+        if (txReceipt && txReceipt.status === 1) {
           reloadTx.status = TxStatus.SUCCESS;
+          reloadTx.txHash = txReceipt.hash;
         } else {
           reloadTx.retryCount++;
 
