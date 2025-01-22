@@ -644,7 +644,7 @@ export class BetService implements OnModuleInit {
     const betOrders: Array<BetOrder> = [];
     let totalWalletBalanceUsed = 0;
     let totalAmount = 0;
-    // let creditRemaining = Number(userInfo.wallet.creditBalance);
+    let creditRemaining = Number(actualCreditBalance);
     const creditWalletTxns: Array<CreditWalletTx> = [];
 
     const currentTime = new Date().getTime();
@@ -678,13 +678,13 @@ export class BetService implements OnModuleInit {
             creditWalletTxn,
           } = this.validateCreditAndBalance(
             actualWalletBalance,
-            actualCreditBalance,
+            creditRemaining,
             userInfo,
             betOrder,
           );
 
           if (creditWalletTxn) {
-            // creditRemaining = creditAmountRemaining;
+            creditRemaining = creditAmountRemaining;
             betOrder.creditWalletTx = creditWalletTxn;
             creditWalletTxns.push(creditWalletTxn);
           }
