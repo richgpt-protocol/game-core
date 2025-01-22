@@ -124,7 +124,7 @@ export class GameService implements OnModuleInit {
     }
   }
 
-  @Cron('0 0 */1 * * *') // every hour
+  // @Cron('0 0 */1 * * *') // every hour
   async setBetClose(): Promise<void> {
     this.logger.log('setBetClose()');
     const queryRunner = this.dataSource.createQueryRunner();
@@ -426,8 +426,11 @@ export class GameService implements OnModuleInit {
   ): Promise<void> {
     await queryRunner.startTransaction();
     try {
-      const winners = new Set(drawResults.map((result) => result.numberPair));
+      const betOrdersArray: BetOrder[][] = [];
 
+      // first drawResults loop
+      // this loop is to set availableClaim to true for betOrders that numberPair matched
+      // this loop end with commitTransaction()
       for (const drawResult of drawResults) {
         const betOrders = await queryRunner.manager
           .createQueryBuilder(BetOrder, 'betOrder')
@@ -452,8 +455,6 @@ export class GameService implements OnModuleInit {
           )
           .getMany();
         // there might be more than 1 betOrder that numberPair matched
-
-        this.logger.log('betOrders length: ' + betOrders.length);
         for (const betOrder of betOrders) {
           try {
             const { bigForecastWinAmount, smallForecastWinAmount } =
@@ -463,51 +464,96 @@ export class GameService implements OnModuleInit {
             if (totalAmount > 0) {
               betOrder.availableClaim = true;
               await queryRunner.manager.save(betOrder);
+            } else {
+              // totalAmount === 0 means, although the betOrder.numberPair matched the drawResult.numberPair,
+              // but only betOrder.smallForecastAmount > 0 and smallForecastWinAmount === 0(both in calculateWinningAmount())
+              // due to the drawResult.prizeCategory is not first, second or third
+              // (special & consolation no reward for small forecast)
+            }
+          } catch (error) {
+            this.logger.error('Error in setAvailableClaim', error);
+          }
+        }
+        betOrdersArray.push(betOrders);
+      }
+      await queryRunner.commitTransaction();
 
+      // second drawResults loop
+      for (const [index, drawResult] of drawResults.entries()) {
+        const betOrders = betOrdersArray[index];
+        for (const betOrder of betOrders) {
+          try {
+            const { bigForecastWinAmount, smallForecastWinAmount } =
+              this.claimService.calculateWinningAmount(betOrder, drawResult);
+            const totalAmount =
+              Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
+            if (totalAmount > 0) {
+              // process win referral bonus if any
               const jobId = `processWinReferralBonus_${betOrder.id}`;
               await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
                 prizeAmount: totalAmount,
                 betOrderId: betOrder.id,
                 queueType: QueueType.WINNING_REFERRAL_BONUS,
               });
-            } else {
-              // totalAmount === 0 means, although the betOrder.numberPair matched the drawResult.numberPair,
-              // but only betOrder.smallForecastAmount > 0 and smallForecastWinAmount
-              // due to the drawResult.prizeCategory is not first, second or third
-              // (special & consolation no reward for small forecast)
+
+              // send notification to user
             }
           } catch (error) {
-            this.logger.error('Error in processWinReferralBonus', error);
+            this.logger.error('Error in setAvailableClaim', error);
           }
-
-          const user =
-            betOrder.walletTx?.userWallet?.user ||
-            betOrder.creditWalletTx?.userWallet?.user;
-          if (!user) {
-            continue;
-          }
-
-          this.logger.log('User ID: ' + user.id);
-
-          const isWinner = winners.has(betOrder.numberPair);
-
-          const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
-          const message = isWinner
-            ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${gameId}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
-            : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${gameId}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
-
-          await this.fcmService.sendUserFirebase_TelegramNotification(
-            user.id,
-            title,
-            message,
-          );
-
-          this.logger.log(
-            `Notification sent to user ID: ${user.id}, Status: ${isWinner ? 'WINNER' : 'LOSER'}`,
-          );
         }
       }
-      await queryRunner.commitTransaction();
+
+      // this.logger.log('betOrders length: ' + betOrders.length);
+      // for (const betOrder of betOrders) {
+      //   try {
+      //     const { bigForecastWinAmount, smallForecastWinAmount } =
+      //       this.claimService.calculateWinningAmount(betOrder, drawResult);
+      //     const totalAmount =
+      //       Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
+      //     if (totalAmount > 0) {
+      //       betOrder.availableClaim = true;
+      //       await queryRunner.manager.save(betOrder);
+
+      //
+      //     } else {
+      //       // totalAmount === 0 means, although the betOrder.numberPair matched the drawResult.numberPair,
+      //       // but only betOrder.smallForecastAmount > 0 and smallForecastWinAmount
+      //       // due to the drawResult.prizeCategory is not first, second or third
+      //       // (special & consolation no reward for small forecast)
+      //     }
+      //   } catch (error) {
+      //     this.logger.error('Error in processWinReferralBonus', error);
+      //   }
+
+      //   const user =
+      //     betOrder.walletTx?.userWallet?.user ||
+      //     betOrder.creditWalletTx?.userWallet?.user;
+      //   if (!user) {
+      //     continue;
+      //   }
+
+      //   this.logger.log('User ID: ' + user.id);
+
+      //   const isWinner = winners.has(betOrder.numberPair);
+
+      //   const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
+      //   const message = isWinner
+      //     ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${gameId}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
+      //     : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${gameId}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
+
+      //   await this.fcmService.sendUserFirebase_TelegramNotification(
+      //     user.id,
+      //     title,
+      //     message,
+      //   );
+
+      //   this.logger.log(
+      //     `Notification sent to user ID: ${user.id}, Status: ${isWinner ? 'WINNER' : 'LOSER'}`,
+      //   );
+      // }
+      // }
+      // await queryRunner.commitTransaction();
     } catch (error) {
       console.log(error);
       this.logger.error(
@@ -1178,7 +1224,7 @@ export class GameService implements OnModuleInit {
     return total;
   }
 
-  @Cron('0 55 * * * *') // 5 minutes before every hour
+  // @Cron('0 55 * * * *') // 5 minutes before every hour
   async pushBettingStatistic(): Promise<void> {
     // get current epoch
     const now = new Date();
@@ -1383,7 +1429,7 @@ export class GameService implements OnModuleInit {
     }
   }
 
-  @Cron('58 * * * *')
+  // @Cron('58 * * * *')
   async notifyUsersBeforeResult(): Promise<void> {
     this.logger.log('notifyUsersBeforeResult started');
 
@@ -1438,7 +1484,7 @@ export class GameService implements OnModuleInit {
     }
   }
 
-  @Cron('0 0 0 * * *')
+  // @Cron('0 0 0 * * *')
   async notifyUsersWithoutBet(): Promise<void> {
     this.logger.log('notifyUsersWithoutBet started');
 
