@@ -32,7 +32,10 @@ export class GasService {
   ) {}
 
   @OnEvent('gas.service.reload', { async: true })
-  async handleGasReloadEvent(userAddress: string, chainId: number): Promise<void> {
+  async handleGasReloadEvent(
+    userAddress: string,
+    chainId: number,
+  ): Promise<void> {
     const provider_rpc_url = this.configService.get(
       `PROVIDER_RPC_URL_${chainId.toString()}`,
     );
@@ -42,7 +45,7 @@ export class GasService {
     if (balance < ethers.parseEther('0.001')) {
       let amount = '';
       if (!this._isAdmin(userAddress)) {
-        amount = '0.001'
+        amount = '0.001';
 
         // find userWallet through userAddress
         const userWallet = await this.userWalletRepository.findOne({
@@ -63,9 +66,8 @@ export class GasService {
             retryCount: 0,
             userWallet,
             userWalletId: userWallet.id,
-          })
+          }),
         );
-
       } else {
         // no reloadTx for admin reload because
         // no userWallet for admin (userWalletId is compulsory)
@@ -74,25 +76,28 @@ export class GasService {
           `PROVIDER_RPC_URL_${chainId.toString()}`,
         );
         const provider = new ethers.JsonRpcProvider(provider_rpc_url);
-        
+
         // no error handling for admin wallet reload
         // try again in next reload
         const supplyAccount = new ethers.Wallet(
           await MPC.retrievePrivateKey(process.env.SUPPLY_ACCOUNT_ADDRESS),
-          provider
+          provider,
         );
 
         await supplyAccount.sendTransaction({
           to: userAddress,
           // reload 0.01 BNB for admin wallet
-          value: ethers.parseEther('0.01')
+          value: ethers.parseEther('0.01'),
         });
       }
     }
   }
 
   async handlePendingReloadTx(chainId: number): Promise<void> {
-    const multiCallContractAddress = this.configService.get(`MULTICALL_CONTRACT_ADDRESS_${chainId.toString()}`)
+    const multiCallContractAddress = this.configService.get(
+      `MULTICALL_CONTRACT_ADDRESS_${chainId.toString()}`,
+    );
+    this.logger.log('multiCallContractAddress', multiCallContractAddress);
     if (!multiCallContractAddress) return;
 
     const release = await this.cronMutex.acquire();
@@ -100,7 +105,7 @@ export class GasService {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
-    
+
     try {
       const reloadTxs = await queryRunner.manager.find(ReloadTx, {
         where: {
@@ -110,40 +115,50 @@ export class GasService {
         relations: { userWallet: true },
         order: { id: 'ASC' },
       });
+      this.logger.log('reloadTxs.length', reloadTxs.length);
       if (reloadTxs.length === 0) return;
 
       const provider_rpc_url = this.configService.get(
         `PROVIDER_RPC_URL_${chainId.toString()}`,
       );
+      this.logger.log('provider_rpc_url', provider_rpc_url);
       const provider = new ethers.JsonRpcProvider(provider_rpc_url);
       const supplyAccount = new ethers.Wallet(
-        await MPC.retrievePrivateKey(this.configService.get('SUPPLY_ACCOUNT_ADDRESS')),
-        provider
+        await MPC.retrievePrivateKey(
+          this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+        ),
+        provider,
       );
-      const multiCallContract = MultiCall__factory.connect(
-        multiCallContractAddress,
-        supplyAccount
-      );
-      const target: Array<string> = [];
-      const data: Array<string> = [];
-      const values: Array<bigint> = [];
+      this.logger.log('supplyAccount.address', supplyAccount.address);
+      // const multiCallContract = MultiCall__factory.connect(
+      //   multiCallContractAddress,
+      //   supplyAccount,
+      // );
+      // const target: Array<string> = [];
+      // const data: Array<string> = [];
+      // const values: Array<bigint> = [];
+      // for (const reloadTx of reloadTxs) {
+      //   target.push(reloadTx.userWallet.walletAddress);
+      //   data.push('0x');
+      //   values.push(ethers.parseEther('0.001'));
+      // }
+      // // sum up values
+      // const txResponse = await multiCallContract.multicall(
+      //   target,
+      //   data,
+      //   values,
+      //   {
+      //     value: values.reduce((acc, cur) => acc + cur, 0n),
+      //   },
+      // );
+      // const txReceipt = await txResponse.wait();
       for (const reloadTx of reloadTxs) {
-        target.push(reloadTx.userWallet.walletAddress);
-        data.push('0x');
-        values.push(ethers.parseEther('0.001'));
-      }
-      // sum up values
-      const txResponse = await multiCallContract.multicall(
-        target,
-        data,
-        values,
-        {
-          value: values.reduce((acc, cur) => acc + cur, 0n)
-        }
-      );
-      const txReceipt = await txResponse.wait();
-
-      for (const reloadTx of reloadTxs) {
+        const txResponse = await supplyAccount.sendTransaction({
+          to: reloadTx.userWallet.walletAddress,
+          value: ethers.parseEther('0.001'),
+        });
+        const txReceipt = await txResponse.wait();
+        this.logger.log('txReceipt.hash', txReceipt.hash);
         reloadTx.txHash = txReceipt.hash;
         if (txReceipt.status === 1) {
           reloadTx.status = TxStatus.SUCCESS;
@@ -168,7 +183,9 @@ export class GasService {
 
       await queryRunner.commitTransaction();
     } catch (error) {
-      this.logger.error(`handlePendingReloadTx${chainId.toString()}() error within queryRunner, error: ${error}`);
+      this.logger.error(
+        `handlePendingReloadTx${chainId.toString()}() error within queryRunner, error: ${error}`,
+      );
       // no queryRunner.rollbackTransaction() because it contain on-chain transaction
       // no new record created so it's safe not to rollback
 
@@ -182,7 +199,6 @@ export class GasService {
         true,
         true,
       );
-
     } finally {
       await queryRunner.release();
       release(); // release cronMutex
@@ -218,7 +234,7 @@ export class GasService {
       process.env.CREDIT_BOT_ADDRESS,
       process.env.WITHDRAW_BOT_ADDRESS,
       process.env.DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS,
-    ]
+    ];
     return adminAddress.includes(userAddress);
   }
 
@@ -229,25 +245,32 @@ export class GasService {
     const { data } = await firstValueFrom(
       this.httpService.get(requestUrl).pipe(
         catchError((error) => {
-          throw new Error(`Error in GasService.getAmountInUSD, error: ${error}`);
-        })
-      )
+          throw new Error(
+            `Error in GasService.getAmountInUSD, error: ${error}`,
+          );
+        }),
+      ),
     );
     return Number(amount) * data.coins[wbnbAddress].price;
   }
 
-  async reloadNative(walletAddress: string, chainId: number): Promise<ethers.TransactionReceipt> {
+  async reloadNative(
+    walletAddress: string,
+    chainId: number,
+  ): Promise<ethers.TransactionReceipt> {
     const provider_rpc_url = this.configService.get(
       `PROVIDER_RPC_URL_${chainId.toString()}`,
     );
     const provider = new ethers.JsonRpcProvider(provider_rpc_url);
     const supplyAccount = new ethers.Wallet(
-      await MPC.retrievePrivateKey(this.configService.get('SUPPLY_ACCOUNT_ADDRESS')),
-      provider
+      await MPC.retrievePrivateKey(
+        this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+      ),
+      provider,
     );
     const txResponse = await supplyAccount.sendTransaction({
       to: walletAddress,
-      value: ethers.parseEther('0.001')
+      value: ethers.parseEther('0.001'),
     });
     const txReceipt = await txResponse.wait();
     return txReceipt;
