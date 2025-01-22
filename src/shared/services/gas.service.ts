@@ -97,7 +97,6 @@ export class GasService {
     const multiCallContractAddress = this.configService.get(
       `MULTICALL_CONTRACT_ADDRESS_${chainId.toString()}`,
     );
-    this.logger.log('multiCallContractAddress', multiCallContractAddress);
     if (!multiCallContractAddress) return;
 
     const release = await this.cronMutex.acquire();
@@ -115,8 +114,9 @@ export class GasService {
         relations: { userWallet: true },
         order: { id: 'ASC' },
       });
-      this.logger.log('reloadTxs.length', reloadTxs.length);
       if (reloadTxs.length === 0) return;
+      this.logger.log('multiCallContractAddress', multiCallContractAddress);
+      this.logger.log('reloadTxs.length', reloadTxs.length);
 
       const provider_rpc_url = this.configService.get(
         `PROVIDER_RPC_URL_${chainId.toString()}`,
