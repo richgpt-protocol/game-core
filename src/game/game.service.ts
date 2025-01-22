@@ -11,12 +11,9 @@ import {
   DataSource,
   In,
   LessThan,
-<<<<<<< HEAD
   LessThanOrEqual,
   MoreThanOrEqual,
   QueryRunner,
-=======
->>>>>>> 3eb9bf930609ffa515c854375018a2198aafdcf5
   Repository,
 } from 'typeorm';
 import { Game } from './entities/game.entity';
