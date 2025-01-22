@@ -1244,6 +1244,8 @@ export class GameService implements OnModuleInit {
       .where('betOrder.gameId = :gameId', { gameId: game.id })
       // filter out not real USDT bet
       .andWhere('betOrder.walletTxId IS NOT NULL')
+      // filter out failed bet
+      .andWhere('walletTx.status != :status', { status: 'F' })
       // filter out not $1 big forecast at max
       .andWhere('betOrder.bigForecastAmount > 0')
       .andWhere('betOrder.bigForecastAmount <= 1');
