@@ -454,15 +454,10 @@ export class GameService implements OnModuleInit {
           const bigForecast = betOrder.bigForecastAmount;          
           const smallForecast = betOrder.smallForecastAmount;
 
-          if (bigForecast === 0 && smallForecast > 0) {
-            if (["1", "2", "3"].includes(prizeCategory)) {
-              isWinner = true; 
-            }
-          } else if (bigForecast > 0 && smallForecast === 0) {
-            isWinner = true; 
-          } else if (bigForecast > 0 && smallForecast > 0) {
-            isWinner = true; 
-          }
+          if ((bigForecast === 0 && smallForecast > 0 && ["1", "2", "3"].includes(prizeCategory)) 
+            || bigForecast > 0) {
+          isWinner = true; 
+        }
   
           const user =
             betOrder.walletTx?.userWallet?.user ||
