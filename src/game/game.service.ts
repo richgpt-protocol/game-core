@@ -468,7 +468,7 @@ export class GameService implements OnModuleInit {
             }`
           );
         }
-
+        
       }
       await queryRunner.commitTransaction();
     } catch (error) {
@@ -1081,7 +1081,6 @@ export class GameService implements OnModuleInit {
   }
 
   @Cron('58 * * * *')
-  // @Cron('* * * * *')
   async notifyUsersBeforeResult(): Promise<void> {
     this.logger.log('notifyUsersBeforeResult started');
 
@@ -1092,9 +1091,8 @@ export class GameService implements OnModuleInit {
       const currentGame = await queryRunner.manager
         .createQueryBuilder(Game, 'game')
         .where('game.isClosed = :isClosed', { isClosed: false })
-        .orderBy('game.startDate', 'DESC')
         .getOne();
-
+        this.logger.log(`Current game: ${currentGame?.id}`);
       if (!currentGame) {
         this.logger.warn('No active game found');
         return;
@@ -1109,17 +1107,27 @@ export class GameService implements OnModuleInit {
         .leftJoinAndSelect('userWallet.user', 'user')
         .leftJoinAndSelect('creditUserWallet.user', 'creditUser') 
         .where('betOrder.gameId = :gameId', { gameId: currentGame.id })
-        .where('betOrder.type = :type', { type: 'S' })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('walletTx.status = :status', {
+              status: TxStatus.SUCCESS,
+            }).orWhere('creditWalletTx.status = :status', {
+              status: TxStatus.SUCCESS,
+            });
+          }),
+        )
         .getMany();
-        
+    
+      this.logger.log(`Found ${betOrders.length} bet orders for game ID: ${currentGame.id}`);
+
       for (const betOrder of betOrders) {
         const user = betOrder.walletTx?.userWallet?.user || betOrder.creditWalletTx?.userWallet?.user;
         const message = `Only 1 minute left until the results are announced! ⏳ Check it out now and see if you're a winner! 🏆`;
-        await this.fcmService.sendUserFirebase_TelegramNotification(
-          user.id,
-          'Result Announcement Reminder 🕒',
-          message,
-        );
+        // await this.fcmService.sendUserFirebase_TelegramNotification(
+        //   user.id,
+        //   'Result Announcement Reminder 🕒',
+        //   message,
+        // );
         this.logger.log(`Notification sent to user ID: ${user.id}`);
       }
     } catch (error) {
