@@ -485,7 +485,6 @@ export class GameService implements OnModuleInit {
 
         // there might be more than 1 betOrder that numberPair matched
 
-        this.logger.log('betOrders length: ' + betOrders.length);
         for (const betOrder of betOrders) {
           try {
             const { bigForecastWinAmount, smallForecastWinAmount } =
@@ -512,6 +511,8 @@ export class GameService implements OnModuleInit {
             this.logger.error('Error in processWinReferralBonus', error);
           }
         }
+
+        this.logger.log('betOrders length: ' + notificationbetOrders.length);
 
         for (const betOrder of notificationbetOrders) {
           let isWinner = false;
