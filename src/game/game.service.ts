@@ -49,7 +49,11 @@ import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { projectName, endTime } from 'src/database/seeds/jackpot.seed';
 import { Jackpot } from './entities/jackpot.entity';
+import { FCMService } from 'src/shared/services/fcm.service';
+import { AiResponseService } from 'src/shared/services/ai-response.service';
+import { PointTx } from 'src/point/entities/point-tx.entity';
 import { BetService } from './bet.service';
+import { OnChainUtil } from 'src/shared/utils/on-chain.util';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -83,6 +87,8 @@ export class GameService implements OnModuleInit {
     private settingRepository: Repository<Setting>,
     @InjectRepository(Jackpot)
     private jackpotRepository: Repository<Jackpot>,
+    private fcmService: FCMService,
+    private airesponseService: AiResponseService,
     private betService: BetService,
   ) {}
 
@@ -357,16 +363,19 @@ export class GameService implements OnModuleInit {
         ),
         this.provider,
       );
+      console.log('setDrawResultBot', setDrawResultBot.address);
       const coreContract = Core__factory.connect(
         this.configService.get('CORE_CONTRACT_ADDRESS'),
         setDrawResultBot,
       );
       const winningNumberPairs = drawResults.map((result) => result.numberPair);
+      console.log('winningNumberPairs', winningNumberPairs);
       const estimatedGas = await coreContract.setDrawResults.estimateGas(
         winningNumberPairs,
         ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
         '0x',
       );
+      console.log('estimatedGas', estimatedGas.toString());
       const txResponse = await coreContract.setDrawResults(
         winningNumberPairs,
         ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
@@ -376,7 +385,12 @@ export class GameService implements OnModuleInit {
             (estimatedGas * ethers.toBigInt(130)) / ethers.toBigInt(100),
         },
       );
-      const txReceipt = await txResponse.wait();
+      console.log('Response waiting');
+      const txReceipt = await OnChainUtil.waitForTransaction(
+        txResponse,
+        this.provider,
+      );
+      console.log('Finished wait');
 
       const game = await queryRunner.manager
         .createQueryBuilder(Game, 'game')
@@ -398,6 +412,7 @@ export class GameService implements OnModuleInit {
         );
       }
     } catch (err) {
+      console.log(err);
       this.logger.error('Error in game.service.submitDrawResult:', err);
 
       // await this.adminNotificationService.setAdminNotification(
@@ -420,11 +435,48 @@ export class GameService implements OnModuleInit {
   ): Promise<void> {
     await queryRunner.startTransaction();
     try {
+      const game = await queryRunner.manager
+        .createQueryBuilder(Game, 'game')
+        .where('game.id = :id', { id: gameId })
+        .getOne();
+
+      if (!game) {
+        throw new Error(`Game with ID ${gameId} not found`);
+      }
+      const epoch = game.epoch;
+      const notifiedUsers = new Set<number>();
+
+      const notificationbetOrders = await queryRunner.manager
+        .createQueryBuilder(BetOrder, 'betOrder')
+        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
+        .where('betOrder.gameId = :gameId', { gameId })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('walletTx.status = :status', {
+              status: TxStatus.SUCCESS,
+            }).orWhere('creditWalletTx.status = :status', {
+              status: TxStatus.SUCCESS,
+            });
+          }),
+        )
+        .getMany();
+
+      this.logger.log('Bet orders to notify:', notificationbetOrders.length);
+
       for (const drawResult of drawResults) {
         const betOrders = await queryRunner.manager
           .createQueryBuilder(BetOrder, 'betOrder')
           .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
           .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+          .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+          .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+          .leftJoinAndSelect('userWallet.user', 'user')
+          .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
           .where('betOrder.gameId = :gameId', { gameId })
           .andWhere('betOrder.numberPair = :numberPair', {
             numberPair: drawResult.numberPair,
@@ -439,7 +491,11 @@ export class GameService implements OnModuleInit {
             }),
           )
           .getMany();
+
+        const prizeCategory = drawResult.prizeCategory;
+
         // there might be more than 1 betOrder that numberPair matched
+
         for (const betOrder of betOrders) {
           try {
             const { bigForecastWinAmount, smallForecastWinAmount } =
@@ -466,9 +522,53 @@ export class GameService implements OnModuleInit {
             this.logger.error('Error in processWinReferralBonus', error);
           }
         }
+
+        for (const betOrder of notificationbetOrders) {
+          let isWinner = false;
+          const bigForecast = betOrder.bigForecastAmount;
+          const smallForecast = betOrder.smallForecastAmount;
+          if (betOrder.numberPair === drawResult.numberPair) {
+            if (
+              bigForecast > 0 ||
+              (smallForecast > 0 && ['1', '2', '3'].includes(prizeCategory))
+            ) {
+              isWinner = true;
+            }
+          }
+
+          const user =
+            betOrder.walletTx?.userWallet?.user ||
+            betOrder.creditWalletTx?.userWallet?.user;
+          if (!user) {
+            continue;
+          }
+
+          if (notifiedUsers.has(user.id)) {
+            continue;
+          }
+          notifiedUsers.add(user.id);
+
+          const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
+          const message = isWinner
+            ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
+            : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
+
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            user.id,
+            title,
+            message,
+          );
+
+          this.logger.log(
+            `Notification sent to user ID: ${user.id}, Status: ${
+              isWinner ? 'WINNER' : 'LOSER'
+            }`,
+          );
+        }
       }
       await queryRunner.commitTransaction();
     } catch (error) {
+      console.log(error);
       this.logger.error(
         'Error in setAvailableClaimAndProcessReferralBonus',
         error,
@@ -1193,6 +1293,8 @@ export class GameService implements OnModuleInit {
       .where('betOrder.gameId = :gameId', { gameId: game.id })
       // filter out not real USDT bet
       .andWhere('betOrder.walletTxId IS NOT NULL')
+      // filter out failed bet
+      .andWhere('walletTx.status = :status', { status: TxStatus.SUCCESS })
       // filter out not $1 big forecast at max
       .andWhere('betOrder.bigForecastAmount > 0')
       .andWhere('betOrder.bigForecastAmount <= 1');
@@ -1337,6 +1439,138 @@ export class GameService implements OnModuleInit {
         true,
         true,
       );
+    }
+  }
+
+  @Cron('58 * * * *')
+  async notifyUsersBeforeResult(): Promise<void> {
+    this.logger.log('notifyUsersBeforeResult started');
+
+    const betUsers = new Set<number>();
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      const currentGame = await queryRunner.manager
+        .createQueryBuilder(Game, 'game')
+        .where('game.isClosed = :isClosed', { isClosed: false })
+        .getOne();
+
+      this.logger.log(`Current game: ${currentGame?.epoch}`);
+
+      if (!currentGame) {
+        this.logger.warn('No active game found');
+        return;
+      }
+
+      const betOrders = await queryRunner.manager
+        .createQueryBuilder(BetOrder, 'betOrder')
+        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
+        .where('betOrder.gameId = :gameId', { gameId: currentGame.id })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('walletTx.status = :status', {
+              status: TxStatus.SUCCESS,
+            }).orWhere('creditWalletTx.status = :status', {
+              status: TxStatus.SUCCESS,
+            });
+          }),
+        )
+        .getMany();
+
+      this.logger.log(
+        `Found ${betOrders.length} bet orders for game ID: ${currentGame.id}`,
+      );
+
+      for (const betOrder of betOrders) {
+        const user =
+          betOrder.walletTx?.userWallet?.user ||
+          betOrder.creditWalletTx?.userWallet?.user;
+
+        if (!user) {
+          console.log('No user found for betOrder:', betOrder.id);
+          continue;
+        }
+
+        // Only sent once per user
+        if (!betUsers.has(user.id)) {
+          const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆`;
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            user.id,
+            'Result Announcement Reminder 🕒',
+            message,
+          );
+          this.logger.log(`Notification sent to user ID: ${user.id}`);
+
+          betUsers.add(user.id);
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error in notifyUsersBeforeResult:', error.message);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  @Cron('0 0 0 * * *')
+  async notifyUsersWithoutBet(): Promise<void> {
+    this.logger.log('notifyUsersWithoutBet started');
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      this.logger.log(`Three days ago: ${threeDaysAgo}`);
+
+      const usersWithBalance = await queryRunner.manager
+        .createQueryBuilder(UserWallet, 'userWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .getMany();
+
+      this.logger.log(
+        `Number of users with balance: ${usersWithBalance.length}`,
+      );
+
+      const aiMessage =
+        await this.airesponseService.generateInactiveUserNotification();
+      const usersToNotify = [];
+
+      this.logger.log(`AI message: ${aiMessage}`);
+
+      for (const userWallet of usersWithBalance) {
+        const recentPointTx = await queryRunner.manager
+          .createQueryBuilder(PointTx, 'pointTx')
+          .where('pointTx.walletId = :walletId', { walletId: userWallet.id })
+          .andWhere('pointTx.createDate > :threeDaysAgo', { threeDaysAgo })
+          .andWhere('pointTx.status = :status', { status: 'S' })
+          .getOne();
+
+        if (!recentPointTx) {
+          usersToNotify.push(userWallet.user.id);
+        }
+      }
+
+      this.logger.log(`Number of users to notify: ${usersToNotify.length}`);
+
+      for (const userId of usersToNotify) {
+        await this.fcmService.sendUserFirebase_TelegramNotification(
+          userId,
+          'Bet Reminder 🕹️',
+          aiMessage,
+        );
+        await this.airesponseService.saveAiMessageToChatLog(userId, aiMessage);
+        this.logger.log(`Notification sent to user ID: ${userId}`);
+      }
+    } catch (error) {
+      this.logger.error('Error in notifyUsersWithoutBet:', error.message);
+    } finally {
+      await queryRunner.release();
     }
   }
 }

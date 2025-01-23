@@ -37,6 +37,7 @@ import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { ConfigService } from 'src/config/config.service';
 import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { WalletTxType } from 'src/shared/enum/txType.enum';
+import { FCMService } from 'src/shared/services/fcm.service';
 
 type RedeemResponse = {
   error: string;
@@ -77,6 +78,7 @@ export class WithdrawService implements OnModuleInit {
     private settingRepository: Repository<Setting>,
     private dataSource: DataSource,
     private adminNotificationService: AdminNotificationService,
+    private fcmService: FCMService,
     private walletService: WalletService,
     private eventEmitter: EventEmitter2,
     private userService: UserService,
@@ -434,6 +436,7 @@ export class WithdrawService implements OnModuleInit {
           message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
           walletTxId: walletTx.id,
         });
+
       }
       return { error: null, data: redeemTx };
     } catch (error) {
@@ -621,6 +624,12 @@ export class WithdrawService implements OnModuleInit {
             message: `Your payout for amount $${Number(redeemTx.amount)} has been processed successfully.`,
             walletTxId: redeemTx.walletTx.id,
           },
+        );
+
+        await this.fcmService.sendUserFirebase_TelegramNotification(
+          redeemTx.walletTx.userWalletId,
+          'Withdrawal Successful',
+          `You have withdrawn ${Number(redeemTx.amount).toFixed(2)} USDT to ${redeemTx.walletTx.userWallet.walletAddress}`,
         );
       }
     } catch (error) {

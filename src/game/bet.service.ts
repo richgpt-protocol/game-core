@@ -279,24 +279,39 @@ export class BetService implements OnModuleInit {
       payload = this._formatBets(payload);
       await this.validateBets(payload, queryRunner);
 
-      const pendingAmountResult = await queryRunner.manager.query(
+      const pendingWalletTxAmountResult = await queryRunner.manager.query(
         `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx
           WHERE
             userWalletId = ${userInfo.wallet.id} AND
             txType IN ('REDEEM', 'PLAY', 'INTERNAL_TRANSFER') AND
             status IN ('P', 'PD', 'PA')`,
       );
-      const pendingAmount = Number(pendingAmountResult[0]?.pendingAmount) || 0;
-
+      const pendingWalletTxAmount =
+        Number(pendingWalletTxAmountResult[0]?.pendingAmount) || 0;
       const actualWalletBalance =
-        pendingAmount >= userInfo.wallet.walletBalance
+        pendingWalletTxAmount >= userInfo.wallet.walletBalance
           ? 0
-          : userInfo.wallet.walletBalance - pendingAmount;
+          : userInfo.wallet.walletBalance - pendingWalletTxAmount;
+
+      const pendingCreditWalletTxAmountResult = await queryRunner.manager.query(
+        `SELECT SUM(amount) as pendingAmount FROM credit_wallet_tx
+              WHERE
+                userWalletId = ${userInfo.wallet.id} AND
+                txType IN ('PLAY', 'EXPIRY') AND
+                status IN ('P')`,
+      );
+      const pendingCreditWalletTxAmount =
+        Number(pendingCreditWalletTxAmountResult[0]?.pendingAmount) || 0;
+      const actualCreditBalance =
+        pendingCreditWalletTxAmount >= userInfo.wallet.creditBalance
+          ? 0
+          : userInfo.wallet.creditBalance - pendingCreditWalletTxAmount;
 
       // eslint-disable-next-line prefer-const
       let { betOrders, totalWalletBalanceUsed, creditWalletTxns, totalAmount } =
         await this.createBetOrders(
           actualWalletBalance,
+          actualCreditBalance,
           userInfo,
           payload,
           queryRunner,
@@ -601,6 +616,7 @@ export class BetService implements OnModuleInit {
 
   private async createBetOrders(
     actualWalletBalance: number,
+    actualCreditBalance: number,
     userInfo: User,
     payload: BetDto[],
     // walletTx: WalletTx,
@@ -628,7 +644,7 @@ export class BetService implements OnModuleInit {
     const betOrders: Array<BetOrder> = [];
     let totalWalletBalanceUsed = 0;
     let totalAmount = 0;
-    let creditRemaining = Number(userInfo.wallet.creditBalance);
+    let creditRemaining = Number(actualCreditBalance);
     const creditWalletTxns: Array<CreditWalletTx> = [];
 
     const currentTime = new Date().getTime();

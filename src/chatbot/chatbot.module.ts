@@ -13,10 +13,12 @@ import { Admin } from 'src/admin/entities/admin.entity';
 // import { UserModule } from 'src/user/user.module';
 import { ConfigService } from 'src/config/config.service';
 import { ChatbotTelegram } from './chatbot.telegram';
+import { User } from 'src/user/entities/user.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
+      User,
       ChatLog,
       Notification,
       UserNotification,

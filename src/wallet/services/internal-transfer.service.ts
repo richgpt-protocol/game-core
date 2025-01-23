@@ -21,6 +21,7 @@ import { User } from 'src/user/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { WalletTxType } from 'src/shared/enum/txType.enum';
 import { TxStatus } from 'src/shared/enum/status.enum';
+import { FCMService } from 'src/shared/services/fcm.service';
 
 @Injectable()
 export class InternalTransferService {
@@ -42,6 +43,7 @@ export class InternalTransferService {
     private walletService: WalletService,
     private userService: UserService,
     private adminNotificationService: AdminNotificationService,
+    private fcmService: FCMService,
     private configService: ConfigService,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
@@ -389,6 +391,7 @@ export class InternalTransferService {
             walletTxId: senderWalletTx.id,
           });
 
+
           await this.userService.setUserNotification(
             receiverUserWallet.userId,
             {
@@ -431,7 +434,17 @@ export class InternalTransferService {
       await queryRunner.manager.save(senderUserWallet);
       await queryRunner.manager.save(receiverUserWallet);
 
+      const senderUser = await queryRunner.manager.findOne(User, {
+        where: { id: senderUserWallet.userId },
+      });
+
       await queryRunner.commitTransaction();
+
+      await this.fcmService.sendUserFirebase_TelegramNotification(
+        receiverUserWallet.userId,
+        'Internal Transfer Received',
+        `You have received ${Number(senderWalletTx.txAmount).toFixed(2)} USDT from ${senderUser.uid}.`,
+      );
     } catch (error) {
       this.logger.log(
         'InternalTransferService.processTransfer() error: ' + error,

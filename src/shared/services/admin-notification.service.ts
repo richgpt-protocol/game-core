@@ -328,4 +328,12 @@ export class AdminNotificationService implements OnModuleInit {
       });
     }
   }
+
+  public async sendOneTelegram(chatId: string, message: string) {
+    try {
+      await this.bot.sendMessage(chatId, message);
+    } catch (error) {
+      this.logger.error('Error sending message to telegram', error);
+    }
+  }
 }

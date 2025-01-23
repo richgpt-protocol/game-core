@@ -18,7 +18,10 @@ import { MultiCall__factory } from 'src/contract';
 @Injectable()
 export class GasService {
   private readonly logger = new Logger(GasService.name);
-  private readonly cronMutex: Mutex = new Mutex();
+  private readonly cronMutex56: Mutex = new Mutex();
+  private readonly cronMutex97: Mutex = new Mutex();
+  private readonly cronMutex204: Mutex = new Mutex();
+  private readonly cronMutex5611: Mutex = new Mutex();
 
   constructor(
     @InjectRepository(ReloadTx)
@@ -32,7 +35,10 @@ export class GasService {
   ) {}
 
   @OnEvent('gas.service.reload', { async: true })
-  async handleGasReloadEvent(userAddress: string, chainId: number): Promise<void> {
+  async handleGasReloadEvent(
+    userAddress: string,
+    chainId: number,
+  ): Promise<void> {
     const provider_rpc_url = this.configService.get(
       `PROVIDER_RPC_URL_${chainId.toString()}`,
     );
@@ -42,7 +48,7 @@ export class GasService {
     if (balance < ethers.parseEther('0.001')) {
       let amount = '';
       if (!this._isAdmin(userAddress)) {
-        amount = '0.001'
+        amount = '0.001';
 
         // find userWallet through userAddress
         const userWallet = await this.userWalletRepository.findOne({
@@ -63,9 +69,8 @@ export class GasService {
             retryCount: 0,
             userWallet,
             userWalletId: userWallet.id,
-          })
+          }),
         );
-
       } else {
         // no reloadTx for admin reload because
         // no userWallet for admin (userWalletId is compulsory)
@@ -74,55 +79,70 @@ export class GasService {
           `PROVIDER_RPC_URL_${chainId.toString()}`,
         );
         const provider = new ethers.JsonRpcProvider(provider_rpc_url);
-        
+
         // no error handling for admin wallet reload
         // try again in next reload
         const supplyAccount = new ethers.Wallet(
           await MPC.retrievePrivateKey(process.env.SUPPLY_ACCOUNT_ADDRESS),
-          provider
+          provider,
         );
 
         await supplyAccount.sendTransaction({
           to: userAddress,
           // reload 0.01 BNB for admin wallet
-          value: ethers.parseEther('0.01')
+          value: ethers.parseEther('0.01'),
         });
       }
     }
   }
 
-  async handlePendingReloadTx(chainId: number): Promise<void> {
-    const multiCallContractAddress = this.configService.get(`MULTICALL_CONTRACT_ADDRESS_${chainId.toString()}`)
+  async handlePendingReloadTx(
+    chainId: number,
+    cronMutex: Mutex,
+  ): Promise<void> {
+    const multiCallContractAddress = this.configService.get(
+      `MULTICALL_CONTRACT_ADDRESS_${chainId.toString()}`,
+    );
     if (!multiCallContractAddress) return;
 
-    const release = await this.cronMutex.acquire();
+    const release = await cronMutex.acquire();
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
-    
+
     try {
-      const reloadTxs = await queryRunner.manager.find(ReloadTx, {
-        where: {
-          status: TxStatus.PENDING,
-          chainId: chainId,
-        },
-        relations: { userWallet: true },
-        order: { id: 'ASC' },
-      });
+      // const reloadTxs = await queryRunner.manager.find(ReloadTx, {
+      //   where: {
+      //     status: TxStatus.PENDING,
+      //     chainId: chainId,
+      //   },
+      //   relations: { userWallet: true },
+      //   order: { id: 'ASC' },
+      // });
+      const reloadTxs = await queryRunner.manager
+        .createQueryBuilder(ReloadTx, 'reloadTx')
+        .leftJoinAndSelect('reloadTx.userWallet', 'userWallet')
+        .where('reloadTx.status = :status', { status: TxStatus.PENDING })
+        .andWhere('reloadTx.chainId = :chainId', { chainId })
+        .orderBy('reloadTx.id', 'ASC')
+        .getMany();
       if (reloadTxs.length === 0) return;
+      this.logger.log(`reloadTxs.length: ${reloadTxs.length}`);
 
       const provider_rpc_url = this.configService.get(
         `PROVIDER_RPC_URL_${chainId.toString()}`,
       );
       const provider = new ethers.JsonRpcProvider(provider_rpc_url);
       const supplyAccount = new ethers.Wallet(
-        await MPC.retrievePrivateKey(this.configService.get('SUPPLY_ACCOUNT_ADDRESS')),
-        provider
+        await MPC.retrievePrivateKey(
+          this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+        ),
+        provider,
       );
       const multiCallContract = MultiCall__factory.connect(
         multiCallContractAddress,
-        supplyAccount
+        supplyAccount,
       );
       const target: Array<string> = [];
       const data: Array<string> = [];
@@ -138,15 +158,15 @@ export class GasService {
         data,
         values,
         {
-          value: values.reduce((acc, cur) => acc + cur, 0n)
-        }
+          value: values.reduce((acc, cur) => acc + cur, 0n),
+        },
       );
       const txReceipt = await txResponse.wait();
 
       for (const reloadTx of reloadTxs) {
-        reloadTx.txHash = txReceipt.hash;
-        if (txReceipt.status === 1) {
+        if (txReceipt && txReceipt.status === 1) {
           reloadTx.status = TxStatus.SUCCESS;
+          reloadTx.txHash = txReceipt.hash;
         } else {
           reloadTx.retryCount++;
 
@@ -168,7 +188,9 @@ export class GasService {
 
       await queryRunner.commitTransaction();
     } catch (error) {
-      this.logger.error(`handlePendingReloadTx${chainId.toString()}() error within queryRunner, error: ${error}`);
+      this.logger.error(
+        `handlePendingReloadTx${chainId.toString()}() error within queryRunner, error: ${error}`,
+      );
       // no queryRunner.rollbackTransaction() because it contain on-chain transaction
       // no new record created so it's safe not to rollback
 
@@ -182,7 +204,6 @@ export class GasService {
         true,
         true,
       );
-
     } finally {
       await queryRunner.release();
       release(); // release cronMutex
@@ -191,22 +212,22 @@ export class GasService {
 
   @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx56(): Promise<void> {
-    await this.handlePendingReloadTx(56);
+    await this.handlePendingReloadTx(56, this.cronMutex56);
   }
 
   @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx97(): Promise<void> {
-    await this.handlePendingReloadTx(97);
+    await this.handlePendingReloadTx(97, this.cronMutex97);
   }
 
   @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx204(): Promise<void> {
-    await this.handlePendingReloadTx(204);
+    await this.handlePendingReloadTx(204, this.cronMutex204);
   }
 
   @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx5611(): Promise<void> {
-    await this.handlePendingReloadTx(5611);
+    await this.handlePendingReloadTx(5611, this.cronMutex5611);
   }
 
   private _isAdmin(userAddress: string): boolean {
@@ -218,7 +239,7 @@ export class GasService {
       process.env.CREDIT_BOT_ADDRESS,
       process.env.WITHDRAW_BOT_ADDRESS,
       process.env.DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS,
-    ]
+    ];
     return adminAddress.includes(userAddress);
   }
 
@@ -229,25 +250,32 @@ export class GasService {
     const { data } = await firstValueFrom(
       this.httpService.get(requestUrl).pipe(
         catchError((error) => {
-          throw new Error(`Error in GasService.getAmountInUSD, error: ${error}`);
-        })
-      )
+          throw new Error(
+            `Error in GasService.getAmountInUSD, error: ${error}`,
+          );
+        }),
+      ),
     );
     return Number(amount) * data.coins[wbnbAddress].price;
   }
 
-  async reloadNative(walletAddress: string, chainId: number): Promise<ethers.TransactionReceipt> {
+  async reloadNative(
+    walletAddress: string,
+    chainId: number,
+  ): Promise<ethers.TransactionReceipt> {
     const provider_rpc_url = this.configService.get(
       `PROVIDER_RPC_URL_${chainId.toString()}`,
     );
     const provider = new ethers.JsonRpcProvider(provider_rpc_url);
     const supplyAccount = new ethers.Wallet(
-      await MPC.retrievePrivateKey(this.configService.get('SUPPLY_ACCOUNT_ADDRESS')),
-      provider
+      await MPC.retrievePrivateKey(
+        this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+      ),
+      provider,
     );
     const txResponse = await supplyAccount.sendTransaction({
       to: walletAddress,
-      value: ethers.parseEther('0.001')
+      value: ethers.parseEther('0.001'),
     });
     const txReceipt = await txResponse.wait();
     return txReceipt;

@@ -33,6 +33,11 @@ export class RegisterUserDto {
   @IsString()
   @IsNotEmpty()
   otpMethod: 'WHATSAPP' | 'TELEGRAM' | 'SMS';
+
+  @ApiProperty()
+  @IsString()
+  @IsOptional()
+  fcm: string;
 }
 export class SignInDto {
   @ApiProperty()
@@ -45,6 +50,11 @@ export class SignInDto {
   @IsString()
   @IsNotEmpty()
   otpMethod: 'WHATSAPP' | 'TELEGRAM' | 'SMS';
+
+  @ApiProperty()
+  @IsString()
+  @IsOptional()
+  fcm: string;
 }
 export class VerifyOtpDto {
   @ApiProperty()
