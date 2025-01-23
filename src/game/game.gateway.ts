@@ -135,7 +135,7 @@ export class GameGateway {
           break;
         } catch (error) {
           // error occur, log and retry
-          this.logger.error(error);
+          console.log(error);
           attempts++;
         }
       }

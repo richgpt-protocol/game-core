@@ -53,6 +53,7 @@ import { FCMService } from 'src/shared/services/fcm.service';
 import { AiResponseService } from 'src/shared/services/ai-response.service';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { BetService } from './bet.service';
+import { OnChainUtil } from 'src/shared/utils/on-chain.util';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -362,16 +363,19 @@ export class GameService implements OnModuleInit {
         ),
         this.provider,
       );
+      console.log('setDrawResultBot', setDrawResultBot.address);
       const coreContract = Core__factory.connect(
         this.configService.get('CORE_CONTRACT_ADDRESS'),
         setDrawResultBot,
       );
       const winningNumberPairs = drawResults.map((result) => result.numberPair);
+      console.log('winningNumberPairs', winningNumberPairs);
       const estimatedGas = await coreContract.setDrawResults.estimateGas(
         winningNumberPairs,
         ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
         '0x',
       );
+      console.log('estimatedGas', estimatedGas.toString());
       const txResponse = await coreContract.setDrawResults(
         winningNumberPairs,
         ethers.parseEther(this.configService.get('MAX_BET_AMOUNT')),
@@ -381,7 +385,12 @@ export class GameService implements OnModuleInit {
             (estimatedGas * ethers.toBigInt(130)) / ethers.toBigInt(100),
         },
       );
-      const txReceipt = await txResponse.wait();
+      console.log('Response waiting');
+      const txReceipt = await OnChainUtil.waitForTransaction(
+        txResponse,
+        this.provider,
+      );
+      console.log('Finished wait');
 
       const game = await queryRunner.manager
         .createQueryBuilder(Game, 'game')
