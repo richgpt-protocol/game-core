@@ -1105,6 +1105,7 @@ export class GameService implements OnModuleInit {
   async notifyUsersBeforeResult(): Promise<void> {
     this.logger.log('notifyUsersBeforeResult started');
 
+    const betUsers = new Set<number>();
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
 
@@ -1147,13 +1148,24 @@ export class GameService implements OnModuleInit {
         const user =
           betOrder.walletTx?.userWallet?.user ||
           betOrder.creditWalletTx?.userWallet?.user;
-        const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆`;
-        await this.fcmService.sendUserFirebase_TelegramNotification(
-          user.id,
-          'Result Announcement Reminder 🕒',
-          message,
-        );
-        this.logger.log(`Notification sent to user ID: ${user.id}`);
+
+        if (!user) {
+          console.log('No user found for betOrder:', betOrder.id);
+          continue;
+        }
+
+        // Only sent once per user
+        if (!betUsers.has(user.id)) {
+          const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆`;
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            user.id,
+            'Result Announcement Reminder 🕒',
+            message,
+          );
+          this.logger.log(`Notification sent to user ID: ${user.id}`);
+
+          betUsers.add(user.id);
+        }
       }
     } catch (error) {
       this.logger.error('Error in notifyUsersBeforeResult:', error.message);
