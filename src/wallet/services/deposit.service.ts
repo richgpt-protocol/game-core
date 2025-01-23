@@ -343,7 +343,7 @@ export class DepositService implements OnModuleInit {
 
       // reload user wallet if needed
       // temporary solution
-      this.forceReloadIfNeededOrError(
+      await this.forceReloadIfNeededOrError(
         payload.walletAddress,
         payload.chainId,
         queryRunner,
