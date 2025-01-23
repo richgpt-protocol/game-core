@@ -627,7 +627,7 @@ export class WithdrawService implements OnModuleInit {
         await this.fcmService.sendUserFirebase_TelegramNotification(
           redeemTx.walletTx.userWalletId,
           'Withdrawal Successful',
-          `You have withdrawn $$${Number(redeemTx.amount).toFixed(2)} USDT to ${redeemTx.walletTx.userWallet.walletAddress}`,
+          `You have withdrawn ${Number(redeemTx.amount).toFixed(2)} USDT to ${redeemTx.walletTx.userWallet.walletAddress}`,
         );
       }
     } catch (error) {
