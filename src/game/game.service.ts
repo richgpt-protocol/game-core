@@ -524,6 +524,7 @@ export class GameService implements OnModuleInit {
         }
 
         for (const betOrder of notificationbetOrders) {
+          this.logger.log('Procssing BetOrder ID:', betOrder.id);
           let isWinner = false;
           const bigForecast = betOrder.bigForecastAmount;
           const smallForecast = betOrder.smallForecastAmount;
@@ -540,10 +541,14 @@ export class GameService implements OnModuleInit {
             betOrder.walletTx?.userWallet?.user ||
             betOrder.creditWalletTx?.userWallet?.user;
           if (!user) {
+            this.logger.log(`BetOrder ID: ${betOrder.id} has no user`);
             continue;
           }
 
           if (notifiedUsers.has(user.id)) {
+            this.logger.log(
+              `BetOrder ID: ${betOrder.id}  User ID: ${user.id} already notified`,
+            );
             continue;
           }
           notifiedUsers.add(user.id);
