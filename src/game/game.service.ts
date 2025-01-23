@@ -466,6 +466,8 @@ export class GameService implements OnModuleInit {
         )
         .getMany();
 
+      this.logger.log('betOrders length: ' + notificationbetOrders.length);
+
       for (const drawResult of drawResults) {
         const betOrders = await queryRunner.manager
           .createQueryBuilder(BetOrder, 'betOrder')
@@ -520,8 +522,6 @@ export class GameService implements OnModuleInit {
             this.logger.error('Error in processWinReferralBonus', error);
           }
         }
-
-        this.logger.log('betOrders length: ' + notificationbetOrders.length);
 
         for (const betOrder of notificationbetOrders) {
           let isWinner = false;
