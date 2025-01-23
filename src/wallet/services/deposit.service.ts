@@ -47,6 +47,7 @@ import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 import { FCMService } from 'src/shared/services/fcm.service';
 import { GasService } from 'src/shared/services/gas.service';
 import { ReloadTx } from '../entities/reload-tx.entity';
+import { OnChainUtil } from 'src/shared/utils/on-chain.util';
 
 /**
  * How deposit works
@@ -570,7 +571,29 @@ export class DepositService implements OnModuleInit {
       // if transfer token failed, normally due to insufficient gas fee, means
       // user wallet haven't been reloaded yet in processDeposit() especially new created wallet
       // into catch block and retry again in next cron job
-      const receipt = await onchainEscrowTx.wait();
+      const receipt = await OnChainUtil.waitForTransaction(
+        onchainEscrowTx,
+        userSigner.provider,
+      );
+      if (!receipt) {
+        this.logger.error(
+          `handleEscrowTx() error: Transaction receipt not found for depositTxId: ${depositTx.id}`,
+        );
+        // set depositTx status to pending admin
+        depositTx.status = TxStatus.PENDING_ADMIN;
+        await queryRunner.manager.save(depositTx);
+        await queryRunner.commitTransaction();
+        // inform admin
+        await this.adminNotificationService.setAdminNotification(
+          `handleEscrowTx(): transaction receipt not found for depositTxId: ${depositTx.id}`,
+          'ESCROW_ON_CHAIN_TX_NOT_FOUND',
+          'Transfer to Escrow On-chain Tx Failed',
+          true,
+          true,
+          depositTx.walletTxId,
+        );
+        return; // exit silently to prevent attempt this job again
+      }
       const onchainEscrowTxHash = onchainEscrowTx.hash;
 
       if (receipt && receipt.status == 1) {
