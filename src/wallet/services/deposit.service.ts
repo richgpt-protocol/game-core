@@ -45,6 +45,8 @@ import { CreditService } from './credit.service';
 import { Campaign } from 'src/campaign/entities/campaign.entity';
 import { CreditWalletTx } from '../entities/credit-wallet-tx.entity';
 import { FCMService } from 'src/shared/services/fcm.service';
+import { GasService } from 'src/shared/services/gas.service';
+import { ReloadTx } from '../entities/reload-tx.entity';
 
 /**
  * How deposit works
@@ -76,6 +78,9 @@ export class DepositService implements OnModuleInit {
     private campaignService: CampaignService,
     private creditService: CreditService,
     private fcmService: FCMService,
+    @InjectRepository(ReloadTx)
+    private reloadTxRepository: Repository<ReloadTx>,
+    private gasService: GasService,
   ) {}
   onModuleInit() {
     this.queueService.registerHandler(
@@ -255,7 +260,8 @@ export class DepositService implements OnModuleInit {
         `processDeposit() error within queryRunner, walletAddress: ${payload.walletAddress}, error: ${error}`,
         'TRANSACTION_ROLLBACK',
         'Transaction Rollback When Processing Deposit',
-        false,
+        true,
+        true,
       );
 
       throw new InternalServerErrorException('Error processing deposit');
@@ -336,20 +342,26 @@ export class DepositService implements OnModuleInit {
       await queryRunner.manager.save(depositTx);
 
       // reload user wallet if needed
-      const baseChainId = Number(this.configService.get('BASE_CHAIN_ID'));
-      if (payload.chainId !== baseChainId) {
-        // reload user wallet on deposit chain if needed
-        this.eventEmitter.emit(
-          'gas.service.reload',
-          payload.walletAddress,
-          payload.chainId,
-        );
-      }
-      this.eventEmitter.emit(
-        'gas.service.reload',
+      // temporary solution
+      this.forceReloadIfNeededOrError(
         payload.walletAddress,
-        baseChainId,
+        payload.chainId,
+        queryRunner,
       );
+      // const baseChainId = Number(this.configService.get('BASE_CHAIN_ID'));
+      // if (payload.chainId !== baseChainId) {
+      //   // reload user wallet on deposit chain if needed
+      //   this.eventEmitter.emit(
+      //     'gas.service.reload',
+      //     payload.walletAddress,
+      //     payload.chainId,
+      //   );
+      // }
+      // this.eventEmitter.emit(
+      //   'gas.service.reload',
+      //   payload.walletAddress,
+      //   baseChainId,
+      // );
 
       return depositTx;
     } catch (error) {
@@ -1240,5 +1252,100 @@ export class DepositService implements OnModuleInit {
 
       throw new Error(`Error processing referral flow ${error}`);
     }
+  }
+
+  private async forceReloadIfNeededOrError(
+    walletAddress: string,
+    chainId: number,
+    queryRunner: QueryRunner,
+  ) {
+    // queryRunner is connected and transaction is started on parent function
+    const supplyAccount = new ethers.Wallet(
+      await MPC.retrievePrivateKey(
+        this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
+      ),
+    );
+
+    const userWallet = await queryRunner.manager
+      .createQueryBuilder(UserWallet, 'userWallet')
+      .where('userWallet.walletAddress = :walletAddress', {
+        walletAddress,
+      })
+      .getOne();
+
+    const amount = '0.001';
+
+    const baseChainId = Number(this.configService.get('BASE_CHAIN_ID'));
+    if (chainId !== baseChainId) {
+      const chain_provider_rpc_url = this.configService.get(
+        `PROVIDER_RPC_URL_${chainId.toString()}`,
+      );
+      const provider = new ethers.JsonRpcProvider(chain_provider_rpc_url);
+      const balance = await provider.getBalance(walletAddress);
+      if (balance <= ethers.parseEther(amount)) {
+        const chainSupplyAccount = supplyAccount.connect(provider);
+        const txResponse = await chainSupplyAccount.sendTransaction({
+          to: walletAddress,
+          value: ethers.parseEther(amount),
+        });
+        const txReceipt = await txResponse.wait();
+        if (!txReceipt || txReceipt.status !== 1) {
+          throw new Error(
+            `Failed to reload native token on-chain in chain ${chainId}`,
+          );
+        }
+
+        // create reload tx
+        await queryRunner.manager.save(
+          queryRunner.manager.create(ReloadTx, {
+            amount: Number(amount),
+            status: TxStatus.SUCCESS,
+            chainId,
+            currency: 'BNB',
+            amountInUSD: await this.gasService.getAmountInUSD(amount),
+            txHash: txReceipt.hash,
+            retryCount: 0,
+            userWallet,
+            userWalletId: userWallet.id,
+          }),
+        );
+      }
+    }
+
+    const base_chain_provider_rpc_url = this.configService.get(
+      `PROVIDER_RPC_URL_${baseChainId.toString()}`,
+    );
+    const provider = new ethers.JsonRpcProvider(base_chain_provider_rpc_url);
+    const balance = await provider.getBalance(walletAddress);
+    if (balance <= ethers.parseEther(amount)) {
+      const chainSupplyAccount = supplyAccount.connect(provider);
+      const txResponse = await chainSupplyAccount.sendTransaction({
+        to: walletAddress,
+        value: ethers.parseEther(amount),
+      });
+      const txReceipt = await txResponse.wait();
+      if (!txReceipt || txReceipt.status !== 1) {
+        throw new Error(
+          `Failed to reload native token on-chain in chain ${baseChainId}`,
+        );
+      }
+
+      // create reload tx
+      await queryRunner.manager.save(
+        queryRunner.manager.create(ReloadTx, {
+          amount: Number(amount),
+          status: TxStatus.SUCCESS,
+          chainId: baseChainId,
+          currency: 'BNB',
+          amountInUSD: await this.gasService.getAmountInUSD(amount),
+          txHash: txReceipt.hash,
+          retryCount: 0,
+          userWallet,
+          userWalletId: userWallet.id,
+        }),
+      );
+    }
+
+    // queryRunner commit transaction and release will be done in parent function
   }
 }
