@@ -402,12 +402,6 @@ export class InternalTransferService {
             },
           );
 
-          await this.fcmService.sendUserFirebase_TelegramNotification(
-            receiverUserWallet.userId,
-            'Internal Transfer Received',
-            `You have received ${Number(senderWalletTx.txAmount).toFixed(2)} USDT from ${senderWalletTx.userWallet.user.uid}.`,
-          );
-
           this.eventEmitter.emit(
             'gas.service.reload',
             receiverUserWallet.walletAddress,
@@ -440,7 +434,17 @@ export class InternalTransferService {
       await queryRunner.manager.save(senderUserWallet);
       await queryRunner.manager.save(receiverUserWallet);
 
+      const senderUser = await queryRunner.manager.findOne(User, {
+        where: { id: senderUserWallet.userId },
+      });
+
       await queryRunner.commitTransaction();
+
+      await this.fcmService.sendUserFirebase_TelegramNotification(
+        receiverUserWallet.userId,
+        'Internal Transfer Received',
+        `You have received ${Number(senderWalletTx.txAmount).toFixed(2)} USDT from ${senderUser.uid}.`,
+      );
     } catch (error) {
       this.logger.log(
         'InternalTransferService.processTransfer() error: ' + error,
