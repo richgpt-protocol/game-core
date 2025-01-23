@@ -18,7 +18,10 @@ import { MultiCall__factory } from 'src/contract';
 @Injectable()
 export class GasService {
   private readonly logger = new Logger(GasService.name);
-  private readonly cronMutex: Mutex = new Mutex();
+  private readonly cronMutex56: Mutex = new Mutex();
+  private readonly cronMutex97: Mutex = new Mutex();
+  private readonly cronMutex204: Mutex = new Mutex();
+  private readonly cronMutex5611: Mutex = new Mutex();
 
   constructor(
     @InjectRepository(ReloadTx)
@@ -93,13 +96,16 @@ export class GasService {
     }
   }
 
-  async handlePendingReloadTx(chainId: number): Promise<void> {
+  async handlePendingReloadTx(
+    chainId: number,
+    cronMutex: Mutex,
+  ): Promise<void> {
     const multiCallContractAddress = this.configService.get(
       `MULTICALL_CONTRACT_ADDRESS_${chainId.toString()}`,
     );
     if (!multiCallContractAddress) return;
 
-    const release = await this.cronMutex.acquire();
+    const release = await cronMutex.acquire();
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -206,22 +212,22 @@ export class GasService {
 
   @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx56(): Promise<void> {
-    await this.handlePendingReloadTx(56);
+    await this.handlePendingReloadTx(56, this.cronMutex56);
   }
 
   @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx97(): Promise<void> {
-    await this.handlePendingReloadTx(97);
+    await this.handlePendingReloadTx(97, this.cronMutex97);
   }
 
   @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx204(): Promise<void> {
-    await this.handlePendingReloadTx(204);
+    await this.handlePendingReloadTx(204, this.cronMutex204);
   }
 
   @Cron(CronExpression.EVERY_SECOND)
   async handlePendingReloadTx5611(): Promise<void> {
-    await this.handlePendingReloadTx(5611);
+    await this.handlePendingReloadTx(5611, this.cronMutex5611);
   }
 
   private _isAdmin(userAddress: string): boolean {
