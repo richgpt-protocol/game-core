@@ -15,6 +15,7 @@ import { SetReferralPrizeBonusDto } from './points.dto';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointSnapshot } from './entities/PointSnapshot.entity';
 import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
+import { FCMService } from 'src/shared/services/fcm.service';
 
 @Injectable()
 export class PointService {
@@ -35,6 +36,7 @@ export class PointService {
     private adminNotificationService: AdminNotificationService,
     private walletService: WalletService,
     private userService: UserService,
+    private fcmService: FCMService,
   ) {}
 
   getDepositPoints(depositAmount: number): { xp: number; bonusPerc: number } {
@@ -497,7 +499,11 @@ export class PointService {
               walletTxId: pointTx.walletTxId,
             },
           );
-
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            pointTx.userWallet.userId,
+            'Congratulations on Level Up',
+            `You just level up from ${levelBefore} to level ${levelAfter}!`,
+          )
           isLevelUp = true;
         }
 
@@ -516,6 +522,7 @@ export class PointService {
         'Transaction Rollbacked',
         true,
       );
+      
     } finally {
       await queryRunner.release();
     }

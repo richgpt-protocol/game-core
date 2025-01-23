@@ -15,6 +15,7 @@ import { PointTxType } from 'src/shared/enum/txType.enum';
 import axios from 'axios';
 import { ConfigService } from 'src/config/config.service';
 import * as dotenv from 'dotenv';
+
 dotenv.config();
 
 const client = new MongoClient(process.env.MONGODB_URI); // for number recommendation based on input
