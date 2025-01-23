@@ -378,7 +378,6 @@ export class GameService implements OnModuleInit {
         throw new Error(`Game with ID ${gameId} not found`);
       }
       const epoch = game.epoch;
-      const winners = new Set(drawResults.map((result) => result.numberPair));
       const notifiedUsers = new Set<number>();
 
       for (const drawResult of drawResults) {
@@ -451,14 +450,17 @@ export class GameService implements OnModuleInit {
 
         for (const betOrder of notificationbetOrders) {
           let isWinner = false;
-          const bigForecast = betOrder.bigForecastAmount;          
+          const bigForecast = betOrder.bigForecastAmount;
           const smallForecast = betOrder.smallForecastAmount;
           if (betOrder.numberPair === drawResult.numberPair) {
-            if (bigForecast > 0 || (smallForecast > 0 && ["1", "2", "3"].includes(prizeCategory))) {
-              isWinner = true; 
+            if (
+              bigForecast > 0 ||
+              (smallForecast > 0 && ['1', '2', '3'].includes(prizeCategory))
+            ) {
+              isWinner = true;
             }
           }
-  
+
           const user =
             betOrder.walletTx?.userWallet?.user ||
             betOrder.creditWalletTx?.userWallet?.user;
@@ -1145,7 +1147,7 @@ export class GameService implements OnModuleInit {
         const user =
           betOrder.walletTx?.userWallet?.user ||
           betOrder.creditWalletTx?.userWallet?.user;
-        const message = `Only 1 minute left until the results are announced! ⏳ Check it out now and see if you're a winner! 🏆`;
+        const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆`;
         await this.fcmService.sendUserFirebase_TelegramNotification(
           user.id,
           'Result Announcement Reminder 🕒',
