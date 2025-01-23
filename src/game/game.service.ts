@@ -400,6 +400,8 @@ export class GameService implements OnModuleInit {
         )
         .getMany();
 
+      this.logger.log('Bet orders to notify:', notificationbetOrders.length);
+
       for (const drawResult of drawResults) {
         const betOrders = await queryRunner.manager
           .createQueryBuilder(BetOrder, 'betOrder')
