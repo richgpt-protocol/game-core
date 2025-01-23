@@ -453,11 +453,11 @@ export class GameService implements OnModuleInit {
           let isWinner = false;
           const bigForecast = betOrder.bigForecastAmount;          
           const smallForecast = betOrder.smallForecastAmount;
-
-          if ((smallForecast > 0 && ["1", "2", "3"].includes(prizeCategory)) 
-            || bigForecast > 0) {
-          isWinner = true; 
-        }
+          if (betOrder.numberPair === drawResult.numberPair) {
+            if (bigForecast > 0 || (smallForecast > 0 && ["1", "2", "3"].includes(prizeCategory))) {
+              isWinner = true; 
+            }
+          }
   
           const user =
             betOrder.walletTx?.userWallet?.user ||
