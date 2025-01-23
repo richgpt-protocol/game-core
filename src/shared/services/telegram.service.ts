@@ -197,7 +197,7 @@ export class TelegramService {
   public async sendOneTelegram(
     chatId: string,
     message: string,
-    parse_mode: TelegramBot.ParseMode = 'MarkdownV2',
+    parse_mode: TelegramBot.ParseMode = 'Markdown',
   ) {
     try {
       await this.fuyoBot.sendMessage(chatId, message, {
