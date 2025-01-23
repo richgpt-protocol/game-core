@@ -481,6 +481,7 @@ export class DepositService implements OnModuleInit {
   async handleEscrowTx(job: Job<{ depositTxId: number }>) {
     const queryRunner = this.dataSource.createQueryRunner();
 
+    this.logger.log(`handleEscrowTx() job: ${JSON.stringify(job)}`);
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
@@ -492,6 +493,8 @@ export class DepositService implements OnModuleInit {
         .where('depositTx.id = :id', { id: job.data.depositTxId })
         // .orderBy('depositTx.id', 'ASC')
         .getOne();
+
+      this.logger.log(`depositTx: ${JSON.stringify(depositTx)}`);
       if (!depositTx) {
         await queryRunner.release();
 
@@ -508,6 +511,8 @@ export class DepositService implements OnModuleInit {
             walletTxId: depositTx.walletTxId,
           },
         });
+
+        this.logger.log(`gameUsdTx: ${JSON.stringify(gameUsdTx)}`);
 
         if (gameUsdTx) {
           await this.queueService.addJob(
@@ -533,6 +538,8 @@ export class DepositService implements OnModuleInit {
         depositTx.walletTx.userWallet.walletAddress,
         depositTx.chainId,
       );
+
+      this.logger.log(`userSigner: ${userSigner.address}`);
       const tokenContract = this.getTokenContract(
         depositTx.currency,
         userSigner,
@@ -547,24 +554,32 @@ export class DepositService implements OnModuleInit {
         await tokenContract.decimals(),
       );
 
+      this.logger.log(`escrowAddress: ${escrowAddress}`);
       // transfer user deposit token to escrow wallet
       const onchainEscrowTx = await this.transferToken(
         tokenContract,
         escrowAddress,
         depositAmount,
       );
+
+      this.logger.log(`onchainEscrowTx starting`);
       // if transfer token failed, normally due to insufficient gas fee, means
       // user wallet haven't been reloaded yet in processDeposit() especially new created wallet
       // into catch block and retry again in next cron job
       const receipt = await onchainEscrowTx.wait();
-      const onchainEscrowTxHash = onchainEscrowTx.hash;
+      this.logger.log(`onchainEscrowTx waiting`);
 
+      const onchainEscrowTxHash = onchainEscrowTx.hash;
+      this.logger.log(`onchainEscrowTx ${onchainEscrowTxHash}`);
+      this.logger.log(`receipt: ${JSON.stringify(receipt)}`);
       if (receipt && receipt.status == 1) {
         // transfer token transaction success
         depositTx.isTransferred = true;
         depositTx.status = TxStatus.SUCCESS;
         depositTx.txHash = onchainEscrowTxHash;
         await queryRunner.manager.save(depositTx);
+
+        this.logger.log(`depositTx saved`);
 
         const gameUsdTx = new GameUsdTx();
         gameUsdTx.amount = depositTx.walletTx.txAmount;
@@ -578,7 +593,11 @@ export class DepositService implements OnModuleInit {
         gameUsdTx.walletTxs = [depositTx.walletTx];
         const tx = await queryRunner.manager.save(gameUsdTx);
 
+        this.logger.log(`gameUsdTx saved`);
+
         await queryRunner.commitTransaction();
+
+        this.logger.log(`commitTransaction`);
 
         await this.queueService.addJob(
           QueueName.DEPOSIT,
@@ -588,12 +607,14 @@ export class DepositService implements OnModuleInit {
             queueType: QueueType.DEPOSIT_GAMEUSD_ONCHAIN,
           },
         );
+        this.logger.log(`addJob`);
       } else if (receipt && receipt.status != 1) {
         throw new Error(
           `Escrow transaction failed with hash: ${onchainEscrowTxHash}`,
         );
       }
     } catch (error) {
+      console.log(error);
       this.logger.error('handleEscrowTx() error:', error);
       throw new Error(`Error processing deposit ${error}`);
     } finally {
