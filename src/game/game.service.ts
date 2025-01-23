@@ -380,6 +380,26 @@ export class GameService implements OnModuleInit {
       const epoch = game.epoch;
       const notifiedUsers = new Set<number>();
 
+      const notificationbetOrders = await queryRunner.manager
+        .createQueryBuilder(BetOrder, 'betOrder')
+        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
+        .where('betOrder.gameId = :gameId', { gameId })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('walletTx.status = :status', {
+              status: TxStatus.SUCCESS,
+            }).orWhere('creditWalletTx.status = :status', {
+              status: TxStatus.SUCCESS,
+            });
+          }),
+        )
+        .getMany();
+
       for (const drawResult of drawResults) {
         const betOrders = await queryRunner.manager
           .createQueryBuilder(BetOrder, 'betOrder')
@@ -393,26 +413,6 @@ export class GameService implements OnModuleInit {
           .andWhere('betOrder.numberPair = :numberPair', {
             numberPair: drawResult.numberPair,
           })
-          .andWhere(
-            new Brackets((qb) => {
-              qb.where('walletTx.status = :status', {
-                status: TxStatus.SUCCESS,
-              }).orWhere('creditWalletTx.status = :status', {
-                status: TxStatus.SUCCESS,
-              });
-            }),
-          )
-          .getMany();
-
-        const notificationbetOrders = await queryRunner.manager
-          .createQueryBuilder(BetOrder, 'betOrder')
-          .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
-          .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
-          .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-          .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
-          .leftJoinAndSelect('userWallet.user', 'user')
-          .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
-          .where('betOrder.gameId = :gameId', { gameId })
           .andWhere(
             new Brackets((qb) => {
               qb.where('walletTx.status = :status', {
