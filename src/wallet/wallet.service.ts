@@ -420,6 +420,11 @@ export class WalletService {
           )}/tx/${jackpotTx.txHash}`,
           availableClaim: jackpotTx.availableClaim,
           payoutAmount: Number(jackpotTx.payoutAmount),
+          resultStatus: jackpotTx.jackpot.jackpotHash
+            ? jackpotTx.payoutAmount > 0
+              ? 'S' // Matched
+              : 'F' // Not Matched
+            : 'P', // To be revealed soon
         };
       }),
       totalCount,
