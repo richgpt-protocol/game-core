@@ -682,7 +682,7 @@ export class ClaimService implements OnModuleInit {
         .where('walletTx.userWalletId = :userWalletId', {
           userWalletId: userWallet.id,
         })
-        .where('jackpotTx.availableClaim = :availableClaim', {
+        .andWhere('jackpotTx.availableClaim = :availableClaim', {
           availableClaim: true,
         })
         .andWhere('jackpotTx.isClaimed = :isClaimed', {
