@@ -492,8 +492,6 @@ export class GameService implements OnModuleInit {
           )
           .getMany();
 
-        const prizeCategory = drawResult.prizeCategory;
-
         // there might be more than 1 betOrder that numberPair matched
 
         for (const betOrder of betOrders) {
@@ -522,6 +520,12 @@ export class GameService implements OnModuleInit {
             this.logger.error('Error in processWinReferralBonus', error);
           }
         }
+      }
+      await queryRunner.commitTransaction();
+
+      // notify user
+      for (const drawResult of drawResults) {
+        const prizeCategory = drawResult.prizeCategory;
 
         for (const betOrder of notificationbetOrders) {
           this.logger.log('Procssing BetOrder ID:', betOrder.id);
@@ -571,7 +575,6 @@ export class GameService implements OnModuleInit {
           );
         }
       }
-      await queryRunner.commitTransaction();
     } catch (error) {
       console.log(error);
       this.logger.error(
