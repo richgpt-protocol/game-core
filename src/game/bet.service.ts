@@ -1534,14 +1534,7 @@ export class BetService implements OnModuleInit {
         .getOne();
 
       // check if the user is eligible to participate in the jackpot
-      if (
-        (jackpot &&
-          jackpot.projectName === 'FUYO X SQUID GAME - STAGE 2' &&
-          !participant) ||
-        (jackpot.projectName === 'FUYO X SQUID GAME - STAGE 4' &&
-          participant &&
-          participant.lastStage < 2)
-      ) {
+      if (!jackpot) {
         return;
       }
 
