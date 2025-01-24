@@ -436,7 +436,6 @@ export class WithdrawService implements OnModuleInit {
           message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
           walletTxId: walletTx.id,
         });
-
       }
       return { error: null, data: redeemTx };
     } catch (error) {
@@ -544,11 +543,13 @@ export class WithdrawService implements OnModuleInit {
     }>,
   ) {
     this.logger.log('handlePayout()');
+
+    let redeemTx: RedeemTx;
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
       await queryRunner.startTransaction();
-      const redeemTx = await queryRunner.manager
+      redeemTx = await queryRunner.manager
         .createQueryBuilder(RedeemTx, 'redeemTx')
         .leftJoinAndSelect('redeemTx.walletTx', 'walletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
@@ -615,7 +616,18 @@ export class WithdrawService implements OnModuleInit {
         await queryRunner.manager.save(redeemTx.walletTx);
         await queryRunner.manager.save(redeemTx.walletTx.userWallet);
         await queryRunner.commitTransaction();
+      }
+    } catch (error) {
+      this.logger.error('handlePayout() error: ', JSON.stringify(error));
+      await queryRunner.rollbackTransaction();
 
+      throw new Error('Handle Payout errored'); //re-tried by queue
+    } finally {
+      if (!queryRunner.isReleased) await queryRunner.release();
+    }
+
+    if (redeemTx) {
+      try {
         await this.userService.setUserNotification(
           redeemTx.walletTx.userWalletId,
           {
@@ -631,14 +643,10 @@ export class WithdrawService implements OnModuleInit {
           'Withdrawal Successful',
           `You have withdrawn ${Number(redeemTx.amount).toFixed(2)} USDT to ${redeemTx.walletTx.userWallet.walletAddress}`,
         );
+      } catch (ex) {
+        this.logger.error('handlePayout() for sending notification error: ');
+        console.log(ex);
       }
-    } catch (error) {
-      this.logger.error('handlePayout() error: ', JSON.stringify(error));
-      await queryRunner.rollbackTransaction();
-
-      throw new Error('Handle Payout errored'); //re-tried by queue
-    } finally {
-      if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
 

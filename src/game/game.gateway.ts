@@ -6,14 +6,16 @@ import {
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { Game } from './entities/game.entity';
-import { DataSource, Repository } from 'typeorm';
+import { Brackets, DataSource, Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { GameService } from './game.service';
 import { CacheSettingService } from 'src/shared/services/cache-setting.service';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { QueueService } from 'src/queue/queue.service';
-import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { Logger } from '@nestjs/common';
+import { BetOrder } from './entities/bet-order.entity';
+import { TxStatus } from 'src/shared/enum/status.enum';
+import { FCMService } from 'src/shared/services/fcm.service';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class GameGateway {
@@ -32,6 +34,7 @@ export class GameGateway {
     private adminNotificationService: AdminNotificationService,
     private readonly queueService: QueueService,
     private dataSource: DataSource,
+    private fcmService: FCMService,
   ) {}
 
   @SubscribeMessage('liveDrawResult')
@@ -58,6 +61,7 @@ export class GameGateway {
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
     this.logger.log('emitDrawResult()');
+    let lastGame: Game;
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -73,7 +77,7 @@ export class GameGateway {
         lastHour.getUTCMinutes(),
         lastHour.getUTCSeconds(),
       );
-      const lastGame = await queryRunner.manager
+      lastGame = await queryRunner.manager
         .createQueryBuilder(Game, 'game')
         .leftJoinAndSelect('game.drawResult', 'drawResult')
         .where('game.startDate < :lastHourUTC', { lastHourUTC })
@@ -163,6 +167,94 @@ export class GameGateway {
       );
     } finally {
       await queryRunner.release();
+    }
+
+    if (lastGame) {
+      const notifiedUsers = new Set<number>();
+      const epoch = lastGame.epoch;
+
+      try {
+        const notificationbetOrders = await this.dataSource.manager
+          .createQueryBuilder(BetOrder, 'betOrder')
+          .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+          .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+          .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+          .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+          .leftJoinAndSelect('userWallet.user', 'user')
+          .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
+          .where('betOrder.gameId = :gameId', { gameId: lastGame.id })
+          .andWhere(
+            new Brackets((qb) => {
+              qb.where('walletTx.status = :status', {
+                status: TxStatus.SUCCESS,
+              }).orWhere('creditWalletTx.status = :status', {
+                status: TxStatus.SUCCESS,
+              });
+            }),
+          )
+          .getMany();
+
+        this.logger.log('Bet orders to notify:', notificationbetOrders.length);
+
+        // notify user
+        for (const drawResult of lastGame.drawResult) {
+          const prizeCategory = drawResult.prizeCategory;
+
+          for (const betOrder of notificationbetOrders) {
+            this.logger.log('Procssing BetOrder ID:', betOrder.id);
+            let isWinner = false;
+            const bigForecast = betOrder.bigForecastAmount;
+            const smallForecast = betOrder.smallForecastAmount;
+            if (betOrder.numberPair === drawResult.numberPair) {
+              if (
+                bigForecast > 0 ||
+                (smallForecast > 0 && ['1', '2', '3'].includes(prizeCategory))
+              ) {
+                isWinner = true;
+              }
+            }
+
+            const user =
+              betOrder.walletTx?.userWallet?.user ||
+              betOrder.creditWalletTx?.userWallet?.user;
+            if (!user) {
+              this.logger.log(`BetOrder ID: ${betOrder.id} has no user`);
+              continue;
+            }
+
+            if (notifiedUsers.has(user.id)) {
+              this.logger.log(
+                `BetOrder ID: ${betOrder.id}  User ID: ${user.id} already notified`,
+              );
+              continue;
+            }
+            notifiedUsers.add(user.id);
+
+            const title = isWinner
+              ? '✨ You’re a Winner! ✨'
+              : '📢 Game Results';
+            const message = isWinner
+              ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
+              : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
+
+            await this.fcmService.sendUserFirebase_TelegramNotification(
+              user.id,
+              title,
+              message,
+            );
+
+            this.logger.log(
+              `Notification sent to user ID: ${user.id}, Status: ${
+                isWinner ? 'WINNER' : 'LOSER'
+              }`,
+            );
+
+            await this.delay(200);
+          }
+        }
+      } catch (ex) {
+        console.log('Error in drawResult sending notification', ex);
+      }
     }
   }
 }
