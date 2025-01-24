@@ -448,7 +448,8 @@ export class GameService implements OnModuleInit {
             this.logger.error('Error in processWinReferralBonus', error);
           }
         }
-
+        await queryRunner.commitTransaction();
+        
         for (const betOrder of notificationbetOrders) {
           let isWinner = false;
           const bigForecast = betOrder.bigForecastAmount;          
@@ -489,7 +490,7 @@ export class GameService implements OnModuleInit {
           );
         }
       }
-      await queryRunner.commitTransaction();
+     
     } catch (error) {
       this.logger.error(
         'Error in setAvailableClaimAndProcessReferralBonus',
