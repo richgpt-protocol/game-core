@@ -678,6 +678,10 @@ export class ClaimService implements OnModuleInit {
       // fetch all available claim jackpot txs
       const jackpotTxs = await queryRunner.manager
         .createQueryBuilder(JackpotTx, 'jackpotTx')
+        .leftJoinAndSelect('jackpotTx.walletTx', 'walletTx')
+        .where('walletTx.userWalletId = :userWalletId', {
+          userWalletId: userWallet.id,
+        })
         .where('jackpotTx.availableClaim = :availableClaim', {
           availableClaim: true,
         })
