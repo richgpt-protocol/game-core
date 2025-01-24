@@ -466,11 +466,12 @@ export class CreditService {
   ): Promise<any> {
     const { creditWalletTxId } = job.data;
     const queryRunner = this.dataSource.createQueryRunner();
+    let creditWalletTx;
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
 
-      const creditWalletTx = await queryRunner.manager
+      creditWalletTx = await queryRunner.manager
         .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
         .leftJoinAndSelect('creditWalletTx.gameUsdTx', 'gameUsdTx')
         .leftJoinAndSelect('creditWalletTx.userWallet', 'userWallet')
@@ -524,49 +525,6 @@ export class CreditService {
       await queryRunner.manager.save(userWallet);
 
       await queryRunner.commitTransaction();
-
-      if (creditWalletTx.txType == 'CREDIT') {
-        await this.userService.setUserNotification(
-          creditWalletTx.userWallet.userId,
-          {
-            type: 'Credit',
-            title: 'Credit Added Successfully',
-            message: 'Your Credit has been added successfully',
-            walletTxId: creditWalletTx.id,
-          },
-        );
-        await this.fcmService.sendUserFirebase_TelegramNotification(
-          creditWalletTx.userWallet.userId,
-          'Credit Added',
-          `You have received $${Number(gameUsdTx.amount).toFixed(2)} as a credit. Check your app wallet to view your updated balance.`,
-        );
-      }
-
-      if (creditWalletTx.campaign) {
-        const user = await queryRunner.manager.findOne(User, {
-          where: {
-            id: creditWalletTx.userWallet.userId,
-          },
-        });
-
-        if (user) {
-          if (
-            creditWalletTx.campaign.name === 'Deposit $1 USDT Free $1 Credit'
-          ) {
-            await this.sendPostRequest({
-              uid: user.uid,
-              questId: 8,
-            });
-          } else if (
-            creditWalletTx.campaign.name === 'Deposit $10 USDT Free $10 Credit'
-          ) {
-            await this.sendPostRequest({
-              uid: user.uid,
-              questId: 9,
-            });
-          }
-        }
-      }
     } catch (error) {
       this.logger.error(error);
       await queryRunner.rollbackTransaction();
@@ -574,6 +532,58 @@ export class CreditService {
       throw new Error('Failed to add credit');
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
+    }
+
+    // Credit Post actions
+    if (creditWalletTx) {
+      try {
+        if (creditWalletTx.campaign) {
+          const user = await queryRunner.manager.findOne(User, {
+            where: {
+              id: creditWalletTx.userWallet.userId,
+            },
+          });
+
+          if (user) {
+            if (
+              creditWalletTx.campaign.name === 'Deposit $1 USDT Free $1 Credit'
+            ) {
+              await this.sendPostRequest({
+                uid: user.uid,
+                questId: 8,
+              });
+            } else if (
+              creditWalletTx.campaign.name ===
+              'Deposit $10 USDT Free $10 Credit'
+            ) {
+              await this.sendPostRequest({
+                uid: user.uid,
+                questId: 9,
+              });
+            }
+          }
+        }
+
+        if (creditWalletTx.txType == 'CREDIT') {
+          await this.userService.setUserNotification(
+            creditWalletTx.userWallet.userId,
+            {
+              type: 'Credit',
+              title: 'Credit Added Successfully',
+              message: 'Your Credit has been added successfully',
+              walletTxId: creditWalletTx.id,
+            },
+          );
+
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            creditWalletTx.userWallet.userId,
+            'Credit Added',
+            `You have received $${Number(creditWalletTx.gameUsdTx.amount).toFixed(2)} as a credit. Check your app wallet to view your updated balance.`,
+          );
+        }
+      } catch (ex) {
+        console.log('Credit Post Action: ', ex);
+      }
     }
   }
 

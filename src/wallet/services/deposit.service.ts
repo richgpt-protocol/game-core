@@ -868,6 +868,7 @@ export class DepositService implements OnModuleInit {
 
   // handles the db part of gameUsdTx sent to user address.
   private async handleGameUsdTxHash(job: Job<{ gameUsdTxId: number }>) {
+    let walletTx;
     const queryRunner = this.dataSource.createQueryRunner();
     try {
       await queryRunner.connect();
@@ -878,7 +879,7 @@ export class DepositService implements OnModuleInit {
           id: job.data.gameUsdTxId,
         },
       });
-      const walletTx = await queryRunner.manager
+      walletTx = await queryRunner.manager
         .createQueryBuilder(WalletTx, 'walletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
@@ -973,20 +974,6 @@ export class DepositService implements OnModuleInit {
         gameUsdTx.amount,
         queryRunner,
       );
-
-      if (!queryRunner.isReleased) await queryRunner.release();
-
-      await this.userService.setUserNotification(walletTx.userWallet.userId, {
-        type: 'Deposit',
-        title: 'Deposit Processed Successfully',
-        message: 'Your Deposit has been successfully processed',
-        walletTxId: walletTx.id,
-      });
-      await this.fcmService.sendUserFirebase_TelegramNotification(
-        walletTx.userWallet.userId,
-        'Deposit Successful',
-        `You have received ${Number(walletTx.txAmount).toFixed(2)} USDT in your wallet. Check your app wallet to view your updated balance.`,
-      );
     } catch (error) {
       this.logger.error(
         'handleGameUsdTxHash() error within queryRunner, error:',
@@ -997,6 +984,25 @@ export class DepositService implements OnModuleInit {
       throw new Error(`Error processing gameUsdTx ${error}`); //throwing to retry
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
+    }
+
+    // Send notifications outside of the transaction
+    if (walletTx) {
+      try {
+        await this.userService.setUserNotification(walletTx.userWallet.userId, {
+          type: 'Deposit',
+          title: 'Deposit Processed Successfully',
+          message: 'Your Deposit has been successfully processed',
+          walletTxId: walletTx.id,
+        });
+        await this.fcmService.sendUserFirebase_TelegramNotification(
+          walletTx.userWallet.userId,
+          'Deposit Successful',
+          `You have received ${Number(walletTx.txAmount).toFixed(2)} USDT in your wallet. Check your app wallet to view your updated balance.`,
+        );
+      } catch (error) {
+        console.log('Error in sending notification [Deposit function]', error);
+      }
     }
   }
 

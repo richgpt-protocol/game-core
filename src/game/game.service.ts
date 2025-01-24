@@ -54,6 +54,7 @@ import { AiResponseService } from 'src/shared/services/ai-response.service';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { BetService } from './bet.service';
 import { OnChainUtil } from 'src/shared/utils/on-chain.util';
+import { delay } from 'src/shared/constants/util.constant';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -443,30 +444,6 @@ export class GameService implements OnModuleInit {
       if (!game) {
         throw new Error(`Game with ID ${gameId} not found`);
       }
-      const epoch = game.epoch;
-      const notifiedUsers = new Set<number>();
-
-      const notificationbetOrders = await queryRunner.manager
-        .createQueryBuilder(BetOrder, 'betOrder')
-        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
-        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
-        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
-        .leftJoinAndSelect('userWallet.user', 'user')
-        .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
-        .where('betOrder.gameId = :gameId', { gameId })
-        .andWhere(
-          new Brackets((qb) => {
-            qb.where('walletTx.status = :status', {
-              status: TxStatus.SUCCESS,
-            }).orWhere('creditWalletTx.status = :status', {
-              status: TxStatus.SUCCESS,
-            });
-          }),
-        )
-        .getMany();
-
-      this.logger.log('Bet orders to notify:', notificationbetOrders.length);
 
       for (const drawResult of drawResults) {
         const betOrders = await queryRunner.manager
@@ -491,8 +468,6 @@ export class GameService implements OnModuleInit {
             }),
           )
           .getMany();
-
-        const prizeCategory = drawResult.prizeCategory;
 
         // there might be more than 1 betOrder that numberPair matched
 
@@ -521,51 +496,6 @@ export class GameService implements OnModuleInit {
           } catch (error) {
             this.logger.error('Error in processWinReferralBonus', error);
           }
-        }
-
-        this.logger.log('betOrders length: ' + notificationbetOrders.length);
-
-        for (const betOrder of notificationbetOrders) {
-          let isWinner = false;
-          const bigForecast = betOrder.bigForecastAmount;
-          const smallForecast = betOrder.smallForecastAmount;
-          if (betOrder.numberPair === drawResult.numberPair) {
-            if (
-              bigForecast > 0 ||
-              (smallForecast > 0 && ['1', '2', '3'].includes(prizeCategory))
-            ) {
-              isWinner = true;
-            }
-          }
-
-          const user =
-            betOrder.walletTx?.userWallet?.user ||
-            betOrder.creditWalletTx?.userWallet?.user;
-          if (!user) {
-            continue;
-          }
-
-          if (notifiedUsers.has(user.id)) {
-            continue;
-          }
-          notifiedUsers.add(user.id);
-
-          const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
-          const message = isWinner
-            ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
-            : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
-
-          await this.fcmService.sendUserFirebase_TelegramNotification(
-            user.id,
-            title,
-            message,
-          );
-
-          this.logger.log(
-            `Notification sent to user ID: ${user.id}, Status: ${
-              isWinner ? 'WINNER' : 'LOSER'
-            }`,
-          );
         }
       }
       await queryRunner.commitTransaction();
@@ -1449,11 +1379,9 @@ export class GameService implements OnModuleInit {
     this.logger.log('notifyUsersBeforeResult started');
 
     const betUsers = new Set<number>();
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
 
     try {
-      const currentGame = await queryRunner.manager
+      const currentGame = await this.dataSource.manager
         .createQueryBuilder(Game, 'game')
         .where('game.isClosed = :isClosed', { isClosed: false })
         .getOne();
@@ -1465,7 +1393,7 @@ export class GameService implements OnModuleInit {
         return;
       }
 
-      const betOrders = await queryRunner.manager
+      const betOrders = await this.dataSource.manager
         .createQueryBuilder(BetOrder, 'betOrder')
         .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
         .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
@@ -1510,12 +1438,12 @@ export class GameService implements OnModuleInit {
           this.logger.log(`Notification sent to user ID: ${user.id}`);
 
           betUsers.add(user.id);
+
+          await delay(200);
         }
       }
     } catch (error) {
       this.logger.error('Error in notifyUsersBeforeResult:', error.message);
-    } finally {
-      await queryRunner.release();
     }
   }
 
@@ -1523,14 +1451,11 @@ export class GameService implements OnModuleInit {
   async notifyUsersWithoutBet(): Promise<void> {
     this.logger.log('notifyUsersWithoutBet started');
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-
     try {
       const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
       this.logger.log(`Three days ago: ${threeDaysAgo}`);
 
-      const usersWithBalance = await queryRunner.manager
+      const usersWithBalance = await this.dataSource.manager
         .createQueryBuilder(UserWallet, 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
         .getMany();
@@ -1546,7 +1471,7 @@ export class GameService implements OnModuleInit {
       this.logger.log(`AI message: ${aiMessage}`);
 
       for (const userWallet of usersWithBalance) {
-        const recentPointTx = await queryRunner.manager
+        const recentPointTx = await this.dataSource.manager
           .createQueryBuilder(PointTx, 'pointTx')
           .where('pointTx.walletId = :walletId', { walletId: userWallet.id })
           .andWhere('pointTx.createDate > :threeDaysAgo', { threeDaysAgo })
@@ -1568,11 +1493,10 @@ export class GameService implements OnModuleInit {
         );
         await this.airesponseService.saveAiMessageToChatLog(userId, aiMessage);
         this.logger.log(`Notification sent to user ID: ${userId}`);
+        await delay(200);
       }
     } catch (error) {
       this.logger.error('Error in notifyUsersWithoutBet:', error.message);
-    } finally {
-      await queryRunner.release();
     }
   }
 }
