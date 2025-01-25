@@ -1525,18 +1525,7 @@ export class BetService implements OnModuleInit {
           currentTime: currentTime,
         })
         .getOne();
-
-      const participant = await queryRunner.manager
-        .createQueryBuilder(SquidGameParticipant, 'participant')
-        .where('participant.userId = :userId', {
-          userId: userWallet.user.id,
-        })
-        .getOne();
-
-      // check if the user is eligible to participate in the jackpot
-      if (!jackpot) {
-        return;
-      }
+      if (!jackpot) return;
 
       // check if any numberPair in betOrders is greater than minimumBetAmount
       for (const betOrder of betOrders) {
