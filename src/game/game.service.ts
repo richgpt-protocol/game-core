@@ -1145,14 +1145,19 @@ export class GameService implements OnModuleInit {
     });
   }
 
-  async getTotalWinningAmount(): Promise<any> {
+  async getTotalWinningAmount(): Promise<number> {
     const betOrders = await this.betOrderRepository
       .createQueryBuilder('betOrder')
-      .leftJoinAndSelect('betOrder.game', 'game')
-      .leftJoinAndSelect('game.drawResult', 'drawResult')
       .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
       .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
-      .where('betOrder.numberPair = drawResult.numberPair')
+      .leftJoinAndSelect('betOrder.game', 'game')
+      .leftJoinAndSelect('game.drawResult', 'drawResult')
+      .where(
+        'betOrder.gameId IN (SELECT game.id FROM game WHERE game.id = betOrder.gameId)',
+      )
+      .andWhere(
+        'betOrder.numberPair IN (SELECT drawResult.numberPair FROM draw_result WHERE drawResult.gameId = betOrder.gameId)',
+      )
       .andWhere(
         new Brackets((qb) => {
           qb.where('walletTx.status = :status', {
@@ -1162,19 +1167,21 @@ export class GameService implements OnModuleInit {
           });
         }),
       )
+      .setParameter('status', TxStatus.SUCCESS)
       .getMany();
 
     let total = 0;
 
     for (const betOrder of betOrders) {
-      const drawResults = betOrder.game.drawResult;
-      const drawResult = drawResults.find(
+      const drawResult = betOrder.game.drawResult.find(
         (dr) => dr.numberPair === betOrder.numberPair,
       );
 
-      const { bigForecastWinAmount, smallForecastWinAmount } =
-        this.claimService.calculateWinningAmount(betOrder, drawResult);
-      total += Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
+      if (drawResult) {
+        const { bigForecastWinAmount, smallForecastWinAmount } =
+          this.claimService.calculateWinningAmount(betOrder, drawResult);
+        total += Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
+      }
     }
 
     return total;
