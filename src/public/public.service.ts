@@ -345,9 +345,7 @@ export class PublicService {
       previousGameEpoch.toString(),
     );
     const previousWinningAmount =
-      await this.gameService.getWinningAmountByEpoch(
-        previousGameEpoch.toString(),
-      );
+      await this.gameService.getTotalWinningAmount();
 
     return {
       currentGame,
@@ -679,6 +677,10 @@ export class PublicService {
       payload.page,
       payload.limit,
     );
+  }
+
+  async getCurrentJackpot() {
+    return await this.gameService.getCurrentJackpot();
   }
 
   private async addXP(

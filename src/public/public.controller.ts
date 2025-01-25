@@ -433,4 +433,20 @@ export class PublicController {
       message: 'Success',
     };
   }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-jackpot-info')
+  @ApiResponse({
+    status: 200,
+    description: 'Get jackpot info',
+    type: ResponseVo,
+  })
+  async getJackpotInfo(): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getCurrentJackpot();
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
 }
