@@ -1145,19 +1145,14 @@ export class GameService implements OnModuleInit {
     });
   }
 
-  async getTotalWinningAmount(): Promise<number> {
+  async getTotalWinningAmount(): Promise<any> {
     const betOrders = await this.betOrderRepository
       .createQueryBuilder('betOrder')
-      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
-      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
       .leftJoinAndSelect('betOrder.game', 'game')
       .leftJoinAndSelect('game.drawResult', 'drawResult')
-      .where(
-        'betOrder.gameId IN (SELECT game.id FROM game WHERE game.id = betOrder.gameId)',
-      )
-      .andWhere(
-        'betOrder.numberPair IN (SELECT drawResult.numberPair FROM draw_result WHERE drawResult.gameId = betOrder.gameId)',
-      )
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .where('betOrder.numberPair = drawResult.numberPair')
       .andWhere(
         new Brackets((qb) => {
           qb.where('walletTx.status = :status', {
@@ -1167,21 +1162,19 @@ export class GameService implements OnModuleInit {
           });
         }),
       )
-      .setParameter('status', TxStatus.SUCCESS)
       .getMany();
 
     let total = 0;
 
     for (const betOrder of betOrders) {
-      const drawResult = betOrder.game.drawResult.find(
+      const drawResults = betOrder.game.drawResult;
+      const drawResult = drawResults.find(
         (dr) => dr.numberPair === betOrder.numberPair,
       );
 
-      if (drawResult) {
-        const { bigForecastWinAmount, smallForecastWinAmount } =
-          this.claimService.calculateWinningAmount(betOrder, drawResult);
-        total += Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
-      }
+      const { bigForecastWinAmount, smallForecastWinAmount } =
+        this.claimService.calculateWinningAmount(betOrder, drawResult);
+      total += Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
     }
 
     return total;
