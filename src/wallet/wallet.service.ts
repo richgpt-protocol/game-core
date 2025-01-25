@@ -14,6 +14,7 @@ import { UsdtTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 import * as dotenv from 'dotenv';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
+import { projectName } from 'src/database/seeds/jackpot.seed';
 dotenv.config();
 
 type TransactionHistory = {
@@ -369,7 +370,9 @@ export class WalletService {
       .leftJoinAndSelect('jackpotTx.jackpot', 'jackpot')
       .where('user.id = :userId', { userId })
       .andWhere('jackpotTx.status = :status', { status: TxStatus.SUCCESS })
-      .andWhere('jackpot.id != :jackpotId', { jackpotId: 1 })
+      .andWhere('jackpot.projectName = :projectName', {
+        projectName: 'FUYO X SQUID GAME - STAGE 4',
+      })
       .orderBy('jackpotTx.id', 'DESC')
       .skip(skip)
       .take(limit)
@@ -403,7 +406,7 @@ export class WalletService {
       .leftJoinAndSelect('jackpotTx.jackpot', 'jackpot')
       .where('user.id = :userId', { userId })
       .andWhere('jackpotTx.status = :status', { status: TxStatus.SUCCESS })
-      .andWhere('jackpot.id > :jackpotId', { jackpotId: 1 })
+      .andWhere('jackpot.id > :jackpotId', { jackpotId: 2 })
       .orderBy('jackpotTx.id', 'DESC')
       .skip(skip)
       .take(limit)
