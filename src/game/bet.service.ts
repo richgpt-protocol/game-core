@@ -924,6 +924,10 @@ export class BetService implements OnModuleInit {
         .getOne();
 
       //if txHash is not set (first time submission) and contains *ONLY* masked bets, then set txHash and commit transaction
+      console.log('betOrdersDb', JSON.stringify(betOrdersDb));
+      console.log('gameUsdTx', JSON.stringify(gameUsdTx));
+      console.log('containsMasked', containsMasked);
+      console.log('betOrders', betOrders.length);
       if (!gameUsdTx.txHash && containsMasked && betOrders.length === 0) {
         gameUsdTx.txHash = randomUUID();
         gameUsdTx.status = TxStatus.SUCCESS;
