@@ -1523,4 +1523,41 @@ export class GameService implements OnModuleInit {
       this.logger.error('Error in notifyUsersWithoutBet:', error.message);
     }
   }
+
+  @Cron('0 10 * * * *') // 10 minutes after every hour
+  async healthCheck(): Promise<void> {
+    const informAdmin = async (message: string) => {
+      await this.adminNotificationService.setAdminNotification(
+        message,
+        'CHECK_GAME_STATUS_FAILED',
+        'Check Game Status Failed',
+        true,
+        true,
+      );
+    };
+
+    // check if oldest isClosed = false game is current game
+    const currentGame = await this.gameRepository
+      .createQueryBuilder('game')
+      .where('game.isClosed = :isClosed', { isClosed: false })
+      .getOne();
+    const now = new Date(Date.now());
+    if (!(currentGame.startDate < now && currentGame.endDate > now)) {
+      const message = `***NOTICE*** Current game(isClosed = false) is not in the correct time range, current game start date: ${currentGame.startDate}, current game end date: ${currentGame.endDate}, now: ${now}`;
+      this.logger.error(message);
+      await informAdmin(message);
+    }
+
+    // check if current game epoch is same as contract epoch
+    const coreContract = Core__factory.connect(
+      this.configService.get('CORE_CONTRACT_ADDRESS'),
+      this.provider,
+    );
+    const contractEpoch = await coreContract.currentEpoch();
+    if (Number(currentGame.epoch) !== Number(contractEpoch)) {
+      const message = `***NOTICE*** Current game epoch is not same as contract epoch, current game epoch: ${currentGame.epoch}, contract epoch: ${contractEpoch}`;
+      this.logger.error(message);
+      await informAdmin(message);
+    }
+  }
 }
