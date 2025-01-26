@@ -5,8 +5,8 @@ import { Jackpot__factory } from '../../contract';
 
 // game.service.setSquidGameJackpotHash() relies on projectName, startTime and endTime to determine time to set squid game jackpot hash on-chain
 export const projectName = 'CNY Jackpot'; // to update, must be exactly same as contract
-export const startTime = '2025-01-25 18:06:40'; // to update, in UTC
-export const endTime = '2025-02-02 18:06:39'; // to update, in UTC
+export const startTime = '2025-01-27 04:00:00'; // to update, in UTC
+export const endTime = '2025-02-03 03:59:59'; // to update, in UTC
 const minimumBetAmount = 2;
 const PROVIDER_RPC_URL = 'https://opbnb-mainnet-rpc.bnbchain.org'; // to update
 const JACKPOT_CONTRACT_ADDRESS = '0x36D82db01EDb08068EEd19C5517E67A4AF960E0D'; // to update
