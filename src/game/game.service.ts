@@ -1145,28 +1145,52 @@ export class GameService implements OnModuleInit {
     });
   }
 
-  async getWinningAmountByEpoch(epoch: string): Promise<any> {
-    const drawResults = await this.getDrawResultByEpoch(epoch);
+  async getTotalWinningAmount(): Promise<any> {
+    const betOrders = await this.betOrderRepository
+      .createQueryBuilder('betOrder')
+      .leftJoinAndSelect('betOrder.game', 'game')
+      .leftJoinAndSelect('game.drawResult', 'drawResult')
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .where('betOrder.numberPair = drawResult.numberPair')
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('walletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          }).orWhere('creditWalletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          });
+        }),
+      )
+      .getMany();
+
     let total = 0;
 
-    for (const drawResult of drawResults) {
-      const betOrders = await this.betOrderRepository
-        .createQueryBuilder('betOrder')
-        .leftJoinAndSelect('betOrder.game', 'game')
-        .where('game.epoch = :epoch', { epoch })
-        .andWhere('betOrder.numberPair = :numberPair', {
-          numberPair: drawResult.numberPair,
-        })
-        .getMany();
+    for (const betOrder of betOrders) {
+      const drawResults = betOrder.game.drawResult;
+      const drawResult = drawResults.find(
+        (dr) => dr.numberPair === betOrder.numberPair,
+      );
 
-      for (const betOrder of betOrders) {
-        const { bigForecastWinAmount, smallForecastWinAmount } =
-          this.claimService.calculateWinningAmount(betOrder, drawResult);
-        total += Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
-      }
+      const { bigForecastWinAmount, smallForecastWinAmount } =
+        this.claimService.calculateWinningAmount(betOrder, drawResult);
+      total += Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
     }
 
     return total;
+  }
+
+  async getCurrentJackpot(): Promise<Jackpot> {
+    const currentTime = new Date();
+
+    const currentJackpot = await this.jackpotRepository.findOne({
+      where: {
+        startTime: LessThanOrEqual(currentTime),
+        endTime: MoreThanOrEqual(currentTime),
+      },
+    });
+
+    return currentJackpot;
   }
 
   @Cron('0 55 * * * *') // 5 minutes before every hour

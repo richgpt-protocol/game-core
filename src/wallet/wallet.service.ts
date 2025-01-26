@@ -14,6 +14,7 @@ import { UsdtTxType, WalletTxType } from 'src/shared/enum/txType.enum';
 import * as dotenv from 'dotenv';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
+import { projectName } from 'src/database/seeds/jackpot.seed';
 dotenv.config();
 
 type TransactionHistory = {
@@ -369,7 +370,9 @@ export class WalletService {
       .leftJoinAndSelect('jackpotTx.jackpot', 'jackpot')
       .where('user.id = :userId', { userId })
       .andWhere('jackpotTx.status = :status', { status: TxStatus.SUCCESS })
-      .andWhere('jackpot.id != :jackpotId', { jackpotId: 1 })
+      .andWhere('jackpot.projectName = :projectName', {
+        projectName: 'FUYO X SQUID GAME - STAGE 4',
+      })
       .orderBy('jackpotTx.id', 'DESC')
       .skip(skip)
       .take(limit)
@@ -386,6 +389,45 @@ export class WalletService {
           )}/tx/${jackpotTx.txHash}`,
           availableClaim: jackpotTx.availableClaim,
           payoutAmount: Number(jackpotTx.payoutAmount),
+        };
+      }),
+      totalCount,
+      currentPage: page,
+    };
+  }
+
+  async getUserJackpotTickets(userId: number, page: number, limit: number) {
+    const skip = (page - 1) * limit;
+    const [jackpotTx, totalCount] = await this.jackpotTxRepository
+      .createQueryBuilder('jackpotTx')
+      .leftJoinAndSelect('jackpotTx.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('userWallet.user', 'user')
+      .leftJoinAndSelect('jackpotTx.jackpot', 'jackpot')
+      .where('user.id = :userId', { userId })
+      .andWhere('jackpotTx.status = :status', { status: TxStatus.SUCCESS })
+      .andWhere('jackpot.id > :jackpotId', { jackpotId: 2 })
+      .orderBy('jackpotTx.id', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data: jackpotTx.map((jackpotTx) => {
+        return {
+          id: jackpotTx.id,
+          hashGenerated: jackpotTx.randomHash,
+          createdTime: jackpotTx.createdDate,
+          explorerUrl: `${this.configService.get(
+            `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+          )}/tx/${jackpotTx.txHash}`,
+          availableClaim: jackpotTx.availableClaim,
+          payoutAmount: Number(jackpotTx.payoutAmount),
+          resultStatus: jackpotTx.jackpot.jackpotHash
+            ? jackpotTx.payoutAmount > 0
+              ? 'S' // Matched
+              : 'F' // Not Matched
+            : 'P', // To be revealed soon
         };
       }),
       totalCount,
