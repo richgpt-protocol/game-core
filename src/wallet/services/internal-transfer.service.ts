@@ -312,6 +312,9 @@ export class InternalTransferService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
+    let senderUserWallet: UserWallet;
+    let receiverUserWallet: UserWallet;
+
     try {
       // const senderLastValidWalletTx = await this.getLastValidWalletTx(
       //   senderWalletTx.userWalletId,
@@ -320,8 +323,8 @@ export class InternalTransferService {
       //   receiverWalletTx.userWalletId,
       // );
 
-      const senderUserWallet = senderWalletTx.userWallet;
-      const receiverUserWallet = receiverWalletTx.userWallet;
+      senderUserWallet = senderWalletTx.userWallet;
+      receiverUserWallet = receiverWalletTx.userWallet;
 
       const provider = new JsonRpcProvider(
         this.configService.get(
@@ -391,7 +394,6 @@ export class InternalTransferService {
             walletTxId: senderWalletTx.id,
           });
 
-
           await this.userService.setUserNotification(
             receiverUserWallet.userId,
             {
@@ -434,17 +436,7 @@ export class InternalTransferService {
       await queryRunner.manager.save(senderUserWallet);
       await queryRunner.manager.save(receiverUserWallet);
 
-      const senderUser = await queryRunner.manager.findOne(User, {
-        where: { id: senderUserWallet.userId },
-      });
-
       await queryRunner.commitTransaction();
-
-      await this.fcmService.sendUserFirebase_TelegramNotification(
-        receiverUserWallet.userId,
-        'Internal Transfer Received',
-        `You have received ${Number(senderWalletTx.txAmount).toFixed(2)} USDT from ${senderUser.uid}.`,
-      );
     } catch (error) {
       this.logger.log(
         'InternalTransferService.processTransfer() error: ' + error,
@@ -459,6 +451,24 @@ export class InternalTransferService {
       );
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
+    }
+
+    if (senderUserWallet && receiverUserWallet) {
+      try {
+        const senderUser = await this.dataSource.manager.findOne(User, {
+          where: { id: senderUserWallet.userId },
+        });
+        await this.fcmService.sendUserFirebase_TelegramNotification(
+          receiverUserWallet.userId,
+          'Internal Transfer Received',
+          `You have received ${Number(senderWalletTx.txAmount).toFixed(2)} USDT from ${senderUser.uid}.`,
+        );
+      } catch (ex) {
+        this.logger.error(
+          'InternalTransferService.processTransfer() error in sending notification: ',
+        );
+        console.log(ex);
+      }
     }
   }
 

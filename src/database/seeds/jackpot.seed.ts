@@ -4,9 +4,9 @@ import { ethers } from 'ethers';
 import { Jackpot__factory } from '../../contract';
 
 // game.service.setSquidGameJackpotHash() relies on projectName, startTime and endTime to determine time to set squid game jackpot hash on-chain
-export const projectName = 'FUYO X SQUID GAME - STAGE 4'; // to update, must be exactly same as contract
-export const startTime = '2025-01-15 08:28:43'; // to update, in UTC
-export const endTime = '2025-01-24 08:28:42'; // to update, in UTC
+export const projectName = 'CNY Jackpot'; // to update, must be exactly same as contract
+export const startTime = '2025-01-25 18:06:40'; // to update, in UTC
+export const endTime = '2025-02-02 18:06:39'; // to update, in UTC
 const minimumBetAmount = 2;
 const PROVIDER_RPC_URL =
   'https://opbnb-testnet.nodereal.io/v1/8e5337e061dc418eaca1cc8236ba566a'; // to update
