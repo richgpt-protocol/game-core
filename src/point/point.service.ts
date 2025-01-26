@@ -4,8 +4,8 @@ import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { User } from 'src/user/entities/user.entity';
-import { DataSource, Repository, Like, Brackets, Between, In } from 'typeorm';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { DataSource, Repository, Like, Brackets } from 'typeorm';
+import { Cron } from '@nestjs/schedule';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { PointTx } from './entities/point-tx.entity';
 import { WalletService } from 'src/wallet/wallet.service';
@@ -16,6 +16,7 @@ import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
 import { PointSnapshot } from './entities/PointSnapshot.entity';
 import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { FCMService } from 'src/shared/services/fcm.service';
+import { delay } from 'src/shared/constants/util.constant';
 
 @Injectable()
 export class PointService {
@@ -469,6 +470,9 @@ export class PointService {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+
+    const notifiedUsers: any[] = [];
+
     try {
       // const pointTxs = await this.pointTxRepository.find({
       //   where: {
@@ -499,12 +503,13 @@ export class PointService {
               walletTxId: pointTx.walletTxId,
             },
           );
-          await this.fcmService.sendUserFirebase_TelegramNotification(
-            pointTx.userWallet.userId,
-            'Congratulations on Level Up',
-            `You just level up from ${levelBefore} to level ${levelAfter}!`,
-          )
+
           isLevelUp = true;
+          notifiedUsers.push({
+            userId: pointTx.userWallet.userId,
+            levelBefore,
+            levelAfter,
+          });
         }
 
         pointTx.isLevelUp = isLevelUp;
@@ -522,9 +527,23 @@ export class PointService {
         'Transaction Rollbacked',
         true,
       );
-      
     } finally {
       await queryRunner.release();
+    }
+
+    if (notifiedUsers.length > 0) {
+      try {
+        for (const notifiedUser of notifiedUsers) {
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            notifiedUser.userId,
+            'Congratulations on Level Up',
+            `You just level up from ${notifiedUser.levelBefore} to level ${notifiedUser.levelAfter}!`,
+          );
+          await delay(200);
+        }
+      } catch (error) {
+        console.log('checkLevelUp', error);
+      }
     }
   }
 

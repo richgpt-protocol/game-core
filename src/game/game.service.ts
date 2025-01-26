@@ -54,6 +54,7 @@ import { AiResponseService } from 'src/shared/services/ai-response.service';
 import { PointTx } from 'src/point/entities/point-tx.entity';
 import { BetService } from './bet.service';
 import { OnChainUtil } from 'src/shared/utils/on-chain.util';
+import { delay } from 'src/shared/constants/util.constant';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -1247,28 +1248,52 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
     });
   }
 
-  async getWinningAmountByEpoch(epoch: string): Promise<any> {
-    const drawResults = await this.getDrawResultByEpoch(epoch);
+  async getTotalWinningAmount(): Promise<any> {
+    const betOrders = await this.betOrderRepository
+      .createQueryBuilder('betOrder')
+      .leftJoinAndSelect('betOrder.game', 'game')
+      .leftJoinAndSelect('game.drawResult', 'drawResult')
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .where('betOrder.numberPair = drawResult.numberPair')
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('walletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          }).orWhere('creditWalletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          });
+        }),
+      )
+      .getMany();
+
     let total = 0;
 
-    for (const drawResult of drawResults) {
-      const betOrders = await this.betOrderRepository
-        .createQueryBuilder('betOrder')
-        .leftJoinAndSelect('betOrder.game', 'game')
-        .where('game.epoch = :epoch', { epoch })
-        .andWhere('betOrder.numberPair = :numberPair', {
-          numberPair: drawResult.numberPair,
-        })
-        .getMany();
+    for (const betOrder of betOrders) {
+      const drawResults = betOrder.game.drawResult;
+      const drawResult = drawResults.find(
+        (dr) => dr.numberPair === betOrder.numberPair,
+      );
 
-      for (const betOrder of betOrders) {
-        const { bigForecastWinAmount, smallForecastWinAmount } =
-          this.claimService.calculateWinningAmount(betOrder, drawResult);
-        total += Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
-      }
+      const { bigForecastWinAmount, smallForecastWinAmount } =
+        this.claimService.calculateWinningAmount(betOrder, drawResult);
+      total += Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
     }
 
     return total;
+  }
+
+  async getCurrentJackpot(): Promise<Jackpot> {
+    const currentTime = new Date();
+
+    const currentJackpot = await this.jackpotRepository.findOne({
+      where: {
+        startTime: LessThanOrEqual(currentTime),
+        endTime: MoreThanOrEqual(currentTime),
+      },
+    });
+
+    return currentJackpot;
   }
 
   @Cron('0 55 * * * *') // 5 minutes before every hour
@@ -1481,11 +1506,9 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
     this.logger.log('notifyUsersBeforeResult started');
 
     const betUsers = new Set<number>();
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
 
     try {
-      const currentGame = await queryRunner.manager
+      const currentGame = await this.dataSource.manager
         .createQueryBuilder(Game, 'game')
         .where('game.isClosed = :isClosed', { isClosed: false })
         .getOne();
@@ -1497,7 +1520,7 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
         return;
       }
 
-      const betOrders = await queryRunner.manager
+      const betOrders = await this.dataSource.manager
         .createQueryBuilder(BetOrder, 'betOrder')
         .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
         .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
@@ -1542,12 +1565,12 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
           this.logger.log(`Notification sent to user ID: ${user.id}`);
 
           betUsers.add(user.id);
+
+          await delay(200);
         }
       }
     } catch (error) {
       this.logger.error('Error in notifyUsersBeforeResult:', error.message);
-    } finally {
-      await queryRunner.release();
     }
   }
 
@@ -1555,14 +1578,11 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
   async notifyUsersWithoutBet(): Promise<void> {
     this.logger.log('notifyUsersWithoutBet started');
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-
     try {
       const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
       this.logger.log(`Three days ago: ${threeDaysAgo}`);
 
-      const usersWithBalance = await queryRunner.manager
+      const usersWithBalance = await this.dataSource.manager
         .createQueryBuilder(UserWallet, 'userWallet')
         .leftJoinAndSelect('userWallet.user', 'user')
         .getMany();
@@ -1578,7 +1598,7 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
       this.logger.log(`AI message: ${aiMessage}`);
 
       for (const userWallet of usersWithBalance) {
-        const recentPointTx = await queryRunner.manager
+        const recentPointTx = await this.dataSource.manager
           .createQueryBuilder(PointTx, 'pointTx')
           .where('pointTx.walletId = :walletId', { walletId: userWallet.id })
           .andWhere('pointTx.createDate > :threeDaysAgo', { threeDaysAgo })
@@ -1600,11 +1620,10 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
         );
         await this.airesponseService.saveAiMessageToChatLog(userId, aiMessage);
         this.logger.log(`Notification sent to user ID: ${userId}`);
+        await delay(200);
       }
     } catch (error) {
       this.logger.error('Error in notifyUsersWithoutBet:', error.message);
-    } finally {
-      await queryRunner.release();
     }
   }
 }

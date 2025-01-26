@@ -57,8 +57,7 @@ export class FCMService {
     message: string,
   ) {
     try {
-      const queryRunner = this.dataSource.createQueryRunner();
-      const user = await queryRunner.manager.findOne(User, {
+      const user = await this.userRepository.findOne({
         where: {
           id: userId,
         },
@@ -77,7 +76,6 @@ export class FCMService {
             telegramError.message,
           );
         }
-        await this.delay(1000 / 30);
       } else {
         this.logger.warn(`Telegram ID is empty for user ID: ${userId}`);
       }
@@ -100,7 +98,6 @@ export class FCMService {
             firebaseError.message,
           );
         }
-        await this.delay(1000 / 500);
       } else {
         this.logger.warn(`FCM token is empty for user ID: ${userId}`);
       }
@@ -157,9 +154,5 @@ export class FCMService {
     }
 
     return results;
-  }
-
-  private async delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

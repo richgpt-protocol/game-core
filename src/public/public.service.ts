@@ -345,9 +345,7 @@ export class PublicService {
       previousGameEpoch.toString(),
     );
     const previousWinningAmount =
-      await this.gameService.getWinningAmountByEpoch(
-        previousGameEpoch.toString(),
-      );
+      await this.gameService.getTotalWinningAmount();
 
     return {
       currentGame,
@@ -666,6 +664,23 @@ export class PublicService {
       payload.page,
       payload.limit,
     );
+  }
+
+  async getJackpotTickets(payload: SquidGameTicketListDto) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    return await this.walletService.getUserJackpotTickets(
+      user.id,
+      payload.page,
+      payload.limit,
+    );
+  }
+
+  async getCurrentJackpot() {
+    return await this.gameService.getCurrentJackpot();
   }
 
   private async addXP(
