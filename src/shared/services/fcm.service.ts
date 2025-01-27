@@ -74,7 +74,6 @@ export class FCMService {
               telegramError.message,
             );
           }
-          await this.delay(1000 / 30);
         } else {
           this.logger.warn(`Telegram ID is empty for user ID: ${userId}`);
         }
@@ -95,7 +94,6 @@ export class FCMService {
                 firebaseError.message,
               );
             }
-            await this.delay(1000 / 500);
         } else {
           this.logger.warn(`FCM token is empty for user ID: ${userId}`);
         }
@@ -139,9 +137,5 @@ export class FCMService {
     }
 
     return results;
-  }
-
-  private async delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

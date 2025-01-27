@@ -448,17 +448,21 @@ export class GameService implements OnModuleInit {
             this.logger.error('Error in processWinReferralBonus', error);
           }
         }
+        await queryRunner.commitTransaction();
 
         for (const betOrder of notificationbetOrders) {
           let isWinner = false;
-          const bigForecast = betOrder.bigForecastAmount;          
+          const bigForecast = betOrder.bigForecastAmount;
           const smallForecast = betOrder.smallForecastAmount;
           if (betOrder.numberPair === drawResult.numberPair) {
-            if (bigForecast > 0 || (smallForecast > 0 && ["1", "2", "3"].includes(prizeCategory))) {
-              isWinner = true; 
+            if (
+              bigForecast > 0 ||
+              (smallForecast > 0 && ['1', '2', '3'].includes(prizeCategory))
+            ) {
+              isWinner = true;
             }
           }
-  
+
           const user =
             betOrder.walletTx?.userWallet?.user ||
             betOrder.creditWalletTx?.userWallet?.user;
@@ -489,7 +493,6 @@ export class GameService implements OnModuleInit {
           );
         }
       }
-      await queryRunner.commitTransaction();
     } catch (error) {
       this.logger.error(
         'Error in setAvailableClaimAndProcessReferralBonus',
