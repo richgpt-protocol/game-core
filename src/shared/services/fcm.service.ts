@@ -54,8 +54,7 @@ export class FCMService {
 
   async sendUserFirebase_TelegramNotification(userId: number, title: string, message: string) {
       try {
-        const queryRunner = this.dataSource.createQueryRunner();
-        const user = await queryRunner.manager.findOne(User, {
+        const user = await this.userRepository.findOne({
           where: {
             id: userId,
           },
