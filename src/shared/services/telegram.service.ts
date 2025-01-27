@@ -1,4 +1,4 @@
-import { Injectable ,Logger} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from 'src/config/config.service';
 import { User } from 'src/user/entities/user.entity';
@@ -26,12 +26,9 @@ export class TelegramService {
       'TELEGRAM_OTP_BOT_USERNAME',
     );
 
-    this.fuyoBot = new TelegramBot(
-      this.configService.get('FUYO_BOT_TOKEN'),
-      {
-        polling: false,
-      },
-    );
+    this.fuyoBot = new TelegramBot(this.configService.get('FUYO_BOT_TOKEN'), {
+      polling: false,
+    });
 
     this.telegramOTPBot = new Telegraf(telegramOTPBotToken);
     this.telegramOTPBot.start((ctx) => this.handleStartCommand(ctx));
@@ -197,10 +194,15 @@ export class TelegramService {
     );
   }
 
-  
-  public async sendOneTelegram(chatId: string, message: string) {
+  public async sendOneTelegram(
+    chatId: string,
+    message: string,
+    parse_mode: TelegramBot.ParseMode = 'Markdown',
+  ) {
     try {
-      await this.fuyoBot.sendMessage(chatId, message);
+      await this.fuyoBot.sendMessage(chatId, message, {
+        parse_mode,
+      });
     } catch (error) {
       this.logger.error('Error sending message to telegram', error);
     }

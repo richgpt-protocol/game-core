@@ -529,7 +529,7 @@ export class CreditService {
         await this.fcmService.sendUserFirebase_TelegramNotification(
           creditWalletTx.userWallet.userId,
           'Credit Added',
-          `You have received ${Number(gameUsdTx.amount).toFixed(2)} as a credit. Check your app wallet to view your updated balance.`,
+          `You have received $${Number(gameUsdTx.amount).toFixed(2)} as a credit. Check your app wallet to view your updated balance.`,
         );
       }
     } catch (error) {

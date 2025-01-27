@@ -885,7 +885,7 @@ export class DepositService implements OnModuleInit {
       await this.fcmService.sendUserFirebase_TelegramNotification(
         walletTx.userWallet.userId,
         'Deposit Successful',
-        `You have received ${walletTx.txAmount} USDT in your wallet. Check your app wallet to view your updated balance.`,
+        `You have received ${Number(walletTx.txAmount).toFixed(2)} USDT in your wallet. Check your app wallet to view your updated balance.`,
       );
     } catch (error) {
       this.logger.error(
