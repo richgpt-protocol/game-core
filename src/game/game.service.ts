@@ -1148,7 +1148,7 @@ export class GameService implements OnModuleInit {
         const user =
           betOrder.walletTx?.userWallet?.user ||
           betOrder.creditWalletTx?.userWallet?.user;
-        const message = `Only 1 minute left until the results are announced! ⏳ Check it out now and see if you're a winner! 🏆`;
+        const message = `Only 1 minute left until the results are announced! ⏳ Check it out now and see if you're a winner! 🏆 \n\n https://app.fuyo.lol/`;
         await this.fcmService.sendUserFirebase_TelegramNotification(
           user.id,
           'Result Announcement Reminder 🕒',
