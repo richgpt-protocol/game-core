@@ -1159,7 +1159,7 @@ export class GameService implements OnModuleInit {
 
         // Only sent once per user
         if (!betUsers.has(user.id)) {
-          const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆`;
+          const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆 \n\n! https://app.fuyo.lol/`;
           await this.fcmService.sendUserFirebase_TelegramNotification(
             user.id,
             'Result Announcement Reminder 🕒',
