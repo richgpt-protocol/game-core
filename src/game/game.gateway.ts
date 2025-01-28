@@ -197,60 +197,66 @@ export class GameGateway {
         this.logger.log('Bet orders to notify:', notificationbetOrders.length);
 
         // notify user
-        for (const drawResult of lastGame.drawResult) {
-          const prizeCategory = drawResult.prizeCategory;
+        const userBetOrdersMap = new Map<number, BetOrder[]>();
 
-          for (const betOrder of notificationbetOrders) {
-            this.logger.log('Procssing BetOrder ID:', betOrder.id);
-            let isWinner = false;
+        for (const betOrder of notificationbetOrders) {
+          const user =
+            betOrder.walletTx?.userWallet?.user ||
+            betOrder.creditWalletTx?.userWallet?.user;
+          if (!user) {
+            this.logger.log(`BetOrder ID: ${betOrder.id} has no user`);
+            continue;
+          }
+
+          if (!userBetOrdersMap.has(user.id)) {
+            userBetOrdersMap.set(user.id, []);
+          }
+          userBetOrdersMap.get(user.id).push(betOrder);
+        }
+
+        for (const [userId, betOrders] of userBetOrdersMap.entries()) {
+          let isWinner = false;
+          let winningNumberPair = '';
+
+          for (const betOrder of betOrders) {
             const bigForecast = betOrder.bigForecastAmount;
             const smallForecast = betOrder.smallForecastAmount;
-            if (betOrder.numberPair === drawResult.numberPair) {
-              if (
-                bigForecast > 0 ||
-                (smallForecast > 0 && ['1', '2', '3'].includes(prizeCategory))
-              ) {
-                isWinner = true;
+
+            for (const drawResult of lastGame.drawResult) {
+              const prizeCategory = drawResult.prizeCategory;
+              if (betOrder.numberPair === drawResult.numberPair) {
+                if (
+                  bigForecast > 0 ||
+                  (smallForecast > 0 && ['1', '2', '3'].includes(prizeCategory))
+                ) {
+                  isWinner = true;
+                  winningNumberPair = drawResult.numberPair;
+                  break;
+                }
               }
             }
 
-            const user =
-              betOrder.walletTx?.userWallet?.user ||
-              betOrder.creditWalletTx?.userWallet?.user;
-            if (!user) {
-              this.logger.log(`BetOrder ID: ${betOrder.id} has no user`);
-              continue;
-            }
-
-            if (notifiedUsers.has(user.id)) {
-              this.logger.log(
-                `BetOrder ID: ${betOrder.id}  User ID: ${user.id} already notified`,
-              );
-              continue;
-            }
-            notifiedUsers.add(user.id);
-
-            const title = isWinner
-              ? '✨ You’re a Winner! ✨'
-              : '📢 Game Results';
-            const message = isWinner
-              ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
-              : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
-
-            await this.fcmService.sendUserFirebase_TelegramNotification(
-              user.id,
-              title,
-              message,
-            );
-
-            this.logger.log(
-              `Notification sent to user ID: ${user.id}, Status: ${
-                isWinner ? 'WINNER' : 'LOSER'
-              }`,
-            );
-
-            await this.delay(200);
+            if (isWinner) break;
           }
+
+          const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
+          const message = isWinner
+            ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${epoch}\n**Winning Number:** ${winningNumberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
+            : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
+
+          await this.fcmService.sendUserFirebase_TelegramNotification(
+            userId,
+            title,
+            message,
+          );
+
+          this.logger.log(
+            `Notification sent to user ID: ${userId}, Status: ${
+              isWinner ? 'WINNER' : 'LOSER'
+            }`,
+          );
+
+          await this.delay(200);
         }
       } catch (ex) {
         console.log('Error in drawResult sending notification', ex);
