@@ -449,4 +449,34 @@ export class PublicController {
       message: 'Success',
     };
   }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-user-ticket')
+  @ApiQuery({ name: 'uid', required: true })
+  @ApiQuery({ name: 'isCurrent', required: true })
+  @ApiQuery({ name: 'page', required: true })
+  @ApiQuery({ name: 'limit', required: true })
+  @ApiResponse({
+    status: 200,
+    description: 'Get user ticket',
+    type: ResponseVo,
+  })
+  async getUserTicket(
+    @Query('uid') uid: string,
+    @Query('isCurrent') isCurrent: string,
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getUserTicket(
+      uid,
+      isCurrent === 'true',
+      page,
+      limit,
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
 }
