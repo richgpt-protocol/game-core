@@ -453,7 +453,7 @@ export class PublicController {
   @UseGuards(SecretTokenGuard)
   @Get('get-user-ticket')
   @ApiQuery({ name: 'uid', required: true })
-  @ApiQuery({ name: 'isCurrent', required: true })
+  @ApiQuery({ name: 'isUpcoming', required: true })
   @ApiQuery({ name: 'page', required: true })
   @ApiQuery({ name: 'limit', required: true })
   @ApiResponse({
@@ -463,13 +463,13 @@ export class PublicController {
   })
   async getUserTicket(
     @Query('uid') uid: string,
-    @Query('isCurrent') isCurrent: string,
+    @Query('isUpcoming') isUpcoming: string,
     @Query('page') page: number,
     @Query('limit') limit: number,
   ): Promise<ResponseVo<any>> {
     const data = await this.publicService.getUserTicket(
       uid,
-      isCurrent === 'true',
+      isUpcoming === 'true',
       page,
       limit,
     );
