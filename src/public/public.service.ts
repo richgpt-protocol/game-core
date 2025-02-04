@@ -1025,7 +1025,7 @@ export class PublicService {
 
   async getUserTicket(
     uid: string,
-    isCurrent: boolean,
+    isUpcoming: boolean,
     page: number,
     limit: number,
   ) {
@@ -1063,7 +1063,7 @@ export class PublicService {
       .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
       .leftJoin('walletTx.userWallet', 'walletTxUserWallet')
       .leftJoin('creditWalletTx.userWallet', 'creditTxUserWallet')
-      .where(isCurrent ? 'game.epoch = :epoch' : 'game.epoch != :epoch', {
+      .where(isUpcoming ? 'game.epoch >= :epoch' : 'game.epoch < :epoch', {
         epoch: currentGame.epoch,
       })
       .andWhere(
