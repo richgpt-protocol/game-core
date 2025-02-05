@@ -12,7 +12,7 @@ import { UpdateTaskXpDto } from './dtos/update-task-xp.dto';
 import { UpdateUserTelegramDto } from './dtos/update-user-telegram.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
-import { DataSource, QueryRunner, Repository } from 'typeorm';
+import { Brackets, DataSource, QueryRunner, Repository } from 'typeorm';
 import { ConfigService } from 'src/config/config.service';
 import {
   ContractTransactionReceipt,
@@ -53,6 +53,9 @@ import { WithdrawService } from 'src/wallet/services/withdraw.service';
 import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimService } from 'src/wallet/services/claim.service';
+import { BetOrder } from 'src/game/entities/bet-order.entity';
+import { Game } from 'src/game/entities/game.entity';
+
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -1018,5 +1021,84 @@ export class PublicService {
       if (!queryRunner.isReleased) await queryRunner.release();
       release();
     }
+  }
+
+  async getUserTicket(
+    uid: string,
+    isUpcoming: boolean,
+    page: number,
+    limit: number,
+  ) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const now = new Date(Date.now());
+    const currentGame = await this.dataSource.manager
+      .createQueryBuilder(Game, 'game')
+      .andWhere('game.startDate <= :now', { now })
+      .andWhere('game.endDate >= :now', { now })
+      .getOne();
+    if (!currentGame) {
+      throw new BadRequestException('Current epoch not found');
+    }
+
+    const betOrders = await this.dataSource.manager
+      .createQueryBuilder(BetOrder, 'betOrder')
+      .select([
+        'betOrder.id',
+        'betOrder.numberPair',
+        'betOrder.bigForecastAmount',
+        'betOrder.smallForecastAmount',
+        'betOrder.isClaimed',
+        'betOrder.availableClaim',
+        'betOrder.createdDate',
+        'betOrder.type',
+        'betOrder.motherPair',
+        'game.epoch',
+        'walletTx.status',
+        'creditWalletTx.status',
+      ])
+      .leftJoin('betOrder.game', 'game')
+      .leftJoin('betOrder.walletTx', 'walletTx')
+      .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoin('walletTx.userWallet', 'walletTxUserWallet')
+      .leftJoin('creditWalletTx.userWallet', 'creditTxUserWallet')
+      .leftJoin('creditTxUserWallet.user', 'creditTxUser')
+      .where(isUpcoming ? 'game.epoch >= :epoch' : 'game.epoch < :epoch', {
+        epoch: currentGame.epoch,
+      })
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('walletTxUserWallet.userId = :userId', {
+            userId: user.id,
+          }).orWhere('creditTxUser.id = :userId', {
+            userId: user.id,
+          });
+        }),
+      )
+      .orderBy('betOrder.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return betOrders.map((betOrder) => {
+      const {
+        bigForecastAmount,
+        smallForecastAmount,
+        game,
+        walletTx,
+        creditWalletTx,
+        ...rest
+      } = betOrder;
+      return {
+        ...rest,
+        bigForecastAmount: Number(bigForecastAmount),
+        smallForecastAmount: Number(smallForecastAmount),
+        epoch: game.epoch,
+        status: walletTx?.status || creditWalletTx.status,
+      };
+    });
   }
 }
