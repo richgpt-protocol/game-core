@@ -21,10 +21,13 @@ import { LiteBetDto } from './dtos/lite-bet.dto';
 import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimJackpotDto } from './dtos/claim.dto';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
 export class PublicController {
+  private readonly logger = new Logger(PublicController.name);
+
   constructor(private publicService: PublicService) {}
 
   @UseGuards(SecretTokenGuard)
@@ -448,5 +451,117 @@ export class PublicController {
       data,
       message: 'Success',
     };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-recent-bets')
+  @ApiResponse({
+    status: 200,
+    description: 'Get recent bets',
+    type: ResponseVo,
+  })
+  async getRecentBets(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getRecentBets(page, limit);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get recent bets',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get recent bets',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-recent-claims')
+  @ApiResponse({
+    status: 200,
+    description: 'Get recent claims',
+    type: ResponseVo,
+  })
+  async getRecentClaims(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getRecentClaims(page, limit);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get recent claims',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get recent claims',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-recent-deposits')
+  @ApiResponse({
+    status: 200,
+    description: 'Get recent deposits',
+    type: ResponseVo,
+  })
+  async getRecentDeposits(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getRecentDeposits(page, limit);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get recent deposits',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get recent deposits',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-recent-withdrawals')
+  @ApiResponse({
+    status: 200,
+    description: 'Get recent withdrawals',
+    type: ResponseVo,
+  })
+  async getRecentWithdrawals(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getRecentWithdrawals(page, limit);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get recent withdrawals',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get recent withdrawals',
+      };
+    }
   }
 }
