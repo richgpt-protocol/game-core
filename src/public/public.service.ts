@@ -1057,12 +1057,15 @@ export class PublicService {
         'betOrder.type',
         'betOrder.motherPair',
         'game.epoch',
+        'walletTx.status',
+        'creditWalletTx.status',
       ])
       .leftJoin('betOrder.game', 'game')
       .leftJoin('betOrder.walletTx', 'walletTx')
       .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
       .leftJoin('walletTx.userWallet', 'walletTxUserWallet')
       .leftJoin('creditWalletTx.userWallet', 'creditTxUserWallet')
+      .leftJoin('creditTxUserWallet.user', 'creditTxUser')
       .where(isUpcoming ? 'game.epoch >= :epoch' : 'game.epoch < :epoch', {
         epoch: currentGame.epoch,
       })
@@ -1070,17 +1073,9 @@ export class PublicService {
         new Brackets((qb) => {
           qb.where('walletTxUserWallet.userId = :userId', {
             userId: user.id,
-          }).orWhere('creditTxUserWallet.userId = :userId', {
+          }).orWhere('creditTxUser.id = :userId', {
             userId: user.id,
           });
-        }),
-      )
-      .andWhere(
-        new Brackets((qb) => {
-          qb.where('walletTx.status = :status', { status: 'S' }).orWhere(
-            'creditWalletTx.status = :status',
-            { status: 'S' },
-          );
         }),
       )
       .orderBy('betOrder.id', 'DESC')
@@ -1089,11 +1084,20 @@ export class PublicService {
       .getMany();
 
     return betOrders.map((betOrder) => {
-      const { bigForecastAmount, smallForecastAmount, ...rest } = betOrder;
+      const {
+        bigForecastAmount,
+        smallForecastAmount,
+        game,
+        walletTx,
+        creditWalletTx,
+        ...rest
+      } = betOrder;
       return {
         ...rest,
         bigForecastAmount: Number(bigForecastAmount),
         smallForecastAmount: Number(smallForecastAmount),
+        epoch: game.epoch,
+        status: walletTx?.status || creditWalletTx.status,
       };
     });
   }
