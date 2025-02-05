@@ -12,7 +12,7 @@ import { UpdateTaskXpDto } from './dtos/update-task-xp.dto';
 import { UpdateUserTelegramDto } from './dtos/update-user-telegram.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
-import { DataSource, QueryRunner, Repository } from 'typeorm';
+import { Brackets, DataSource, QueryRunner, Repository } from 'typeorm';
 import { ConfigService } from 'src/config/config.service';
 import {
   ContractTransactionReceipt,
@@ -53,6 +53,7 @@ import { WithdrawService } from 'src/wallet/services/withdraw.service';
 import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimService } from 'src/wallet/services/claim.service';
+import { BetOrder } from 'src/game/entities/bet-order.entity';
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -798,7 +799,7 @@ export class PublicService {
     }
   }
 
-  @Cron(CronExpression.EVERY_SECOND)
+  // @Cron(CronExpression.EVERY_SECOND)
   async handleAddUSDT() {
     const release = await this.AddGameUSDMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
@@ -896,7 +897,7 @@ export class PublicService {
   }
 
   //Updates the status of gameTx to success if all the transactions are successful
-  @Cron(CronExpression.EVERY_SECOND)
+  // @Cron(CronExpression.EVERY_SECOND)
   async statusUpdater() {
     const release = await this.StatusUpdaterMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
@@ -943,7 +944,7 @@ export class PublicService {
     }
   }
 
-  @Cron(CronExpression.EVERY_SECOND)
+  // @Cron(CronExpression.EVERY_SECOND)
   async notifyMiniGame() {
     const release = await this.NotifierMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
@@ -1018,5 +1019,57 @@ export class PublicService {
       if (!queryRunner.isReleased) await queryRunner.release();
       release();
     }
+  }
+
+  async getRecentBets(page: number, limit: number) {
+    const betOrders = await this.dataSource
+      .createQueryBuilder(BetOrder, 'betOrder')
+      .leftJoin('betOrder.walletTx', 'walletTx')
+      .leftJoin('walletTx.userWallet', 'userWallet')
+      .leftJoin('userWallet.user', 'user')
+      .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoin('creditWalletTx.userWallet', 'creditUserWallet')
+      .leftJoin('creditUserWallet.user', 'creditUser')
+      .leftJoin('betOrder.gameUsdTx', 'gameUsdTx')
+      .where(
+        new Brackets((qb) => {
+          qb.where('walletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          }).orWhere('creditWalletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          });
+        }),
+      )
+      .orderBy('betOrder.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return betOrders.map((betOrder) => ({
+      id: betOrder.id,
+      uid:
+        betOrder.walletTx.userWallet.user.uid ||
+        betOrder.creditWalletTx.userWallet.user.uid,
+      amount:
+        Number(betOrder.bigForecastAmount) +
+        Number(betOrder.smallForecastAmount),
+      time: betOrder.createdDate,
+      txHashUrl:
+        this.configService.get(
+          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+        ) + `/tx/${betOrder.gameUsdTx.txHash}`,
+    }));
+  }
+
+  async getRecentClaims(page: number, limit: number) {
+    // TODO
+  }
+
+  async getRecentDeposits(page: number, limit: number) {
+    // TODO
+  }
+
+  async getRecentWithdrawals(page: number, limit: number) {
+    // TODO
   }
 }
