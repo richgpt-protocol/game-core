@@ -54,6 +54,8 @@ import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimService } from 'src/wallet/services/claim.service';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
+import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
+
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -1062,14 +1064,86 @@ export class PublicService {
   }
 
   async getRecentClaims(page: number, limit: number) {
-    // TODO
+    const claimDetails = await this.dataSource
+      .createQueryBuilder(ClaimDetail, 'claimDetail')
+      .leftJoin('claimDetail.walletTx', 'walletTx')
+      .leftJoin('walletTx.userWallet', 'userWallet')
+      .leftJoin('userWallet.user', 'user')
+      .where('walletTx.status = :status', {
+        status: TxStatus.SUCCESS,
+      })
+      .orderBy('claimDetail.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return claimDetails.map((claimDetail) => ({
+      id: claimDetail.id,
+      uid: claimDetail.userWallet.user.uid,
+      winningNumberPair: claimDetail.winningNumberPair,
+      winningBet: claimDetail.winningBet,
+      winningEpoch: claimDetail.winningEpoch,
+      betTxHash: 
+      claimTxHashUrl:
+        this.configService.get(
+          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+        ) + `/tx/${claimDetail.txHash}`,
+    }));
   }
 
   async getRecentDeposits(page: number, limit: number) {
-    // TODO
+    const depositWalletTx = await this.dataSource
+      .createQueryBuilder(WalletTx, 'walletTx')
+      .leftJoin('walletTx.userWallet', 'userWallet')
+      .leftJoin('userWallet.user', 'user')
+      .where('walletTx.txType = :txType', {
+        txType: WalletTxType.DEPOSIT,
+      })
+      .andWhere('walletTx.status = :status', {
+        status: TxStatus.SUCCESS,
+      })
+      .orderBy('walletTx.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return depositWalletTx.map((depositWalletTx) => ({
+      id: depositWalletTx.id,
+      uid: depositWalletTx.userWallet.user.uid,
+      amount: depositWalletTx.txAmount,
+      time: depositWalletTx.createdDate,
+      txHashUrl:
+        this.configService.get(
+          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+        ) + `/tx/${depositWalletTx.txHash}`,
+    }));
   }
 
   async getRecentWithdrawals(page: number, limit: number) {
-    // TODO
+    const withdrawalTx = await this.dataSource
+      .createQueryBuilder(WalletTx, 'walletTx')
+      .leftJoin('walletTx.userWallet', 'userWallet')
+      .leftJoin('userWallet.user', 'user')
+      .where('walletTx.txType = :txType', {
+        txType: WalletTxType.REDEEM,
+      })
+      .andWhere('walletTx.status = :status', {
+        status: TxStatus.SUCCESS,
+      })
+      .orderBy('walletTx.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return withdrawalTx.map((withdrawalTx) => ({
+      id: withdrawalTx.id,
+      uid: withdrawalTx.userWallet.user.uid,
+      amount: withdrawalTx.txAmount,
+      time: withdrawalTx.createdDate,
+      txHashUrl:
+        this.configService.get(
+          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+        ) + `/tx/${withdrawalTx.txHash}`,
+    }));
   }
 }
