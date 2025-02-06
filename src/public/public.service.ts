@@ -54,7 +54,8 @@ import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimService } from 'src/wallet/services/claim.service';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
-import { ClaimDetail } from 'src/wallet/entities/claim-detail.entity';
+import { DrawResult } from 'src/game/entities/draw-result.entity';
+import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
 
 @Injectable()
 export class PublicService {
@@ -801,7 +802,7 @@ export class PublicService {
     }
   }
 
-  // @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_SECOND)
   async handleAddUSDT() {
     const release = await this.AddGameUSDMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
@@ -899,7 +900,7 @@ export class PublicService {
   }
 
   //Updates the status of gameTx to success if all the transactions are successful
-  // @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_SECOND)
   async statusUpdater() {
     const release = await this.StatusUpdaterMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
@@ -946,7 +947,7 @@ export class PublicService {
     }
   }
 
-  // @Cron(CronExpression.EVERY_SECOND)
+  @Cron(CronExpression.EVERY_SECOND)
   async notifyMiniGame() {
     const release = await this.NotifierMutex.acquire();
     const queryRunner = this.dataSource.createQueryRunner();
@@ -1026,11 +1027,20 @@ export class PublicService {
   async getRecentBets(page: number, limit: number) {
     const betOrders = await this.dataSource
       .createQueryBuilder(BetOrder, 'betOrder')
-      .leftJoin('betOrder.walletTx', 'walletTx')
-      .leftJoin('walletTx.userWallet', 'userWallet')
+      .select([
+        'betOrder.id',
+        'betOrder.bigForecastAmount',
+        'betOrder.smallForecastAmount',
+        'betOrder.createdDate',
+        'gameUsdTx.txHash',
+        'user.uid',
+        'creditUser.uid',
+      ])
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .leftJoin('userWallet.user', 'user')
-      .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
-      .leftJoin('creditWalletTx.userWallet', 'creditUserWallet')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
       .leftJoin('creditUserWallet.user', 'creditUser')
       .leftJoin('betOrder.gameUsdTx', 'gameUsdTx')
       .where(
@@ -1050,52 +1060,100 @@ export class PublicService {
     return betOrders.map((betOrder) => ({
       id: betOrder.id,
       uid:
-        betOrder.walletTx.userWallet.user.uid ||
+        betOrder.walletTx?.userWallet.user.uid ||
         betOrder.creditWalletTx.userWallet.user.uid,
       amount:
         Number(betOrder.bigForecastAmount) +
         Number(betOrder.smallForecastAmount),
       time: betOrder.createdDate,
-      txHashUrl:
+      txUrl:
         this.configService.get(
           `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
         ) + `/tx/${betOrder.gameUsdTx.txHash}`,
     }));
   }
 
-  async getRecentClaims(page: number, limit: number) {
-    const claimDetails = await this.dataSource
-      .createQueryBuilder(ClaimDetail, 'claimDetail')
-      .leftJoin('claimDetail.walletTx', 'walletTx')
+  async getRecentWinningBets(page: number, limit: number) {
+    const betOrders = await this.dataSource
+      .createQueryBuilder(BetOrder, 'betOrder')
+      .select([
+        'betOrder.id',
+        'betOrder.gameId',
+        'betOrder.numberPair',
+        'betOrder.bigForecastAmount',
+        'betOrder.smallForecastAmount',
+        'gameUsdTx.txHash',
+      ])
+      .leftJoin('betOrder.walletTx', 'walletTx')
       .leftJoin('walletTx.userWallet', 'userWallet')
       .leftJoin('userWallet.user', 'user')
-      .leftJoin('claimDetail.betOrder', 'betOrder')
-      .where('walletTx.status = :status', {
-        status: TxStatus.SUCCESS,
+      .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoin('creditWalletTx.userWallet', 'creditUserWallet')
+      .leftJoin('creditUserWallet.user', 'creditUser')
+      .leftJoin('betOrder.gameUsdTx', 'gameUsdTx')
+      .where(
+        new Brackets((qb) => {
+          qb.where('walletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          }).orWhere('creditWalletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          });
+        }),
+      )
+      .andWhere('betOrder.availableClaim = :availableClaim', {
+        availableClaim: true,
       })
-      .orderBy('claimDetail.id', 'DESC')
+      .orderBy('betOrder.id', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)
       .getMany();
 
-    return claimDetails.map((claimDetail) => ({
-      id: claimDetail.id,
-      uid: claimDetail.walletTx.userWallet.user.uid,
-      winningNumberPair: claimDetail.betOrder.numberPair,
-      // winningBet: claimDetail.winningBet,
-      // winningEpoch: claimDetail.winningEpoch,
-      // betTxHash:
-      // claimTxHashUrl:
-      //   this.configService.get(
-      //     `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
-      //   ) + `/tx/${claimDetail.txHash}`,
-    }));
+    const betOrdersData = [];
+    for (const betOrder of betOrders) {
+      const drawResult = await this.dataSource
+        .createQueryBuilder(DrawResult, 'drawResult')
+        .select(['drawResult.id', 'drawResult.prizeCategory', 'game.epoch'])
+        .leftJoin('drawResult.game', 'game')
+        .where('drawResult.gameId = :gameId', {
+          gameId: betOrder.gameId,
+        })
+        .andWhere('drawResult.numberPair = :numberPair', {
+          numberPair: betOrder.numberPair,
+        })
+        .getOne();
+      const { bigForecastWinAmount, smallForecastWinAmount } =
+        this.claimService.calculateWinningAmount(betOrder, drawResult);
+      betOrdersData.push({
+        id: betOrder.id,
+        uid:
+          betOrder.walletTx?.userWallet.user.uid ||
+          betOrder.creditWalletTx?.userWallet.user.uid,
+        winningNumberPair: betOrder.numberPair,
+        bigForecastBetAmount: Number(betOrder.bigForecastAmount),
+        bigForecastWinAmount: bigForecastWinAmount,
+        smallForecastBetAmount: Number(betOrder.smallForecastAmount),
+        smallForecastWinAmount: smallForecastWinAmount,
+        winningEpoch: drawResult.game.epoch,
+        txUrl:
+          this.configService.get(
+            `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+          ) + `/tx/${betOrder.gameUsdTx.txHash}`,
+      });
+    }
+
+    return betOrdersData;
   }
 
   async getRecentDeposits(page: number, limit: number) {
     const depositWalletTx = await this.dataSource
       .createQueryBuilder(WalletTx, 'walletTx')
-      .leftJoin('walletTx.userWallet', 'userWallet')
+      .select([
+        'walletTx.id',
+        'walletTx.txAmount',
+        'walletTx.txHash',
+        'user.uid',
+      ])
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .leftJoin('userWallet.user', 'user')
       .where('walletTx.txType = :txType', {
         txType: WalletTxType.DEPOSIT,
@@ -1111,9 +1169,9 @@ export class PublicService {
     return depositWalletTx.map((depositWalletTx) => ({
       id: depositWalletTx.id,
       uid: depositWalletTx.userWallet.user.uid,
-      amount: depositWalletTx.txAmount,
+      amount: Number(depositWalletTx.txAmount),
       time: depositWalletTx.createdDate,
-      txHashUrl:
+      txUrl:
         this.configService.get(
           `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
         ) + `/tx/${depositWalletTx.txHash}`,
@@ -1121,30 +1179,46 @@ export class PublicService {
   }
 
   async getRecentWithdrawals(page: number, limit: number) {
-    const withdrawalTx = await this.dataSource
-      .createQueryBuilder(WalletTx, 'walletTx')
-      .leftJoin('walletTx.userWallet', 'userWallet')
-      .leftJoin('userWallet.user', 'user')
-      .where('walletTx.txType = :txType', {
-        txType: WalletTxType.REDEEM,
+    const withdrawalTxs = await this.dataSource
+      .createQueryBuilder(RedeemTx, 'redeemTx')
+      .select([
+        'redeemTx.id',
+        'redeemTx.fromAddress',
+        'redeemTx.amount',
+        'redeemTx.createdDate',
+        'redeemTx.chainId',
+        'redeemTx.payoutTxHash',
+      ])
+      .andWhere('redeemTx.payoutStatus = :payoutStatus', {
+        payoutStatus: TxStatus.SUCCESS,
       })
-      .andWhere('walletTx.status = :status', {
-        status: TxStatus.SUCCESS,
-      })
-      .orderBy('walletTx.id', 'DESC')
+      .orderBy('redeemTx.id', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)
       .getMany();
 
-    return withdrawalTx.map((withdrawalTx) => ({
-      id: withdrawalTx.id,
-      uid: withdrawalTx.userWallet.user.uid,
-      amount: withdrawalTx.txAmount,
-      time: withdrawalTx.createdDate,
-      txHashUrl:
-        this.configService.get(
-          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
-        ) + `/tx/${withdrawalTx.txHash}`,
-    }));
+    const withdrawalTxData = [];
+    for (const withdrawalTx of withdrawalTxs) {
+      const userWallet = await this.dataSource
+        .createQueryBuilder(UserWallet, 'userWallet')
+        .select(['userWallet.walletAddress', 'user.uid'])
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .where('userWallet.walletAddress = :walletAddress', {
+          walletAddress: withdrawalTx.fromAddress,
+        })
+        .getOne();
+
+      withdrawalTxData.push({
+        id: withdrawalTx.id,
+        uid: userWallet.user.uid,
+        amount: Number(withdrawalTx.amount),
+        time: withdrawalTx.createdDate,
+        txUrl:
+          this.configService.get(`BLOCK_EXPLORER_URL_${withdrawalTx.chainId}`) +
+          `/tx/${withdrawalTx.payoutTxHash}`,
+      });
+    }
+
+    return withdrawalTxData;
   }
 }
