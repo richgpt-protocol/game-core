@@ -482,29 +482,29 @@ export class PublicController {
   }
 
   @UseGuards(SecretTokenGuard)
-  @Get('get-recent-claims')
+  @Get('get-recent-winning-bets')
   @ApiResponse({
     status: 200,
-    description: 'Get recent claims',
+    description: 'Get recent winning bets',
     type: ResponseVo,
   })
-  async getRecentClaims(
+  async getRecentWinningBets(
     @Query('page') page: number,
     @Query('limit') limit: number,
   ): Promise<ResponseVo<any>> {
     try {
-      const data = await this.publicService.getRecentClaims(page, limit);
+      const data = await this.publicService.getRecentWinningBets(page, limit);
       return {
         statusCode: HttpStatus.OK,
         data,
-        message: 'Success get recent claims',
+        message: 'Success get recent winning bets',
       };
     } catch (error) {
       this.logger.error(error);
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         data: null,
-        message: 'Error get recent claims',
+        message: 'Error get recent winning bets',
       };
     }
   }
