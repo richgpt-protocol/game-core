@@ -53,6 +53,8 @@ import { WithdrawService } from 'src/wallet/services/withdraw.service';
 import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimService } from 'src/wallet/services/claim.service';
+import { Game } from 'src/game/entities/game.entity';
+import { DrawResult } from 'src/game/entities/draw-result.entity';
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -1018,5 +1020,75 @@ export class PublicService {
       if (!queryRunner.isReleased) await queryRunner.release();
       release();
     }
+  }
+
+  async queryDrawResult(epoch: string | null) {
+    // TODO: live draw result
+    if (!epoch) {
+      const lastHour = new Date(Date.now() - 60 * 60 * 1000);
+      const lastGame = await this.dataSource
+        .createQueryBuilder(Game, 'game')
+        .leftJoinAndSelect('game.drawResult', 'drawResult')
+        .where('game.startDate < :lastHour', { lastHour })
+        .andWhere('game.endDate > :lastHour', { lastHour })
+        .getOne();
+      if (!lastGame) throw new Error('No game found');
+      epoch = lastGame.epoch;
+    }
+
+    const drawResult = await this.dataSource
+      .createQueryBuilder(DrawResult, 'drawResult')
+      .leftJoin('drawResult.game', 'game')
+      .where('game.epoch = :epoch', { epoch })
+      .getMany();
+
+    return drawResult.map((drawResult) => {
+      return {
+        numberPair: drawResult.numberPair,
+        prizeCategory: drawResult.prizeCategory,
+      };
+    });
+  }
+
+  async queryDrawResultByNumberPair(
+    numberPair: string,
+    page: number,
+    limit: number,
+  ) {
+    const drawResults = await this.dataSource
+      .createQueryBuilder(DrawResult, 'drawResult')
+      .leftJoin('drawResult.game', 'game')
+      .where('drawResult.numberPair = :numberPair', { numberPair })
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return drawResults.map((drawResult) => {
+      return {
+        id: drawResult.id,
+        numberPair: drawResult.numberPair,
+        prizeCategory: drawResult.prizeCategory,
+        epoch: drawResult.game.epoch,
+      };
+    });
+  }
+
+  async queryDrawResultByDate(startDate: string, endDate: string) {
+    // game start at 00:00:01 and end at next hour 00:00:00
+
+    const startDateTime = new Date(startDate);
+    startDateTime.setHours(0, 0, 1);
+
+    const endDateTime = new Date(endDate);
+    endDateTime.setHours(23, 59, 59);
+    endDateTime.setSeconds(endDateTime.getSeconds() + 1);
+
+    const games = await this.dataSource
+      .createQueryBuilder(Game, 'game')
+      .where('game.startDate >= :startDate', { startDate: startDateTime })
+      .andWhere('game.endDate <= :endDate', { endDate: endDateTime })
+      .getMany();
+
+    return games.map((game) => game.epoch);
   }
 }
