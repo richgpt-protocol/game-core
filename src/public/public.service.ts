@@ -1069,6 +1069,7 @@ export class PublicService {
       .leftJoin('claimDetail.walletTx', 'walletTx')
       .leftJoin('walletTx.userWallet', 'userWallet')
       .leftJoin('userWallet.user', 'user')
+      .leftJoin('claimDetail.betOrder', 'betOrder')
       .where('walletTx.status = :status', {
         status: TxStatus.SUCCESS,
       })
@@ -1079,15 +1080,15 @@ export class PublicService {
 
     return claimDetails.map((claimDetail) => ({
       id: claimDetail.id,
-      uid: claimDetail.userWallet.user.uid,
-      winningNumberPair: claimDetail.winningNumberPair,
-      winningBet: claimDetail.winningBet,
-      winningEpoch: claimDetail.winningEpoch,
-      betTxHash: 
-      claimTxHashUrl:
-        this.configService.get(
-          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
-        ) + `/tx/${claimDetail.txHash}`,
+      uid: claimDetail.walletTx.userWallet.user.uid,
+      winningNumberPair: claimDetail.betOrder.numberPair,
+      // winningBet: claimDetail.winningBet,
+      // winningEpoch: claimDetail.winningEpoch,
+      // betTxHash:
+      // claimTxHashUrl:
+      //   this.configService.get(
+      //     `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+      //   ) + `/tx/${claimDetail.txHash}`,
     }));
   }
 
