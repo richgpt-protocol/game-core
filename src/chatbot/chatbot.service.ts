@@ -304,7 +304,7 @@ Today date: ${new Date().toDateString()}.`;
     }
 
     // convert assistant reply into speech
-    if (payload.source === 'fuyoapp') {
+    if (payload.source === 'fuyoapp' || payload.source === 'fuyogame') {
       const speech = await openai.audio.speech.create({
         model: 'tts-1',
         voice: 'nova',

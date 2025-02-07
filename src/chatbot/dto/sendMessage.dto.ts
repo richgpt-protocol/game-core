@@ -9,5 +9,5 @@ export class SendMessageDto {
 
   @ApiProperty()
   @IsString()
-  source: 'fuyoapp' | 'telegram';
+  source: 'fuyoapp' | 'telegram' | 'fuyogame';
 }
