@@ -1232,9 +1232,11 @@ export class PublicService {
         'walletTx.txAmount',
         'walletTx.txHash',
         'user.uid',
+        'depositTx.chainId',
       ])
       .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .leftJoin('userWallet.user', 'user')
+      .leftJoin('walletTx.depositTx', 'depositTx')
       .where('walletTx.txType = :txType', {
         txType: WalletTxType.DEPOSIT,
       })
@@ -1253,7 +1255,7 @@ export class PublicService {
       time: depositWalletTx.createdDate,
       txUrl:
         this.configService.get(
-          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+          `BLOCK_EXPLORER_URL_${depositWalletTx.depositTx.chainId}`,
         ) + `/tx/${depositWalletTx.txHash}`,
     }));
   }
