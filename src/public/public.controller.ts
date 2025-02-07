@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpStatus,
+  Logger,
   Param,
   Post,
   Query,
@@ -25,6 +26,8 @@ import { ClaimJackpotDto } from './dtos/claim.dto';
 @ApiTags('Public')
 @Controller('api/v1/public')
 export class PublicController {
+  private readonly logger = new Logger(PublicController.name);
+
   constructor(private publicService: PublicService) {}
 
   @UseGuards(SecretTokenGuard)
@@ -478,5 +481,93 @@ export class PublicController {
       data,
       message: 'Success',
     };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-draw-result')
+  @ApiResponse({
+    status: 200,
+    description: 'Get draw results',
+    type: ResponseVo,
+  })
+  async getDrawResult(
+    @Query('epoch') epoch: string | null,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getDrawResult(epoch);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get draw result',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get draw result',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-draw-result-by-number-pair')
+  @ApiResponse({
+    status: 200,
+    description: 'Get draw results by number pair',
+    type: ResponseVo,
+  })
+  async getDrawResultByNumberPair(
+    @Query('numberPair') numberPair: string,
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getDrawResultByNumberPair(
+        numberPair,
+        page,
+        limit,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get draw result by number pair',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get draw result by number pair',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-epoch-by-date')
+  @ApiResponse({
+    status: 200,
+    description: 'Get epoch by date',
+    type: ResponseVo,
+  })
+  async getEpochByDate(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getEpochByDate(startDate, endDate);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get epoch by date',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get epoch by date',
+      };
+    }
   }
 }

@@ -1102,7 +1102,7 @@ export class PublicService {
     });
   }
 
-  async queryDrawResult(epoch: string | null) {
+  async getDrawResult(epoch: string | null) {
     // TODO: live draw result
     if (!epoch) {
       const lastHour = new Date(Date.now() - 60 * 60 * 1000);
@@ -1130,17 +1130,26 @@ export class PublicService {
     });
   }
 
-  async queryDrawResultByNumberPair(
+  async getDrawResultByNumberPair(
     numberPair: string,
     page: number,
     limit: number,
   ) {
     const drawResults = await this.dataSource
       .createQueryBuilder(DrawResult, 'drawResult')
+      .select([
+        'drawResult.id',
+        'drawResult.numberPair',
+        'drawResult.prizeCategory',
+        'game.epoch',
+        'game.startDate',
+        'game.endDate',
+      ])
       .leftJoin('drawResult.game', 'game')
       .where('drawResult.numberPair = :numberPair', { numberPair })
       .skip((page - 1) * limit)
       .take(limit)
+      .orderBy('drawResult.id', 'DESC')
       .getMany();
 
     return drawResults.map((drawResult) => {
@@ -1149,11 +1158,13 @@ export class PublicService {
         numberPair: drawResult.numberPair,
         prizeCategory: drawResult.prizeCategory,
         epoch: drawResult.game.epoch,
+        epochStartDate: drawResult.game.startDate,
+        epochEndDate: drawResult.game.endDate,
       };
     });
   }
 
-  async queryDrawResultByDate(startDate: string, endDate: string) {
+  async getEpochByDate(startDate: string, endDate: string) {
     // game start at 00:00:01 and end at next hour 00:00:00
 
     const startDateTime = new Date(startDate);
