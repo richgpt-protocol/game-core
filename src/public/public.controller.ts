@@ -682,4 +682,45 @@ export class PublicController {
       };
     }
   }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-chat-history')
+  @ApiQuery({ name: 'uid', required: true })
+  @ApiQuery({ name: 'page', required: true })
+  @ApiQuery({ name: 'limit', required: true })
+  @ApiResponse({
+    status: 200,
+    description: 'Get chat history',
+    type: ResponseVo,
+  })
+  async getChatHistory(
+    @Query('uid') uid: string,
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getChatHistory(uid, page, limit);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('send-chat-message')
+  @ApiResponse({
+    status: 200,
+    description: 'Send chat message',
+    type: ResponseVo,
+  })
+  async sendChatMessage(
+    @Body() payload: { message: string; source: string; uid: string },
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.sendChatMessage(payload);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
 }

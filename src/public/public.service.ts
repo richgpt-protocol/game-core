@@ -57,6 +57,8 @@ import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { Game } from 'src/game/entities/game.entity';
 import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
+import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
+import { ChatbotService } from 'src/chatbot/chatbot.service';
 
 @Injectable()
 export class PublicService {
@@ -87,6 +89,7 @@ export class PublicService {
     private campaignService: CampaignService,
     private withdrawService: WithdrawService,
     private claimService: ClaimService,
+    private chatbotService: ChatbotService,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
       'DEPOSIT_BOT_ADDRESS',
@@ -1383,5 +1386,46 @@ export class PublicService {
       .getMany();
 
     return games.map((game) => game.epoch);
+  }
+
+  async getChatHistory(uid: string, page: number, limit: number) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const chatHistory = await this.dataSource
+      .createQueryBuilder(ChatLog, 'chatLog')
+      .where('chatLog.userId = :userId', { userId: user.id })
+      .orderBy('chatLog.createAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return chatHistory.map((chatLog) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { userId, ...rest } = chatLog;
+      return {
+        ...rest,
+      };
+    });
+  }
+
+  async sendChatMessage(payload: {
+    message: string;
+    source: string;
+    uid: string;
+  }) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const replied = await this.chatbotService.sendMessage(user.id, {
+      message: payload.message,
+      source: payload.source as 'fuyoapp' | 'telegram' | 'fuyogame',
+    });
+
+    return { replied: replied };
   }
 }
