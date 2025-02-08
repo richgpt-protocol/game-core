@@ -1384,4 +1384,71 @@ export class PublicService {
 
     return games.map((game) => game.epoch);
   }
+
+  async getClaimableAmount(uid: string) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) throw new Error('User not found');
+
+    const betOrders = await this.dataSource
+      .createQueryBuilder(BetOrder, 'betOrder')
+      .select([
+        'betOrder.gameId',
+        'betOrder.numberPair',
+        'betOrder.bigForecastAmount',
+        'betOrder.smallForecastAmount',
+      ])
+      .leftJoin('betOrder.walletTx', 'walletTx')
+      .leftJoin('walletTx.userWallet', 'userWallet')
+      .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoin('creditWalletTx.userWallet', 'creditUserWallet')
+      .where(
+        new Brackets((qb) => {
+          qb.where('userWallet.userId = :userId', { userId: user.id }).orWhere(
+            'creditUserWallet.userId = :userId',
+            { userId: user.id },
+          );
+        }),
+      )
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('walletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          }).orWhere('creditWalletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          });
+        }),
+      )
+      .andWhere('betOrder.availableClaim = :availableClaim', {
+        availableClaim: true,
+      })
+      .andWhere('betOrder.isClaimed = :isClaimed', {
+        isClaimed: false,
+      })
+      .getMany();
+
+    let claimableAmount = 0;
+    for (const betOrder of betOrders) {
+      const drawResult = await this.dataSource
+        .createQueryBuilder(DrawResult, 'drawResult')
+        .select(['drawResult.prizeCategory'])
+        .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+        .andWhere('drawResult.numberPair = :numberPair', {
+          numberPair: betOrder.numberPair,
+        })
+        .getOne();
+
+      const { bigForecastWinAmount, smallForecastWinAmount } =
+        this.claimService.calculateWinningAmount(betOrder, drawResult);
+      claimableAmount += bigForecastWinAmount + smallForecastWinAmount;
+    }
+
+    return claimableAmount;
+  }
+
+  async claim(uid: string) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) throw new Error('User not found');
+
+    return await this.claimService.claim(user.id);
+  }
 }
