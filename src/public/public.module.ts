@@ -12,6 +12,7 @@ import { SharedModule } from 'src/shared/shared.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { GameModule } from 'src/game/game.module';
 import { CampaignModule } from 'src/campaign/campaign.module';
+import { ChatbotModule } from 'src/chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { CampaignModule } from 'src/campaign/campaign.module';
     GameModule,
     CampaignModule,
     CacheModule.register(),
+    ChatbotModule,
   ],
   providers: [PublicService],
   controllers: [PublicController],
