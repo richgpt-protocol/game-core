@@ -1309,30 +1309,34 @@ export class PublicService {
 
   async getDrawResult(epoch: string | null) {
     // TODO: live draw result
-    if (!epoch) {
+
+    const gameQuery = await this.dataSource
+      .createQueryBuilder(Game, 'game')
+      .leftJoinAndSelect('game.drawResult', 'drawResult');
+
+    if (epoch) {
+      gameQuery.where('game.epoch = :epoch', { epoch });
+    } else {
       const lastHour = new Date(Date.now() - 60 * 60 * 1000);
-      const lastGame = await this.dataSource
-        .createQueryBuilder(Game, 'game')
-        .leftJoinAndSelect('game.drawResult', 'drawResult')
+      gameQuery
         .where('game.startDate < :lastHour', { lastHour })
-        .andWhere('game.endDate > :lastHour', { lastHour })
-        .getOne();
-      if (!lastGame) throw new Error('No game found');
-      epoch = lastGame.epoch;
+        .andWhere('game.endDate > :lastHour', { lastHour });
     }
 
-    const drawResult = await this.dataSource
-      .createQueryBuilder(DrawResult, 'drawResult')
-      .leftJoin('drawResult.game', 'game')
-      .where('game.epoch = :epoch', { epoch })
-      .getMany();
+    const game = await gameQuery.getOne();
+    if (!game) throw new Error('No game found');
 
-    return drawResult.map((drawResult) => {
-      return {
-        numberPair: drawResult.numberPair,
-        prizeCategory: drawResult.prizeCategory,
-      };
-    });
+    return {
+      epoch: game.epoch,
+      epochStartDate: game.startDate,
+      epochEndDate: game.endDate,
+      drawResults: game.drawResult.map((drawResult) => {
+        return {
+          numberPair: drawResult.numberPair,
+          prizeCategory: drawResult.prizeCategory,
+        };
+      }),
+    };
   }
 
   async getDrawResultByNumberPair(
