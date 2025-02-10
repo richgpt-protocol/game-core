@@ -440,6 +440,7 @@ export class GameService implements OnModuleInit {
         .createQueryBuilder(Game, 'game')
         .where('game.id = :id', { id: gameId })
         .getOne();
+
       if (!game) {
         // null check, should not happen
         throw new Error(`Game with ID ${gameId} not found`);
@@ -533,63 +534,6 @@ export class GameService implements OnModuleInit {
         }
       }
 
-      // send bet result to users
-      const notifiedUsers = new Set<number>();
-      const allBetOrders = await queryRunner.manager
-        .createQueryBuilder(BetOrder, 'betOrder')
-        .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
-        .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
-        .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
-        .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
-        .leftJoinAndSelect('userWallet.user', 'user')
-        .leftJoinAndSelect('creditUserWallet.user', 'creditUser')
-        .where('betOrder.gameId = :gameId', { gameId })
-        .andWhere(
-          new Brackets((qb) => {
-            qb.where('walletTx.status = :status', {
-              status: TxStatus.SUCCESS,
-            }).orWhere('creditWalletTx.status = :status', {
-              status: TxStatus.SUCCESS,
-            });
-          }),
-        )
-        .getMany();
-      for (const betOrder of allBetOrders) {
-        let isWinner = false;
-        for (const drawResult of drawResults) {
-          const prizeCategory = drawResult.prizeCategory;
-          const bigForecast = betOrder.bigForecastAmount;
-          const smallForecast = betOrder.smallForecastAmount;
-          if (betOrder.numberPair === drawResult.numberPair) {
-            if (
-              bigForecast > 0 ||
-              (smallForecast > 0 && ['1', '2', '3'].includes(prizeCategory))
-            ) {
-              isWinner = true;
-            }
-          }
-          const user =
-            betOrder.walletTx?.userWallet?.user ||
-            betOrder.creditWalletTx?.userWallet?.user;
-          if (!user) {
-            continue;
-          }
-          if (notifiedUsers.has(user.id)) {
-            continue;
-          }
-          notifiedUsers.add(user.id);
-          const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
-          const message = isWinner
-            ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${game.epoch}\n**Winning Number:** ${betOrder.numberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
-            : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${game.epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
-          await this.fcmService.sendUserFirebase_TelegramNotification(
-            user.id,
-            title,
-            message,
-          );
-        }
-      }
-
       // send winning alerts to admin
       if (winningBets.length > 0) {
         const message = `Winning bets:
@@ -604,6 +548,7 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
         );
       }
     } catch (error) {
+      console.log(error);
       this.logger.error(
         'Error in setAvailableClaimAndProcessReferralBonus',
         error,

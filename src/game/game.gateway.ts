@@ -170,7 +170,6 @@ export class GameGateway {
     }
 
     if (lastGame) {
-      const notifiedUsers = new Set<number>();
       const epoch = lastGame.epoch;
 
       try {
