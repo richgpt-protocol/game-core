@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, QueryRunner, Repository } from 'typeorm';
 import { UserWallet } from './entities/user-wallet.entity';
@@ -26,7 +26,9 @@ type TransactionHistory = {
 
 @Injectable()
 export class WalletService {
+  private readonly logger = new Logger(WalletService.name);
   levelMap = [];
+
   constructor(
     @InjectRepository(UserWallet)
     private userWalletRepository: Repository<UserWallet>,
@@ -212,7 +214,7 @@ export class WalletService {
         .createQueryBuilder(BetOrder, 'betOrder')
         .innerJoinAndSelect('betOrder.gameUsdTx', 'gameUsdTx')
         .leftJoinAndSelect('betOrder.game', 'game')
-        .leftJoinAndSelect('game.drawResult', 'drawResult')
+        // .leftJoinAndSelect('game.drawResult', 'drawResult')
         .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
         .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
         .leftJoinAndSelect('walletTx.userWallet', 'walletTxUserWallet')
@@ -236,7 +238,7 @@ export class WalletService {
 
       return groupedBetOrders;
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
 
       return [];
     }
@@ -310,7 +312,7 @@ export class WalletService {
       await queryRunner.manager.save(usdtTx);
       return walletTx;
     } catch (error) {
-      console.error(error);
+      this.logger.error(error);
       if (!runner) await queryRunner.rollbackTransaction();
     } finally {
       if (!runner && !queryRunner.isReleased) await queryRunner.release();
