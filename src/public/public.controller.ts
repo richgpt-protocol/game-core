@@ -723,4 +723,55 @@ export class PublicController {
       message: 'Success',
     };
   }
+
+  @Get('get-claimable-amount')
+  @ApiResponse({
+    status: 200,
+    description: 'Get claimable amount',
+    type: ResponseVo,
+  })
+  async getClaimableAmount(
+    @Query('uid') uid: string,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getClaimableAmount(uid);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get claimable amount',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get claimable amount',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('claim')
+  @ApiResponse({
+    status: 200,
+    description: 'Claim',
+    type: ResponseVo,
+  })
+  async claim(@Body() payload: { uid: string }): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.claim(payload.uid);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success claim',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error claim',
+      };
+    }
+  }
 }
