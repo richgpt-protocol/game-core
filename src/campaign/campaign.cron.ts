@@ -85,15 +85,13 @@ export class CampaignCron {
 
           let cashbackCapPerEpoch = cashbackSettingValue.capPerEpoch as number;
           for (const betOrder of betOrders) {
-            const betAmount =
-              Number(betOrder.bigForecastAmount) +
-              Number(betOrder.smallForecastAmount);
+            // walletTx.txAmount should only be the amount bet with USDT
+            const betAmount = betOrder.walletTx.txAmount;
 
             let retryCount = 0;
             if (cashbackCapPerEpoch >= betAmount) {
               while (retryCount < 3) {
                 try {
-                  // walletTx.txAmount should only be the amount bet with USDT
                   const txResponse = await token.transfer(
                     betOrder.walletTx.userWallet.walletAddress,
                     ethers.parseUnits(betAmount.toString(), 18),
