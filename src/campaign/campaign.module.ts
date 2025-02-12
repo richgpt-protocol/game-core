@@ -11,6 +11,7 @@ import { Setting } from 'src/setting/entities/setting.entity';
 import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
 import { ConfigModule } from 'src/config/config.module';
 import { SharedModule } from 'src/shared/shared.module';
+import { CampaignCron } from './campaign.cron';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { SharedModule } from 'src/shared/shared.module';
     ConfigModule,
     SharedModule,
   ],
-  providers: [CampaignService],
+  providers: [CampaignService, CampaignCron],
   controllers: [CampaignController],
   exports: [CampaignService],
 })
