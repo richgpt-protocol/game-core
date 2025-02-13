@@ -1377,25 +1377,6 @@ export class PublicService {
     });
   }
 
-  async getEpochByDate(startDate: string, endDate: string) {
-    // game start at 00:00:01 and end at next hour 00:00:00
-
-    const startDateTime = new Date(startDate);
-    startDateTime.setHours(0, 0, 1);
-
-    const endDateTime = new Date(endDate);
-    endDateTime.setHours(23, 59, 59);
-    endDateTime.setSeconds(endDateTime.getSeconds() + 1);
-
-    const games = await this.dataSource
-      .createQueryBuilder(Game, 'game')
-      .where('game.startDate >= :startDate', { startDate: startDateTime })
-      .andWhere('game.endDate <= :endDate', { endDate: endDateTime })
-      .getMany();
-
-    return games.map((game) => game.epoch);
-  }
-
   async getChatHistory(uid: string, page: number, limit: number) {
     const user = await this.userService.findByCriteria('uid', uid);
     if (!user) {

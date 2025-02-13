@@ -1613,4 +1613,29 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
       await informAdmin(message);
     }
   }
+
+  async getEpochByDate(startDate: string, endDate: string) {
+    // game start at 00:00:01 and end at next hour 00:00:00
+
+    const startDateTime = new Date(startDate);
+    startDateTime.setHours(0, 0, 1);
+
+    const endDateTime = new Date(endDate);
+    endDateTime.setHours(23, 59, 59);
+    endDateTime.setSeconds(endDateTime.getSeconds() + 1);
+
+    const games = await this.dataSource
+      .createQueryBuilder(Game, 'game')
+      .where('game.startDate >= :startDate', { startDate: startDateTime })
+      .andWhere('game.endDate <= :endDate', { endDate: endDateTime })
+      .getMany();
+
+    return games.map((game) => {
+      return {
+        epoch: game.epoch,
+        startDate: game.startDate,
+        endDate: game.endDate,
+      };
+    });
+  }
 }

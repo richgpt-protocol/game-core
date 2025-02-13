@@ -22,13 +22,17 @@ import { LiteBetDto } from './dtos/lite-bet.dto';
 import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimJackpotDto } from './dtos/claim.dto';
+import { GameService } from 'src/game/game.service';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
 export class PublicController {
   private readonly logger = new Logger(PublicController.name);
 
-  constructor(private publicService: PublicService) {}
+  constructor(
+    private publicService: PublicService,
+    private gameService: GameService,
+  ) {}
 
   @UseGuards(SecretTokenGuard)
   @Get('profile-by-uid')
@@ -667,7 +671,7 @@ export class PublicController {
     @Query('endDate') endDate: string,
   ): Promise<ResponseVo<any>> {
     try {
-      const data = await this.publicService.getEpochByDate(startDate, endDate);
+      const data = await this.gameService.getEpochByDate(startDate, endDate);
       return {
         statusCode: HttpStatus.OK,
         data,
