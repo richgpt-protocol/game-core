@@ -128,6 +128,11 @@ export class GameService implements OnModuleInit {
 
   @Cron('0 0 */1 * * *') // every hour
   async setBetClose(): Promise<void> {
+    if (this.configService.isLocal) {
+      this.logger.log('Skipping setBetClose() in local environment');
+      return;
+    }
+
     this.logger.log('setBetClose()');
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
