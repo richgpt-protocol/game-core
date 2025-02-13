@@ -1308,8 +1308,6 @@ export class PublicService {
   }
 
   async getDrawResult(epoch: string | null) {
-    // TODO: live draw result
-
     const gameQuery = await this.dataSource
       .createQueryBuilder(Game, 'game')
       .leftJoinAndSelect('game.drawResult', 'drawResult');
@@ -1326,16 +1324,22 @@ export class PublicService {
     const game = await gameQuery.getOne();
     if (!game) throw new Error('No game found');
 
+    const now = new Date();
+    const isLive = now.getMinutes() >= 0 && now.getMinutes() <= 2;
+
     return {
       epoch: game.epoch,
       epochStartDate: game.startDate,
       epochEndDate: game.endDate,
-      drawResults: game.drawResult.map((drawResult) => {
-        return {
-          numberPair: drawResult.numberPair,
-          prizeCategory: drawResult.prizeCategory,
-        };
-      }),
+      isLive: isLive,
+      drawResults: isLive
+        ? []
+        : game.drawResult.map((drawResult) => {
+            return {
+              numberPair: drawResult.numberPair,
+              prizeCategory: drawResult.prizeCategory,
+            };
+          }),
     };
   }
 
