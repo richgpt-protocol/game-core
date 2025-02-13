@@ -342,4 +342,36 @@ export class GameController {
       message: '',
     };
   }
+
+  @Secure(null, UserRole.USER)
+  @Get('get-epoch-by-date')
+  @ApiQuery({
+    name: 'startDate',
+    required: true,
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: true,
+  })
+  async getEpochByDate(
+    @Request() req,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    try {
+      const data = await this.gameService.getEpochByDate(startDate, endDate);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'get epoch by date success',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        data: null,
+        message: 'get epoch by date failed',
+      };
+    }
+  }
 }
