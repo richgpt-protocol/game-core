@@ -1233,6 +1233,7 @@ export class PublicService {
       .select([
         'walletTx.id',
         'walletTx.txAmount',
+        'walletTx.createdDate',
         'walletTx.txHash',
         'user.uid',
         'depositTx.chainId',
