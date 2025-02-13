@@ -17,6 +17,10 @@ export class FCMService {
     private configService: ConfigService,
     private telegramnotifications: TelegramService,
   ) {
+    if (this.configService.isLocal) {
+      this.logger.log('Skipping Firebase initialization in local environment');
+      return;
+    }
     this.initializeFirebase();
   }
 

@@ -19,4 +19,8 @@ export class ConfigService {
   get isDev() {
     return this.isEnv('dev');
   }
+
+  get isLocal() {
+    return this.isEnv('local');
+  }
 }
