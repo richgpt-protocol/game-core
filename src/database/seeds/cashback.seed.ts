@@ -19,8 +19,8 @@ export default class CreateCashbackCampaign implements Seeder {
         {
           key: SettingEnum.CASHBACK_CAMPAIGN,
           value: JSON.stringify({
-            startTime: '2025-02-10 00:00:00', // to update, UTC time
-            endTime: '2025-02-16 23:59:59', // to update, UTC time
+            startTime: '2025-02-17 00:00:00', // to update, UTC time
+            endTime: '2025-05-16 23:59:59', // to update, UTC time
             capPerEpoch: 1000,
           }),
         },
