@@ -83,7 +83,13 @@ export class TelegramService {
 
     this.fuyoBot.sendPhoto(chatId, photoUrl, {
       caption:
-        '<b>Welcome to Fuyo AI - Your Personal AI Agent for GambleFi!🤖💰</b>\n\n<b>🎰Bet smarter and win bigger!</b>\n\n<b>💰Earn XP for $FUYO airdrops!</b>\n\n<b>🔥Double chance of winning - 4D lottery with up to 6500x returns and seasonal Jackpots!</b>\n\n<b>Get rich. #GetFuyoAI!🤑</b>\n\n<b>👇Tap a button to get started:</b>',
+        '<b>Welcome to Fuyo AI - Your Personal AI Agent for GambleFi!🤖💰</b>\n\n' +
+        '<b>🎰Bet $10, get $10 cashback</b>\n\n' +
+        '<b>🤑Passive income with Refer-to-earn ambassador program</b>\n\n' +
+        '<b>🪙Earn XP and $FUYO airdrop</b>\n\n' +
+        '<b>🔥Double chance of winning - 4D lottery with up to 6500x returns and seasonal Jackpots!</b>\n\n' +
+        '<b>Get rich. #GetFuyoAI!</b>\n\n' +
+        '<b>👇Tap a button to get started:</b>',
       parse_mode: 'HTML',
       ...inlineKeyboard,
     });

@@ -12,7 +12,7 @@ import { UpdateTaskXpDto } from './dtos/update-task-xp.dto';
 import { UpdateUserTelegramDto } from './dtos/update-user-telegram.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { UserWallet } from 'src/wallet/entities/user-wallet.entity';
-import { DataSource, QueryRunner, Repository } from 'typeorm';
+import { Brackets, DataSource, QueryRunner, Repository } from 'typeorm';
 import { ConfigService } from 'src/config/config.service';
 import {
   ContractTransactionReceipt,
@@ -53,6 +53,13 @@ import { WithdrawService } from 'src/wallet/services/withdraw.service';
 import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimService } from 'src/wallet/services/claim.service';
+import { BetOrder } from 'src/game/entities/bet-order.entity';
+import { Game } from 'src/game/entities/game.entity';
+import { DrawResult } from 'src/game/entities/draw-result.entity';
+import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
+import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
+import { ChatbotService } from 'src/chatbot/chatbot.service';
+
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -82,6 +89,7 @@ export class PublicService {
     private campaignService: CampaignService,
     private withdrawService: WithdrawService,
     private claimService: ClaimService,
+    private chatbotService: ChatbotService,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR = this.configService.get(
       'DEPOSIT_BOT_ADDRESS',
@@ -1018,5 +1026,463 @@ export class PublicService {
       if (!queryRunner.isReleased) await queryRunner.release();
       release();
     }
+  }
+
+  async getUserTicket(
+    uid: string,
+    isUpcoming: boolean,
+    page: number,
+    limit: number,
+  ) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const now = new Date(Date.now());
+    const currentGame = await this.dataSource.manager
+      .createQueryBuilder(Game, 'game')
+      .andWhere('game.startDate <= :now', { now })
+      .andWhere('game.endDate >= :now', { now })
+      .getOne();
+    if (!currentGame) {
+      throw new BadRequestException('Current epoch not found');
+    }
+
+    const betOrders = await this.dataSource.manager
+      .createQueryBuilder(BetOrder, 'betOrder')
+      .select([
+        'betOrder.id',
+        'betOrder.numberPair',
+        'betOrder.bigForecastAmount',
+        'betOrder.smallForecastAmount',
+        'betOrder.isClaimed',
+        'betOrder.availableClaim',
+        'betOrder.createdDate',
+        'betOrder.type',
+        'betOrder.motherPair',
+        'game.epoch',
+        'walletTx.status',
+        'creditWalletTx.status',
+      ])
+      .leftJoin('betOrder.game', 'game')
+      .leftJoin('betOrder.walletTx', 'walletTx')
+      .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoin('walletTx.userWallet', 'walletTxUserWallet')
+      .leftJoin('creditWalletTx.userWallet', 'creditTxUserWallet')
+      .leftJoin('creditTxUserWallet.user', 'creditTxUser')
+      .where(isUpcoming ? 'game.epoch >= :epoch' : 'game.epoch < :epoch', {
+        epoch: Number(currentGame.epoch),
+      })
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('walletTxUserWallet.userId = :userId', {
+            userId: user.id,
+          }).orWhere('creditTxUser.id = :userId', {
+            userId: user.id,
+          });
+        }),
+      )
+      .orderBy('betOrder.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return betOrders.map((betOrder) => {
+      const {
+        bigForecastAmount,
+        smallForecastAmount,
+        game,
+        walletTx,
+        creditWalletTx,
+        ...rest
+      } = betOrder;
+      return {
+        ...rest,
+        bigForecastAmount: Number(bigForecastAmount),
+        smallForecastAmount: Number(smallForecastAmount),
+        epoch: game.epoch,
+        status: walletTx?.status || creditWalletTx.status,
+      };
+    });
+  }
+
+  async getRecentBets(page: number, limit: number) {
+    const betOrders = await this.dataSource
+      .createQueryBuilder(BetOrder, 'betOrder')
+      .select([
+        'betOrder.id',
+        'betOrder.bigForecastAmount',
+        'betOrder.smallForecastAmount',
+        'betOrder.createdDate',
+        'gameUsdTx.txHash',
+        'user.uid',
+        'creditUser.uid',
+      ])
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoin('userWallet.user', 'user')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
+      .leftJoin('creditUserWallet.user', 'creditUser')
+      .leftJoin('betOrder.gameUsdTx', 'gameUsdTx')
+      .where(
+        new Brackets((qb) => {
+          qb.where('walletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          }).orWhere('creditWalletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          });
+        }),
+      )
+      .orderBy('betOrder.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return betOrders.map((betOrder) => ({
+      id: betOrder.id,
+      uid:
+        betOrder.walletTx?.userWallet.user.uid ||
+        betOrder.creditWalletTx.userWallet.user.uid,
+      amount:
+        Number(betOrder.bigForecastAmount) +
+        Number(betOrder.smallForecastAmount),
+      time: betOrder.createdDate,
+      txUrl:
+        this.configService.get(
+          `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+        ) + `/tx/${betOrder.gameUsdTx.txHash}`,
+    }));
+  }
+
+  async getRecentWinningBets(page: number, limit: number) {
+    const betOrders = await this.dataSource
+      .createQueryBuilder(BetOrder, 'betOrder')
+      .select([
+        'betOrder.id',
+        'betOrder.gameId',
+        'betOrder.numberPair',
+        'betOrder.bigForecastAmount',
+        'betOrder.smallForecastAmount',
+        'gameUsdTx.txHash',
+      ])
+      .leftJoin('betOrder.walletTx', 'walletTx')
+      .leftJoin('walletTx.userWallet', 'userWallet')
+      .leftJoin('userWallet.user', 'user')
+      .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoin('creditWalletTx.userWallet', 'creditUserWallet')
+      .leftJoin('creditUserWallet.user', 'creditUser')
+      .leftJoin('betOrder.gameUsdTx', 'gameUsdTx')
+      .where(
+        new Brackets((qb) => {
+          qb.where('walletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          }).orWhere('creditWalletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          });
+        }),
+      )
+      .andWhere('betOrder.availableClaim = :availableClaim', {
+        availableClaim: true,
+      })
+      .orderBy('betOrder.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    const betOrdersData = [];
+    for (const betOrder of betOrders) {
+      const drawResult = await this.dataSource
+        .createQueryBuilder(DrawResult, 'drawResult')
+        .select(['drawResult.id', 'drawResult.prizeCategory', 'game.epoch'])
+        .leftJoin('drawResult.game', 'game')
+        .where('drawResult.gameId = :gameId', {
+          gameId: betOrder.gameId,
+        })
+        .andWhere('drawResult.numberPair = :numberPair', {
+          numberPair: betOrder.numberPair,
+        })
+        .getOne();
+      const { bigForecastWinAmount, smallForecastWinAmount } =
+        this.claimService.calculateWinningAmount(betOrder, drawResult);
+      betOrdersData.push({
+        id: betOrder.id,
+        uid:
+          betOrder.walletTx?.userWallet.user.uid ||
+          betOrder.creditWalletTx?.userWallet.user.uid,
+        winningNumberPair: betOrder.numberPair,
+        bigForecastBetAmount: Number(betOrder.bigForecastAmount),
+        bigForecastWinAmount: bigForecastWinAmount,
+        smallForecastBetAmount: Number(betOrder.smallForecastAmount),
+        smallForecastWinAmount: smallForecastWinAmount,
+        winningEpoch: drawResult.game.epoch,
+        txUrl:
+          this.configService.get(
+            `BLOCK_EXPLORER_URL_${this.configService.get('BASE_CHAIN_ID')}`,
+          ) + `/tx/${betOrder.gameUsdTx.txHash}`,
+      });
+    }
+
+    return betOrdersData;
+  }
+
+  async getRecentDeposits(page: number, limit: number) {
+    const depositWalletTx = await this.dataSource
+      .createQueryBuilder(WalletTx, 'walletTx')
+      .select([
+        'walletTx.id',
+        'walletTx.txAmount',
+        'walletTx.createdDate',
+        'walletTx.txHash',
+        'user.uid',
+        'depositTx.chainId',
+      ])
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
+      .leftJoin('userWallet.user', 'user')
+      .leftJoin('walletTx.depositTx', 'depositTx')
+      .where('walletTx.txType = :txType', {
+        txType: WalletTxType.DEPOSIT,
+      })
+      .andWhere('walletTx.status = :status', {
+        status: TxStatus.SUCCESS,
+      })
+      .orderBy('walletTx.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return depositWalletTx.map((depositWalletTx) => ({
+      id: depositWalletTx.id,
+      uid: depositWalletTx.userWallet.user.uid,
+      amount: Number(depositWalletTx.txAmount),
+      time: depositWalletTx.createdDate,
+      txUrl:
+        this.configService.get(
+          `BLOCK_EXPLORER_URL_${depositWalletTx.depositTx.chainId}`,
+        ) + `/tx/${depositWalletTx.txHash}`,
+    }));
+  }
+
+  async getRecentWithdrawals(page: number, limit: number) {
+    const withdrawalTxs = await this.dataSource
+      .createQueryBuilder(RedeemTx, 'redeemTx')
+      .select([
+        'redeemTx.id',
+        'redeemTx.fromAddress',
+        'redeemTx.amount',
+        'redeemTx.createdDate',
+        'redeemTx.chainId',
+        'redeemTx.payoutTxHash',
+      ])
+      .andWhere('redeemTx.payoutStatus = :payoutStatus', {
+        payoutStatus: TxStatus.SUCCESS,
+      })
+      .orderBy('redeemTx.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    const withdrawalTxData = [];
+    for (const withdrawalTx of withdrawalTxs) {
+      const userWallet = await this.dataSource
+        .createQueryBuilder(UserWallet, 'userWallet')
+        .select(['userWallet.walletAddress', 'user.uid'])
+        .leftJoinAndSelect('userWallet.user', 'user')
+        .where('userWallet.walletAddress = :walletAddress', {
+          walletAddress: withdrawalTx.fromAddress,
+        })
+        .getOne();
+
+      withdrawalTxData.push({
+        id: withdrawalTx.id,
+        uid: userWallet.user.uid,
+        amount: Number(withdrawalTx.amount),
+        time: withdrawalTx.createdDate,
+        txUrl:
+          this.configService.get(`BLOCK_EXPLORER_URL_${withdrawalTx.chainId}`) +
+          `/tx/${withdrawalTx.payoutTxHash}`,
+      });
+    }
+
+    return withdrawalTxData;
+  }
+
+  async getDrawResult(epoch: string | null) {
+    const gameQuery = await this.dataSource
+      .createQueryBuilder(Game, 'game')
+      .leftJoinAndSelect('game.drawResult', 'drawResult');
+
+    if (epoch) {
+      gameQuery.where('game.epoch = :epoch', { epoch });
+    } else {
+      const lastHour = new Date(Date.now() - 60 * 60 * 1000);
+      gameQuery
+        .where('game.startDate < :lastHour', { lastHour })
+        .andWhere('game.endDate > :lastHour', { lastHour });
+    }
+
+    const game = await gameQuery.getOne();
+    if (!game) throw new Error('No game found');
+
+    const now = new Date();
+    const isLive = now.getMinutes() >= 0 && now.getMinutes() <= 2;
+
+    return {
+      epoch: game.epoch,
+      epochStartDate: game.startDate,
+      epochEndDate: game.endDate,
+      isLive: isLive,
+      drawResults: isLive
+        ? []
+        : game.drawResult.map((drawResult) => {
+            return {
+              numberPair: drawResult.numberPair,
+              prizeCategory: drawResult.prizeCategory,
+            };
+          }),
+    };
+  }
+
+  async getDrawResultByNumberPair(
+    numberPair: string,
+    page: number,
+    limit: number,
+  ) {
+    const drawResults = await this.dataSource
+      .createQueryBuilder(DrawResult, 'drawResult')
+      .select([
+        'drawResult.id',
+        'drawResult.numberPair',
+        'drawResult.prizeCategory',
+        'game.epoch',
+        'game.startDate',
+        'game.endDate',
+      ])
+      .leftJoin('drawResult.game', 'game')
+      .where('drawResult.numberPair = :numberPair', { numberPair })
+      .skip((page - 1) * limit)
+      .take(limit)
+      .orderBy('drawResult.id', 'DESC')
+      .getMany();
+
+    return drawResults.map((drawResult) => {
+      return {
+        id: drawResult.id,
+        numberPair: drawResult.numberPair,
+        prizeCategory: drawResult.prizeCategory,
+        epoch: drawResult.game.epoch,
+        epochStartDate: drawResult.game.startDate,
+        epochEndDate: drawResult.game.endDate,
+      };
+    });
+  }
+
+  async getChatHistory(uid: string, page: number, limit: number) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const chatHistory = await this.dataSource
+      .createQueryBuilder(ChatLog, 'chatLog')
+      .where('chatLog.userId = :userId', { userId: user.id })
+      .orderBy('chatLog.createAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return chatHistory.map((chatLog) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { userId, ...rest } = chatLog;
+      return {
+        ...rest,
+      };
+    });
+  }
+
+  async sendChatMessage(payload: {
+    message: string;
+    source: string;
+    uid: string;
+  }) {
+    const user = await this.userService.findByCriteria('uid', payload.uid);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const replied = await this.chatbotService.sendMessage(user.id, {
+      message: payload.message,
+      source: payload.source as 'fuyoapp' | 'telegram' | 'fuyogame',
+    });
+
+    return { replied: replied };
+  }
+
+  async getClaimableAmount(uid: string) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) throw new Error('User not found');
+
+    const betOrders = await this.dataSource
+      .createQueryBuilder(BetOrder, 'betOrder')
+      .select([
+        'betOrder.gameId',
+        'betOrder.numberPair',
+        'betOrder.bigForecastAmount',
+        'betOrder.smallForecastAmount',
+      ])
+      .leftJoin('betOrder.walletTx', 'walletTx')
+      .leftJoin('walletTx.userWallet', 'userWallet')
+      .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoin('creditWalletTx.userWallet', 'creditUserWallet')
+      .where(
+        new Brackets((qb) => {
+          qb.where('userWallet.userId = :userId', { userId: user.id }).orWhere(
+            'creditUserWallet.userId = :userId',
+            { userId: user.id },
+          );
+        }),
+      )
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('walletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          }).orWhere('creditWalletTx.status = :status', {
+            status: TxStatus.SUCCESS,
+          });
+        }),
+      )
+      .andWhere('betOrder.availableClaim = :availableClaim', {
+        availableClaim: true,
+      })
+      .andWhere('betOrder.isClaimed = :isClaimed', {
+        isClaimed: false,
+      })
+      .getMany();
+
+    let claimableAmount = 0;
+    for (const betOrder of betOrders) {
+      const drawResult = await this.dataSource
+        .createQueryBuilder(DrawResult, 'drawResult')
+        .select(['drawResult.prizeCategory'])
+        .where('drawResult.gameId = :gameId', { gameId: betOrder.gameId })
+        .andWhere('drawResult.numberPair = :numberPair', {
+          numberPair: betOrder.numberPair,
+        })
+        .getOne();
+
+      const { bigForecastWinAmount, smallForecastWinAmount } =
+        this.claimService.calculateWinningAmount(betOrder, drawResult);
+      claimableAmount += bigForecastWinAmount + smallForecastWinAmount;
+    }
+
+    return claimableAmount;
+  }
+
+  async claim(uid: string) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) throw new Error('User not found');
+
+    return await this.claimService.claim(user.id);
   }
 }
