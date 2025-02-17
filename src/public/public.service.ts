@@ -1072,7 +1072,7 @@ export class PublicService {
       .leftJoin('creditWalletTx.userWallet', 'creditTxUserWallet')
       .leftJoin('creditTxUserWallet.user', 'creditTxUser')
       .where(isUpcoming ? 'game.epoch >= :epoch' : 'game.epoch < :epoch', {
-        epoch: currentGame.epoch,
+        epoch: Number(currentGame.epoch),
       })
       .andWhere(
         new Brackets((qb) => {
