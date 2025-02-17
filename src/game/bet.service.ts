@@ -638,7 +638,7 @@ export class BetService implements OnModuleInit {
     const allGames = await queryRunner.manager
       .createQueryBuilder(Game, 'game')
       .where('game.isClosed = :isClosed', { isClosed: false })
-      .orderBy('game.epoch', 'ASC')
+      .orderBy('game.id', 'ASC')
       .getMany();
 
     const betOrders: Array<BetOrder> = [];

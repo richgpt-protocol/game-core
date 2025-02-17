@@ -629,6 +629,8 @@ export class CreditService {
   expireCronMutex = new Mutex();
   @Cron(CronExpression.EVERY_10_SECONDS)
   async expireCreditsCron() {
+    if (this.configService.isLocal) return;
+
     const release = await this.expireCronMutex.acquire();
     try {
       // won't get wrong, but will be heavy on db as it queries all the non-expired

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpStatus,
+  Logger,
   Param,
   Post,
   Query,
@@ -21,11 +22,17 @@ import { LiteBetDto } from './dtos/lite-bet.dto';
 import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimJackpotDto } from './dtos/claim.dto';
+import { GameService } from 'src/game/game.service';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
 export class PublicController {
-  constructor(private publicService: PublicService) {}
+  private readonly logger = new Logger(PublicController.name);
+
+  constructor(
+    private publicService: PublicService,
+    private gameService: GameService,
+  ) {}
 
   @UseGuards(SecretTokenGuard)
   @Get('profile-by-uid')
@@ -448,5 +455,327 @@ export class PublicController {
       data,
       message: 'Success',
     };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-user-ticket')
+  @ApiQuery({ name: 'uid', required: true })
+  @ApiQuery({ name: 'isUpcoming', required: true })
+  @ApiQuery({ name: 'page', required: true })
+  @ApiQuery({ name: 'limit', required: true })
+  @ApiResponse({
+    status: 200,
+    description: 'Get user ticket',
+    type: ResponseVo,
+  })
+  async getUserTicket(
+    @Query('uid') uid: string,
+    @Query('isUpcoming') isUpcoming: string,
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getUserTicket(
+      uid,
+      isUpcoming === 'true',
+      page,
+      limit,
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-recent-bets')
+  @ApiResponse({
+    status: 200,
+    description: 'Get recent bets',
+    type: ResponseVo,
+  })
+  async getRecentBets(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getRecentBets(page, limit);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get recent bets',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get recent bets',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-recent-winning-bets')
+  @ApiResponse({
+    status: 200,
+    description: 'Get recent winning bets',
+    type: ResponseVo,
+  })
+  async getRecentWinningBets(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getRecentWinningBets(page, limit);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get recent winning bets',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get recent winning bets',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-recent-deposits')
+  @ApiResponse({
+    status: 200,
+    description: 'Get recent deposits',
+    type: ResponseVo,
+  })
+  async getRecentDeposits(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getRecentDeposits(page, limit);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get recent deposits',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get recent deposits',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-recent-withdrawals')
+  @ApiResponse({
+    status: 200,
+    description: 'Get recent withdrawals',
+    type: ResponseVo,
+  })
+  async getRecentWithdrawals(
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getRecentWithdrawals(page, limit);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get recent withdrawals',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get recent withdrawals',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-draw-result')
+  @ApiResponse({
+    status: 200,
+    description: 'Get draw results',
+    type: ResponseVo,
+  })
+  async getDrawResult(
+    @Query('epoch') epoch: string | null,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getDrawResult(epoch);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get draw result',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get draw result',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-draw-result-by-number-pair')
+  @ApiResponse({
+    status: 200,
+    description: 'Get draw results by number pair',
+    type: ResponseVo,
+  })
+  async getDrawResultByNumberPair(
+    @Query('numberPair') numberPair: string,
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getDrawResultByNumberPair(
+        numberPair,
+        page,
+        limit,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get draw result by number pair',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get draw result by number pair',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-epoch-by-date')
+  @ApiResponse({
+    status: 200,
+    description: 'Get epoch by date',
+    type: ResponseVo,
+  })
+  async getEpochByDate(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.gameService.getEpochByDate(startDate, endDate);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get epoch by date',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get epoch by date',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-chat-history')
+  @ApiQuery({ name: 'uid', required: true })
+  @ApiQuery({ name: 'page', required: true })
+  @ApiQuery({ name: 'limit', required: true })
+  @ApiResponse({
+    status: 200,
+    description: 'Get chat history',
+    type: ResponseVo,
+  })
+  async getChatHistory(
+    @Query('uid') uid: string,
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.getChatHistory(uid, page, limit);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('send-chat-message')
+  @ApiResponse({
+    status: 200,
+    description: 'Send chat message',
+    type: ResponseVo,
+  })
+  async sendChatMessage(
+    @Body() payload: { message: string; source: string; uid: string },
+  ): Promise<ResponseVo<any>> {
+    const data = await this.publicService.sendChatMessage(payload);
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      message: 'Success',
+    };
+  }
+
+  @Get('get-claimable-amount')
+  @ApiResponse({
+    status: 200,
+    description: 'Get claimable amount',
+    type: ResponseVo,
+  })
+  async getClaimableAmount(
+    @Query('uid') uid: string,
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getClaimableAmount(uid);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get claimable amount',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error get claimable amount',
+      };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('claim')
+  @ApiResponse({
+    status: 200,
+    description: 'Claim',
+    type: ResponseVo,
+  })
+  async claim(@Body() payload: { uid: string }): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.claim(payload.uid);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success claim',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      return {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        data: null,
+        message: 'Error claim',
+      };
+    }
   }
 }

@@ -16,6 +16,7 @@ import { Logger } from '@nestjs/common';
 import { BetOrder } from './entities/bet-order.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { FCMService } from 'src/shared/services/fcm.service';
+import { ConfigService } from 'src/config/config.service';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class GameGateway {
@@ -35,6 +36,7 @@ export class GameGateway {
     private readonly queueService: QueueService,
     private dataSource: DataSource,
     private fcmService: FCMService,
+    private configService: ConfigService,
   ) {}
 
   @SubscribeMessage('liveDrawResult')
@@ -60,6 +62,11 @@ export class GameGateway {
   @Cron('0 2 */1 * * *') // 2 minutes after every hour
   // async emitDrawResult(@MessageBody() data: unknown): Promise<WsResponse<unknown>> { // TODO: see below
   async emitDrawResult() {
+    if (this.configService.isLocal) {
+      this.logger.log('Skipping emitDrawResult() in local environment');
+      return;
+    }
+
     this.logger.log('emitDrawResult()');
     let lastGame: Game;
 
@@ -170,7 +177,6 @@ export class GameGateway {
     }
 
     if (lastGame) {
-      const notifiedUsers = new Set<number>();
       const epoch = lastGame.epoch;
 
       try {

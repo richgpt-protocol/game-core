@@ -128,6 +128,11 @@ export class GameService implements OnModuleInit {
 
   @Cron('0 0 */1 * * *') // every hour
   async setBetClose(): Promise<void> {
+    if (this.configService.isLocal) {
+      this.logger.log('Skipping setBetClose() in local environment');
+      return;
+    }
+
     this.logger.log('setBetClose()');
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -442,9 +447,14 @@ export class GameService implements OnModuleInit {
         .getOne();
 
       if (!game) {
+        // null check, should not happen
         throw new Error(`Game with ID ${gameId} not found`);
       }
 
+      // first drawResults loop
+      // set availableClaim to true if win and follow by commitTransaction()
+      // to prevent further error and availableClaim not updated
+      const betOrdersArray: BetOrder[][] = [];
       for (const drawResult of drawResults) {
         const betOrders = await queryRunner.manager
           .createQueryBuilder(BetOrder, 'betOrder')
@@ -468,37 +478,80 @@ export class GameService implements OnModuleInit {
             }),
           )
           .getMany();
+        // same betOrders used for second drawResults loop
+        betOrdersArray.push(betOrders);
 
         // there might be more than 1 betOrder that numberPair matched
-
         for (const betOrder of betOrders) {
-          try {
-            const { bigForecastWinAmount, smallForecastWinAmount } =
-              this.claimService.calculateWinningAmount(betOrder, drawResult);
-            const totalAmount =
-              Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
-            if (totalAmount > 0) {
-              betOrder.availableClaim = true;
-              await queryRunner.manager.save(betOrder);
-
-              const jobId = `processWinReferralBonus_${betOrder.id}`;
-              await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
-                prizeAmount: totalAmount,
-                betOrderId: betOrder.id,
-                queueType: QueueType.WINNING_REFERRAL_BONUS,
-              });
-            } else {
-              // totalAmount === 0 means, although the betOrder.numberPair matched the drawResult.numberPair,
-              // but only betOrder.smallForecastAmount > 0 and smallForecastWinAmount
-              // due to the drawResult.prizeCategory is not first, second or third
-              // (special & consolation no reward for small forecast)
-            }
-          } catch (error) {
-            this.logger.error('Error in processWinReferralBonus', error);
+          const { bigForecastWinAmount, smallForecastWinAmount } =
+            this.claimService.calculateWinningAmount(betOrder, drawResult);
+          const totalAmount =
+            Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
+          if (totalAmount > 0) {
+            betOrder.availableClaim = true;
+            await queryRunner.manager.save(betOrder);
+          } else {
+            // totalAmount === 0 means, although the betOrder.numberPair matched the drawResult.numberPair,
+            // but only betOrder.smallForecastAmount > 0 and smallForecastWinAmount
+            // due to the drawResult.prizeCategory is not first, second or third
+            // (special & consolation no reward for small forecast)
           }
         }
       }
       await queryRunner.commitTransaction();
+
+      // second drawResults loop
+      // process referral bonus queue for winning bets
+      // prepare winning bets data for admin notification
+      const winningBets: {
+        uid: string;
+        drawEpoch: string;
+        winningPair: string;
+        bettingAmountBigForecast: number;
+        bettingAmountSmallForecast: number;
+        winningAmount: number;
+        prizeCategory: string;
+      }[] = [];
+      for (const [index, drawResult] of drawResults.entries()) {
+        const betOrders = betOrdersArray[index];
+        for (const betOrder of betOrders) {
+          const { bigForecastWinAmount, smallForecastWinAmount } =
+            this.claimService.calculateWinningAmount(betOrder, drawResult);
+          const totalAmount =
+            Number(bigForecastWinAmount) + Number(smallForecastWinAmount);
+          if (totalAmount > 0) {
+            const jobId = `processWinReferralBonus_${betOrder.id}`;
+            await this.queueService.addJob(QueueName.REFERRAL_BONUS, jobId, {
+              prizeAmount: totalAmount,
+              betOrderId: betOrder.id,
+              queueType: QueueType.WINNING_REFERRAL_BONUS,
+            });
+            winningBets.push({
+              uid: betOrder.walletTx.userWallet.user.uid,
+              drawEpoch: game.epoch,
+              winningPair: betOrder.numberPair,
+              bettingAmountBigForecast: Number(betOrder.bigForecastAmount),
+              bettingAmountSmallForecast: Number(betOrder.smallForecastAmount),
+              winningAmount: totalAmount,
+              prizeCategory: drawResult.prizeCategory,
+            });
+          }
+        }
+      }
+
+      // send winning alerts to admin
+      if (winningBets.length > 0) {
+        const message = `Winning bets:
+${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winning Pair: ${bet.winningPair}, Betting Amount - Big: $${bet.bettingAmountBigForecast} / Small: $${bet.bettingAmountSmallForecast}, Winning Amount: $${bet.winningAmount}, Prize Category: ${bet.prizeCategory}`).join('\n')}
+        `;
+        await this.adminNotificationService.setAdminNotification(
+          message,
+          'WINNING_BETS',
+          'Winning bets',
+          true,
+          true,
+        );
+      }
     } catch (error) {
       console.log(error);
       this.logger.error(
@@ -1453,7 +1506,7 @@ export class GameService implements OnModuleInit {
 
         // Only sent once per user
         if (!betUsers.has(user.id)) {
-          const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆`;
+          const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆 \n\n https://app.fuyo.lol/`;
           await this.fcmService.sendUserFirebase_TelegramNotification(
             user.id,
             'Result Announcement Reminder 🕒',
@@ -1522,5 +1575,67 @@ export class GameService implements OnModuleInit {
     } catch (error) {
       this.logger.error('Error in notifyUsersWithoutBet:', error.message);
     }
+  }
+
+  @Cron('0 10 * * * *') // 10 minutes after every hour
+  async healthCheck(): Promise<void> {
+    const informAdmin = async (message: string) => {
+      await this.adminNotificationService.setAdminNotification(
+        message,
+        'CHECK_GAME_STATUS_FAILED',
+        'Check Game Status Failed',
+        true,
+        true,
+      );
+    };
+
+    // check if oldest isClosed = false game is current game
+    const currentGame = await this.gameRepository
+      .createQueryBuilder('game')
+      .where('game.isClosed = :isClosed', { isClosed: false })
+      .getOne();
+    const now = new Date(Date.now());
+    if (!(currentGame.startDate < now && currentGame.endDate > now)) {
+      const message = `***NOTICE*** Current game(isClosed = false) is not in the correct time range, current game start date: ${currentGame.startDate}, current game end date: ${currentGame.endDate}, now: ${now}`;
+      this.logger.error(message);
+      await informAdmin(message);
+    }
+
+    // check if current game epoch is same as contract epoch
+    const coreContract = Core__factory.connect(
+      this.configService.get('CORE_CONTRACT_ADDRESS'),
+      this.provider,
+    );
+    const contractEpoch = await coreContract.currentEpoch();
+    if (Number(currentGame.epoch) !== Number(contractEpoch)) {
+      const message = `***NOTICE*** Current game epoch is not same as contract epoch, current game epoch: ${currentGame.epoch}, contract epoch: ${contractEpoch}`;
+      this.logger.error(message);
+      await informAdmin(message);
+    }
+  }
+
+  async getEpochByDate(startDate: string, endDate: string) {
+    // game start at 00:00:01 and end at next hour 00:00:00
+
+    const startDateTime = new Date(startDate);
+    startDateTime.setHours(0, 0, 1);
+
+    const endDateTime = new Date(endDate);
+    endDateTime.setHours(23, 59, 59);
+    endDateTime.setSeconds(endDateTime.getSeconds() + 1);
+
+    const games = await this.dataSource
+      .createQueryBuilder(Game, 'game')
+      .where('game.startDate >= :startDate', { startDate: startDateTime })
+      .andWhere('game.endDate <= :endDate', { endDate: endDateTime })
+      .getMany();
+
+    return games.map((game) => {
+      return {
+        epoch: game.epoch,
+        startDate: game.startDate,
+        endDate: game.endDate,
+      };
+    });
   }
 }
