@@ -1506,7 +1506,7 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
 
         // Only sent once per user
         if (!betUsers.has(user.id)) {
-          const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆 \n\n[Open Game Now] tg://resolve?domain=fuyo_game_bot&startapp=1`;
+          const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆 \n\n[Open Game Now] https://t.me/fuyo_game_bot/fuyo_game`;
           await this.fcmService.sendUserFirebase_TelegramNotification(
             user.id,
             'Result Announcement Reminder 🕒',
