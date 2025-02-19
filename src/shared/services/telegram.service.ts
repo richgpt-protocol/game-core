@@ -51,7 +51,8 @@ export class TelegramService {
       }
     });
     this.fuyoBot.on('message', async (msg) => {
-      if (msg.text && msg.text.startsWith('/')) return;
+      if (!msg.text) return;
+      if (msg.text.startsWith('/')) return;
 
       await this.handleChatWithAIMessage(msg);
     });
