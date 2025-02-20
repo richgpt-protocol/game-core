@@ -312,7 +312,7 @@ export class UserService implements OnModuleInit {
     });
     if (user && user.isMobileVerified) {
       // user && !user.isMobileVerified means user register but never success verified via otp
-      return { error: 'phone number exist', data: null };
+      return { error: 'user.PHONENO_EXIST', data: null };
     }
 
     // check if referralCode valid
@@ -330,7 +330,7 @@ export class UserService implements OnModuleInit {
         })
         .getOne();
       if (!referralUser) {
-        return { error: 'invalid referral code', data: null };
+        return { error: 'user.REFERAL_INVALID', data: null };
       }
       referralUserId = referralUser.id;
     }
@@ -338,7 +338,7 @@ export class UserService implements OnModuleInit {
     // check if last otp generated within 60 seconds
     if (user && user.otpGenerateTime) {
       if (await this.isOtpGeneratedWithin60Seconds(user.otpGenerateTime)) {
-        return { error: 'otp generated within 60 seconds', data: null };
+        return { error: 'user.OTP_GENERATED_WITHIN_60_SECONDS', data: null };
       }
     }
 
@@ -655,7 +655,7 @@ export class UserService implements OnModuleInit {
     // check if last otp generated within 60 seconds
     if (user.otpGenerateTime) {
       if (await this.isOtpGeneratedWithin60Seconds(user.otpGenerateTime)) {
-        return { error: 'otp generated within 60 seconds', data: null };
+        return { error: 'user.OTP_GENERATED_WITHIN_60_SECONDS', data: null };
       }
     }
 
@@ -686,15 +686,14 @@ export class UserService implements OnModuleInit {
   }
 
   async updateFcmToken(user: User, fcmToken: string): Promise<void> {
-
     if (!fcmToken || fcmToken.trim().length === 0) {
       return;
     }
     if (!user.fcm || user.fcm !== fcmToken) {
-        console.log(`Updating FCM token for user ID: ${user.id}`);
-        user.fcm = fcmToken;
-        await this.userRepository.save(user);
-    } 
+      console.log(`Updating FCM token for user ID: ${user.id}`);
+      user.fcm = fcmToken;
+      await this.userRepository.save(user);
+    }
   }
 
   @OnEvent('user.service.otp', { async: true })
@@ -821,7 +820,7 @@ export class UserService implements OnModuleInit {
 
     try {
       if (!user) {
-        return { error: 'invalid phone number', data: null };
+        return { error: 'user.WRONG_PHONE_NUMBER', data: null };
       }
 
       const { error } = await this.validateUserStatus(user);
