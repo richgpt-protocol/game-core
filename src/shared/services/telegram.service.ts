@@ -77,7 +77,12 @@ export class TelegramService {
           [{ text: '🐦 Follow us on X', url: 'https://x.com/FuyoAI' }],
           [{ text: '💬 Join the Community', url: 'https://t.me/fuyoapp' }],
           [{ text: '📲 Download Fuyo App', url: 'https://app.fuyo.lol/' }],
-          [{ text: '📖 Learn More', url: 'https://docs.fuyo.lol/' }],
+          [
+            {
+              text: '💰 Join Ambassador Program',
+              url: 'https://medium.com/@fuyoapp/fuyos-refer-to-earn-ambassador-program-4e36b4c05e42',
+            },
+          ],
         ],
       },
     };
