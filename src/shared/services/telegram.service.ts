@@ -148,9 +148,11 @@ export class TelegramService {
 
         const verificationCode = user.verificationCode;
         const appName = this.configService.get('APP_NAME');
-        const language = user.language || language_code || 'en';
+        const senderLanguage = user.language || language_code || 'en';
         return await ctx.reply(
-          `Please use the code - ${verificationCode} to verify your mobile number for logging into ${appName}`,
+          senderLanguage.startsWith('zh')
+            ? zh_hans.verifyMobileMessage(verificationCode, appName)
+            : en.verifyMobileMessage(verificationCode, appName),
           {
             parse_mode: 'HTML',
           },
@@ -168,6 +170,7 @@ export class TelegramService {
             },
           ],
         });
+        const senderLanguage = existing?.language || language_code || 'en';
 
         if (
           existing &&
@@ -175,7 +178,12 @@ export class TelegramService {
           existing.status != UserStatus.PENDING
         ) {
           return await ctx.reply(
-            'Please Contact Admin. Telegram already registered',
+            senderLanguage.startsWith('zh')
+              ? zh_hans.telegramRegisteredMessage
+              : en.telegramRegisteredMessage,
+            {
+              parse_mode: 'HTML',
+            },
           );
         }
 
@@ -188,7 +196,9 @@ export class TelegramService {
             keyboard: [
               [
                 {
-                  text: 'Share Contact',
+                  text: senderLanguage.startsWith('zh')
+                    ? zh_hans.shareContactButton
+                    : en.shareContactButton,
                   request_contact: true,
                 },
               ],
@@ -197,7 +207,9 @@ export class TelegramService {
           },
         };
         return await ctx.reply(
-          'Please share your contact information:',
+          senderLanguage.startsWith('zh')
+            ? zh_hans.shareContactMessage
+            : en.shareContactMessage,
           requestContactKeyboard,
         );
       }
@@ -213,7 +225,7 @@ export class TelegramService {
   }
 
   private async handleContactSharing(ctx) {
-    const { id, username } = ctx.update.message.from;
+    const { id, username, language_code } = ctx.update.message.from;
     const { contact } = ctx.update.message;
 
     // If user uploads contact manually
@@ -245,6 +257,7 @@ export class TelegramService {
     if (!user) {
       return await ctx.reply('Invalid request');
     }
+    const senderLanguage = user.language || language_code || 'en';
 
     // if (user.phoneNumber != contact.phone_number) {
     //   return await ctx.reply('Invalid phone number');
@@ -270,14 +283,24 @@ export class TelegramService {
       user.tgId = null;
       await this.userRepository.save(user);
       return await ctx.reply(
-        'Telegram data mismatch. Is the telegram Phone number same as the registered phone number?',
+        senderLanguage.startsWith('zh')
+          ? zh_hans.telegramDataMismatchMessage
+          : en.telegramDataMismatchMessage,
+        {
+          parse_mode: 'HTML',
+        },
       );
     }
 
+    const verificationCode = user.verificationCode;
+    const appName = this.configService.get('APP_NAME');
     await ctx.reply(
-      `Please use the code - ${user.verificationCode} to verify your mobile number for ${this.configService.get(
-        'APP_NAME',
-      )} user registration.`,
+      senderLanguage.startsWith('zh')
+        ? zh_hans.verifyMobileMessage(verificationCode, appName)
+        : en.verifyMobileMessage(verificationCode, appName),
+      {
+        parse_mode: 'HTML',
+      },
     );
   }
 
