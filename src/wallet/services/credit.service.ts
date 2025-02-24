@@ -646,8 +646,8 @@ export class CreditService {
     await queryRunner.startTransaction();
 
     try {
-      // get all expired credit wallet txns
-      const expiredCreditWalletTxns: {
+      // get all expired "in" credit wallet txs
+      const expiredInCreditWalletTxs: {
         totalAmount: string;
         walletId: number;
         creditBalance: string;
@@ -666,6 +666,7 @@ export class CreditService {
           types: [
             CreditWalletTxType.CREDIT,
             CreditWalletTxType.GAME_TRANSACTION,
+            CreditWalletTxType.CAMPAIGN,
           ],
         })
         // use creditBalance > 0 to reduce database query
@@ -675,26 +676,26 @@ export class CreditService {
         .getRawMany();
 
       const revokeCreditJobData: { jobId: string; gameUsdTxId: number }[] = [];
-      for (const tx of expiredCreditWalletTxns) {
-        // get total amount of expiry type credit wallet txns
-        const sumExpiryTypeCreditWalletTxns: { totalAmount: string } =
+      for (const tx of expiredInCreditWalletTxs) {
+        // get total amount of "out" credit wallet txs
+        const sumOutCreditWalletTxs: { totalAmount: string } =
           await queryRunner.manager
             .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
             .select('SUM(creditWalletTx.amount)', 'totalAmount')
             .where('creditWalletTx.userWalletId = :userWalletId', {
               userWalletId: tx.walletId,
             })
-            .andWhere('creditWalletTx.txType = :type', {
-              type: CreditWalletTxType.EXPIRY,
+            .andWhere('creditWalletTx.txType IN (:...types)', {
+              types: [CreditWalletTxType.EXPIRY, CreditWalletTxType.PLAY],
             })
             .getRawOne();
 
         // calculate the difference between
-        // total amount of all credit wallet txs that expirationDate < new Date()
-        // and the total amount of EXPIRY type credit wallet txns
+        // total amount of all "in" credit wallet txs that expirationDate < new Date()
+        // and the total amount of "out" credit wallet txs
+        // it is possible that diff is negative
         const diff =
-          Number(tx.totalAmount) -
-          Number(sumExpiryTypeCreditWalletTxns.totalAmount);
+          Number(tx.totalAmount) - Number(sumOutCreditWalletTxs.totalAmount);
 
         if (diff > 0) {
           // there are credits that expired but haven't create EXPIRY type credit wallet tx yet
