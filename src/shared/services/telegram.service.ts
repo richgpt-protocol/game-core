@@ -52,7 +52,8 @@ export class TelegramService {
       }
     });
     this.fuyoBot.on('message', async (msg) => {
-      if (msg.text && msg.text.startsWith('/')) return;
+      if (!msg.text) return;
+      if (msg.text.startsWith('/')) return;
 
       await this.handleChatWithAIMessage(msg);
     });
@@ -225,83 +226,96 @@ export class TelegramService {
   }
 
   private async handleContactSharing(ctx) {
-    const { id, username, language_code } = ctx.update.message.from;
-    const { contact } = ctx.update.message;
+    try {
+      const { id, username } = ctx.update.message.from;
+      const { contact } = ctx.update.message;
 
-    // If user uploads contact manually
-    if (!contact || !contact.phone_number || !contact.user_id) {
-      return await ctx.reply('Invalid request: contact is missing');
-    }
-    if (contact.user_id != id) {
-      return await ctx.reply('Invalid contact');
-    }
-    if (contact.vcard) {
-      return await ctx.reply('Please use the Button to share contact');
-    }
+      // If user uploads contact manually
+      if (!contact || !contact.phone_number || !contact.user_id) {
+        return await ctx.reply('Invalid request: contact is missing');
+      }
+      if (contact.user_id != id) {
+        return await ctx.reply('Invalid contact');
+      }
+      if (contact.vcard) {
+        return await ctx.reply('Please use the Button to share contact');
+      }
 
-    const user = await this.userRepository.findOne({
-      where: {
-        tgId: id,
-      },
-      select: [
-        'id',
-        'verificationCode',
-        'tgUsername',
-        'tgId',
-        'status',
-        'isReset',
-        'phoneNumber',
-      ],
-    });
+      const user = await this.userRepository.findOne({
+        where: {
+          tgId: id,
+        },
+        select: [
+          'id',
+          'verificationCode',
+          'tgUsername',
+          'tgId',
+          'status',
+          'isReset',
+          'phoneNumber',
+        ],
+      });
 
-    if (!user) {
-      return await ctx.reply('Invalid request');
-    }
-    const senderLanguage = user.language || language_code || 'en';
+      if (!user) {
+        return await ctx.reply('Invalid request');
+      }
+      const senderLanguage = user.language || language_code || 'en';
 
-    // if (user.phoneNumber != contact.phone_number) {
-    //   return await ctx.reply('Invalid phone number');
-    // }
+      // if (user.phoneNumber != contact.phone_number) {
+      //   return await ctx.reply('Invalid phone number');
+      // }
 
-    //Telegram removes the (+) sign from phone number for some countries
-    const phone = user.phoneNumber.replace('+', '');
-    const tgPhone = contact.phone_number.replace('+', '');
-    if (
-      user.tgId != id ||
-      user.tgUsername != username ||
-      // user.phoneNumber != contact.phone_number
-      phone != tgPhone
-    ) {
-      this.logger.log(
-        'Invalid Data: ',
-        user,
-        id,
-        username,
-        contact.phone_number,
-      );
-      user.tgUsername = null;
-      user.tgId = null;
-      await this.userRepository.save(user);
-      return await ctx.reply(
+      //Telegram removes the (+) sign from phone number for some countries
+      const phone = user.phoneNumber.replace('+', '');
+      const tgPhone = contact.phone_number.replace('+', '');
+      if (
+        user.tgId != id ||
+        user.tgUsername != username ||
+        // user.phoneNumber != contact.phone_number
+        phone != tgPhone
+      ) {
+        this.logger.log(
+          'Invalid Data: ',
+          user,
+          id,
+          username,
+          contact.phone_number,
+        );
+        user.tgUsername = null;
+        user.tgId = null;
+        await this.userRepository.save(user);
+        return await ctx.reply(
+          senderLanguage.startsWith('zh')
+            ? zh_hans.telegramDataMismatchMessage
+            : en.telegramDataMismatchMessage,
+          {
+            parse_mode: 'HTML',
+          },
+        );
+      }
+
+      const verificationCode = user.verificationCode;
+      const appName = this.configService.get('APP_NAME');
+      await ctx.reply(
         senderLanguage.startsWith('zh')
-          ? zh_hans.telegramDataMismatchMessage
-          : en.telegramDataMismatchMessage,
+          ? zh_hans.verifyMobileMessage(verificationCode, appName)
+          : en.verifyMobileMessage(verificationCode, appName),
         {
           parse_mode: 'HTML',
         },
       );
-    }
+    } catch (error) {
+      this.logger.error('handleContactSharing error', error);
 
-    const verificationCode = user.verificationCode;
-    const appName = this.configService.get('APP_NAME');
-    await ctx.reply(
-      senderLanguage.startsWith('zh')
-        ? zh_hans.verifyMobileMessage(verificationCode, appName)
-        : en.verifyMobileMessage(verificationCode, appName),
-      {
-        parse_mode: 'HTML',
-      },
-    );
+      // inform admin
+      await this.adminNotificationService.setAdminNotification(
+        `Error in telegram.service.handleContactSharing: ${error}`,
+        'telegramBotError',
+        'Telegram Bot Error',
+        true,
+        true,
+      );
+    }
   }
 
   private async handleChatWithAIButton(

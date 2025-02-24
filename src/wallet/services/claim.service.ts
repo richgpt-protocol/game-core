@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Game } from 'src/game/entities/game.entity';
-import { DataSource, In, Not, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { UserWallet } from '../entities/user-wallet.entity';
 import { ClaimDetail } from '../entities/claim-detail.entity';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
@@ -110,7 +110,10 @@ export class ClaimService implements OnModuleInit {
       where: {
         txType: WalletTxType.CLAIM,
         userWalletId: wallet.id,
-        status: Not(TxStatus.SUCCESS),
+        status:
+          TxStatus.PENDING ||
+          TxStatus.PENDING_ADMIN ||
+          TxStatus.PENDING_DEVELOPER,
       },
     });
     if (lastClaimWalletTx) {
