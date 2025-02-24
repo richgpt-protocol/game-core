@@ -51,7 +51,8 @@ export class TelegramService {
       }
     });
     this.fuyoBot.on('message', async (msg) => {
-      if (msg.text && msg.text.startsWith('/')) return;
+      if (!msg.text) return;
+      if (msg.text.startsWith('/')) return;
 
       await this.handleChatWithAIMessage(msg);
     });
@@ -76,7 +77,12 @@ export class TelegramService {
           [{ text: '🐦 Follow us on X', url: 'https://x.com/FuyoAI' }],
           [{ text: '💬 Join the Community', url: 'https://t.me/fuyoapp' }],
           [{ text: '📲 Download Fuyo App', url: 'https://app.fuyo.lol/' }],
-          [{ text: '📖 Learn More', url: 'https://docs.fuyo.lol/' }],
+          [
+            {
+              text: '💰 Join Ambassador Program',
+              url: 'https://medium.com/@fuyoapp/fuyos-refer-to-earn-ambassador-program-4e36b4c05e42',
+            },
+          ],
         ],
       },
     };
@@ -217,72 +223,85 @@ export class TelegramService {
   }
 
   private async handleContactSharing(ctx) {
-    const { id, username } = ctx.update.message.from;
-    const { contact } = ctx.update.message;
+    try {
+      const { id, username } = ctx.update.message.from;
+      const { contact } = ctx.update.message;
 
-    // If user uploads contact manually
-    if (!contact || !contact.phone_number || !contact.user_id) {
-      return await ctx.reply('Invalid request: contact is missing');
-    }
-    if (contact.user_id != id) {
-      return await ctx.reply('Invalid contact');
-    }
-    if (contact.vcard) {
-      return await ctx.reply('Please use the Button to share contact');
-    }
+      // If user uploads contact manually
+      if (!contact || !contact.phone_number || !contact.user_id) {
+        return await ctx.reply('Invalid request: contact is missing');
+      }
+      if (contact.user_id != id) {
+        return await ctx.reply('Invalid contact');
+      }
+      if (contact.vcard) {
+        return await ctx.reply('Please use the Button to share contact');
+      }
 
-    const user = await this.userRepository.findOne({
-      where: {
-        tgId: id,
-      },
-      select: [
-        'id',
-        'verificationCode',
-        'tgUsername',
-        'tgId',
-        'status',
-        'isReset',
-        'phoneNumber',
-      ],
-    });
+      const user = await this.userRepository.findOne({
+        where: {
+          tgId: id,
+        },
+        select: [
+          'id',
+          'verificationCode',
+          'tgUsername',
+          'tgId',
+          'status',
+          'isReset',
+          'phoneNumber',
+        ],
+      });
 
-    if (!user) {
-      return await ctx.reply('Invalid request');
-    }
+      if (!user) {
+        return await ctx.reply('Invalid request');
+      }
 
-    // if (user.phoneNumber != contact.phone_number) {
-    //   return await ctx.reply('Invalid phone number');
-    // }
+      // if (user.phoneNumber != contact.phone_number) {
+      //   return await ctx.reply('Invalid phone number');
+      // }
 
-    //Telegram removes the (+) sign from phone number for some countries
-    const phone = user.phoneNumber.replace('+', '');
-    const tgPhone = contact.phone_number.replace('+', '');
-    if (
-      user.tgId != id ||
-      user.tgUsername != username ||
-      // user.phoneNumber != contact.phone_number
-      phone != tgPhone
-    ) {
-      this.logger.log(
-        'Invalid Data: ',
-        user,
-        id,
-        username,
-        contact.phone_number,
+      //Telegram removes the (+) sign from phone number for some countries
+      const phone = user.phoneNumber.replace('+', '');
+      const tgPhone = contact.phone_number.replace('+', '');
+      if (
+        user.tgId != id ||
+        user.tgUsername != username ||
+        // user.phoneNumber != contact.phone_number
+        phone != tgPhone
+      ) {
+        this.logger.log(
+          'Invalid Data: ',
+          user,
+          id,
+          username,
+          contact.phone_number,
+        );
+        user.tgUsername = null;
+        user.tgId = null;
+        await this.userRepository.save(user);
+        return await ctx.reply(
+          'Telegram data mismatch. Is the telegram Phone number same as the registered phone number?',
+        );
+      }
+
+      await ctx.reply(
+        `Please use the code - ${user.verificationCode} to verify your mobile number for ${this.configService.get(
+          'APP_NAME',
+        )} user registration.`,
       );
-      user.tgUsername = null;
-      user.tgId = null;
-      await this.userRepository.save(user);
-      return await ctx.reply(
-        'Telegram data mismatch. Is the telegram Phone number same as the registered phone number?',
+    } catch (error) {
+      this.logger.error('handleContactSharing error', error);
+
+      // inform admin
+      await this.adminNotificationService.setAdminNotification(
+        `Error in telegram.service.handleContactSharing: ${error}`,
+        'telegramBotError',
+        'Telegram Bot Error',
+        true,
+        true,
       );
     }
-
-    await ctx.reply(
-      `Please use the code - ${user.verificationCode} to verify your mobile number for ${this.configService.get(
-        'APP_NAME',
-      )} user registration.`,
-    );
   }
 
   private async handleChatWithAIButton(
