@@ -26,4 +26,11 @@ export const zh_hans = {
     `<b>与我们的AI聊天</b> 预测你的幸运4D号码。 🔥\n\n` +
     `🔥 今天就赚取真正的钱！ 👉 https://t.me/fuyo_game_bot/fuyo_game\n\n`,
   initialMessage: `嘿！ 👋 我是你的专属FUYO AI。对4D投注有任何问题，或者只是想聊聊幸运数字？让我们来聊聊——我在这里等你！ 🍀`,
+  verifyMobileMessage: (verificationCode: string, appName: string) =>
+    `请使用验证码 - ${verificationCode} 验证你的手机号码以登录 ${appName}`,
+  telegramRegisteredMessage: '电报已注册，请联系管理员',
+  shareContactButton: '分享联系信息',
+  shareContactMessage: '请分享你的联系信息',
+  telegramDataMismatchMessage:
+    '电报数据不匹配。电报手机号码是否与注册手机号码相同？',
 };

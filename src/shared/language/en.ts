@@ -26,4 +26,12 @@ export const en = {
     `<b>Chat with our AI</b> to predict your lucky 4D number. 🔥\n\n` +
     `🔥 Start making real money today! 👉 https://t.me/fuyo_game_bot/fuyo_game\n\n`,
   initialMessage: `Hey! 👋 I’m your FUYO AI buddy. Got questions about 4D draws, results, or just wanna chat about lucky numbers? Let’s talk—I’m here for you! 🍀`,
+  verifyMobileMessage: (verificationCode: string, appName: string) =>
+    `Please use the code - ${verificationCode} to verify your mobile number for logging into ${appName}`,
+  telegramRegisteredMessage:
+    'Please Contact Admin. Telegram already registered',
+  shareContactButton: 'Share Contact',
+  shareContactMessage: 'Please share your contact information:',
+  telegramDataMismatchMessage:
+    'Telegram data mismatch. Is the telegram Phone number same as the registered phone number?',
 };
