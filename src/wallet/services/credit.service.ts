@@ -632,13 +632,7 @@ export class CreditService {
 
     const release = await this.expireCronMutex.acquire();
     try {
-      // won't get wrong, but will be heavy on db as it queries all the non-expired
-      // credits everytime.
       await this.expireCredits();
-
-      // Less heavey on db as it won't scan the same record twice.
-      // But need to edit past transaction's status.
-      // await this.expireCreditsMethod2();
     } catch (error) {
       this.logger.error(error);
     } finally {
@@ -646,15 +640,18 @@ export class CreditService {
     }
   }
 
-  // Less heavey on db as it won't scan the same record twice.
-  // But need to edit past transaction's status.
   async expireCredits() {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      const expiredCreditWalletTxns = await queryRunner.manager
+      // get all expired credit wallet txns
+      const expiredCreditWalletTxns: {
+        totalAmount: string;
+        walletId: number;
+        creditBalance: string;
+      }[] = await queryRunner.manager
         .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
         .innerJoin('creditWalletTx.userWallet', 'userWallet')
         .select([
@@ -666,54 +663,64 @@ export class CreditService {
           expirationDate: new Date(),
         })
         .andWhere('creditWalletTx.txType IN (:...types)', {
-          types: ['CREDIT', 'GAME_TRANSACTION'],
+          types: [
+            CreditWalletTxType.CREDIT,
+            CreditWalletTxType.GAME_TRANSACTION,
+          ],
         })
-        .andWhere('creditWalletTx.status = :status', { status: 'S' })
+        // use creditBalance > 0 to reduce database query
+        // creditBalance goes 0 if all credits are expired
+        .andWhere('creditBalance > 0')
         .groupBy('userWallet.id')
         .getRawMany();
 
       const revokeCreditJobData: { jobId: string; gameUsdTxId: number }[] = [];
       for (const tx of expiredCreditWalletTxns) {
-        const expiredAmount = Number(tx.totalAmount) || 0;
-        const activeCredit = Math.max(
-          Number(tx.creditBalance) - expiredAmount,
-          0,
-        );
+        // get total amount of expiry type credit wallet txns
+        const sumExpiryTypeCreditWalletTxns: { totalAmount: string } =
+          await queryRunner.manager
+            .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
+            .select('SUM(creditWalletTx.amount)', 'totalAmount')
+            .where('creditWalletTx.userWalletId = :userWalletId', {
+              userWalletId: tx.walletId,
+            })
+            .andWhere('creditWalletTx.txType = :type', {
+              type: CreditWalletTxType.EXPIRY,
+            })
+            .getRawOne();
 
-        const diff = Number(tx.creditBalance) - activeCredit;
+        // calculate the difference between
+        // total amount of all credit wallet txs that expirationDate < new Date()
+        // and the total amount of EXPIRY type credit wallet txns
+        const diff =
+          Number(tx.totalAmount) -
+          Number(sumExpiryTypeCreditWalletTxns.totalAmount);
 
         if (diff > 0) {
+          // there are credits that expired but haven't create EXPIRY type credit wallet tx yet
+          // and need to deduct from user's credit balance
           console.log('Expiring credit for wallet:', tx.walletId);
-          const creditWalletTx = new CreditWalletTx();
-          creditWalletTx.amount = diff;
-          creditWalletTx.txType = CreditWalletTxType.EXPIRY;
-          creditWalletTx.status = TxStatus.SUCCESS;
-          creditWalletTx.walletId = tx.walletId;
-          creditWalletTx.userWallet = tx.walletId;
-          creditWalletTx.startingBalance = tx.creditBalance;
-          creditWalletTx.endingBalance = activeCredit;
 
-          await queryRunner.manager.save(creditWalletTx);
-
+          // update user's credit balance
           const userWallet = await queryRunner.manager.findOne(UserWallet, {
             where: { id: tx.walletId },
           });
-
-          userWallet.creditBalance = activeCredit;
+          const remainingCreditBalance = Number(tx.creditBalance) - diff;
+          userWallet.creditBalance = remainingCreditBalance;
           await queryRunner.manager.save(userWallet);
 
-          await queryRunner.manager.update(
-            CreditWalletTx,
-            {
-              walletId: tx.walletId,
-              status: TxStatus.SUCCESS,
-              txType: In(['CREDIT', 'GAME_TRANSACTION']),
-            },
-            {
-              status: 'E',
-            },
-          );
+          // create EXPIRY type credit wallet tx
+          const creditWalletTx = new CreditWalletTx();
+          creditWalletTx.txType = CreditWalletTxType.EXPIRY;
+          creditWalletTx.amount = diff;
+          creditWalletTx.startingBalance = Number(tx.creditBalance);
+          creditWalletTx.endingBalance = remainingCreditBalance;
+          creditWalletTx.status = TxStatus.SUCCESS;
+          creditWalletTx.walletId = tx.walletId;
+          creditWalletTx.userWallet = userWallet;
+          await queryRunner.manager.save(creditWalletTx);
 
+          // create game usd tx for on-chain tx
           const gameUsdTx = new GameUsdTx();
           gameUsdTx.amount = diff;
           gameUsdTx.chainId = +this.configService.get('BASE_CHAIN_ID');
@@ -727,6 +734,7 @@ export class CreditService {
           gameUsdTx.creditWalletTx = [creditWalletTx];
           const savedGameUsdTx = await queryRunner.manager.save(gameUsdTx);
 
+          // add job
           revokeCreditJobData.push({
             jobId: `revokeCredit-${creditWalletTx.id}`,
             gameUsdTxId: savedGameUsdTx.id,
@@ -736,6 +744,7 @@ export class CreditService {
 
       await queryRunner.commitTransaction();
 
+      // submit revoke credit on-chain jobs to queue
       for (const jobData of revokeCreditJobData) {
         await this.queueService.addJob(QueueName.CREDIT, jobData.jobId, {
           gameUsdTxId: jobData.gameUsdTxId,
@@ -749,81 +758,6 @@ export class CreditService {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
-
-  // won't get wrong, but will be heavy on db as it queries all the non-expired
-  // credits everytime.
-  // async expireCredits() {
-  //   const queryRunner = this.dataSource.createQueryRunner();
-  //   await queryRunner.connect();
-  //   await queryRunner.startTransaction();
-
-  //   try {
-  //     const nonExpiredCreditWalletTxns = await queryRunner.manager
-  //       .createQueryBuilder(CreditWalletTx, 'creditWalletTx')
-  //       .innerJoin('creditWalletTx.userWallet', 'userWallet')
-  //       .select([
-  //         'SUM(creditWalletTx.amount) as totalAmount',
-  //         'userWallet.id As walletId',
-  //         'userWallet.creditBalance as creditBalance',
-  //       ])
-  //       .where('creditWalletTx.expirationDate > :expirationDate', {
-  //         expirationDate: new Date(),
-  //       })
-  //       .andWhere('creditWalletTx.txType = :type', { type: 'CREDIT' })
-  //       .andWhere('creditWalletTx.status = :status', { status: 'S' })
-  //       .groupBy('userWallet.id')
-  //       .getRawMany();
-
-  //     // console.log('nonExpiredCreditWalletTxns', nonExpiredCreditWalletTxns);
-
-  //     for (const tx of nonExpiredCreditWalletTxns) {
-  //       const nonEXpiredAmount = Number(tx.totalAmount) || 0;
-
-  //       console.log('nonEXpiredAmount', nonEXpiredAmount);
-  //       console.log('creditBalance', tx.creditBalance);
-
-  //       //non expired credit is the maximum valid credit balance.
-  //       //User could have used some of it already, so its the minimum of the two.
-  //       const activeCredit = Math.min(
-  //         Number(tx.creditBalance),
-  //         nonEXpiredAmount,
-  //       );
-
-  //       // console.log('activeCredit', activeCredit);
-
-  //       const diff = Number(tx.creditBalance) - activeCredit;
-  //       // console.log('diff', diff);
-
-  //       if (diff > 0) {
-  //         console.log('Expiring credit for wallet:', tx.walletId);
-  //         const creditWalletTx = new CreditWalletTx();
-  //         creditWalletTx.amount = diff;
-  //         creditWalletTx.txType = 'EXPIRY';
-  //         creditWalletTx.status = 'S';
-  //         creditWalletTx.walletId = tx.walletId;
-  //         creditWalletTx.userWallet = tx.walletId;
-  //         creditWalletTx.startingBalance = tx.creditBalance;
-  //         creditWalletTx.endingBalance = activeCredit;
-
-  //         await queryRunner.manager.save(creditWalletTx);
-
-  //         const userWallet = await queryRunner.manager.findOne(UserWallet, {
-  //           where: { id: tx.walletId },
-  //         });
-
-  //         userWallet.creditBalance = activeCredit;
-  //         await queryRunner.manager.save(userWallet);
-  //       }
-
-  //       await queryRunner.commitTransaction();
-  //     }
-  //   } catch (error) {
-  //     this.logger.error(error);
-  //     await queryRunner.rollbackTransaction();
-  //   } finally {
-  //     if (!queryRunner.isReleased) await queryRunner.release();
-  //   }
-  // }
 
   async processRevokeCredit(
     job: Job<
