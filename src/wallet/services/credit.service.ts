@@ -669,7 +669,7 @@ export class CreditService {
           ],
         })
         // use creditBalance > 0 to reduce database query
-        // creditBalance goes 0 if all credits are expired
+        // creditBalance goes 0 if all credits are used up or expired
         .andWhere('creditBalance > 0')
         .groupBy('userWallet.id')
         .getRawMany();
