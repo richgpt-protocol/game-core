@@ -1418,4 +1418,13 @@ export class UserService implements OnModuleInit {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
   }
+
+  async getUserLanguage(userId: number) {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    return user?.language || 'en';
+  }
+
+  async updateUserLanguage(userId: number, language: string) {
+    await this.userRepository.update(userId, { language });
+  }
 }
