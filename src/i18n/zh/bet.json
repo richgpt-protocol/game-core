@@ -1,0 +1,4 @@
+{
+  "AMOUNT_EXCEEDS_MAX_ALLOWED": "投注金额超过允许的最大金额",
+  "INSUFFICIENT_BALANCE": "余额不足，无法投注"
+}
