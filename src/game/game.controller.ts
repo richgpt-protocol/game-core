@@ -24,6 +24,7 @@ import { PastResultDto } from './dto/pastResult.dto';
 import { BetDto } from './dto/Bet.dto';
 import { BetService } from './bet.service';
 import { RestartBetDto, RestartReferralDistribution } from './dto/restart.dto';
+import { I18n, I18nContext } from 'nestjs-i18n';
 
 @ApiTags('Game')
 @Controller('api/v1/game')
@@ -164,7 +165,7 @@ export class GameController {
     @Body() payload: BetDto[],
     // @IpAddress() ipAddress,
     // @HandlerClass() classInfo: IHandlerClass,
-    // @I18n() i18n: I18nContext,
+    @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
     try {
       const userId = req.user.userId;
@@ -175,8 +176,11 @@ export class GameController {
         message: 'bet success',
       };
     } catch (error) {
-      this.logger.error(error);
-      throw new BadRequestException(error.message);
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        data: null,
+        message: i18n.translate(error.message),
+      };
     }
   }
 

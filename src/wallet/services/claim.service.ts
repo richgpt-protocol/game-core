@@ -98,7 +98,7 @@ export class ClaimService implements OnModuleInit {
       new Date().getTime() <
       new Date(lastGame.endDate).getTime() + 5 * 60 * 1000
     ) {
-      return { error: 'Claim is not available yet', data: null };
+      return { error: 'claim.CLAIM_NOT_AVAILABLE_YET', data: null };
     }
 
     const wallet = await this.userWalletRepository.findOne({
@@ -117,14 +117,14 @@ export class ClaimService implements OnModuleInit {
       },
     });
     if (lastClaimWalletTx) {
-      return { error: 'Claim is in pending', data: null };
+      return { error: 'claim.CLAIM_IN_PROGRESS', data: null };
     }
 
     // fetch betOrders that have not been claimed
     const claimRes = await this.getPendingClaim(userId);
     const betOrders: BetOrder[] = claimRes.data;
     if (betOrders.length === 0) {
-      return { error: 'No bet order available for claim', data: null };
+      return { error: 'claim.NO_BET_ORDER_AVAILABLE_FOR_CLAIM', data: null };
     }
 
     // create walletTx
@@ -392,7 +392,7 @@ export class ClaimService implements OnModuleInit {
         false,
         walletTx.id,
       );
-      return { error: 'Unable to process claim at the moment', data: null };
+      return { error: 'claim.UNABLE_TO_PROCESS_CLAIM', data: null };
     } finally {
       await queryRunner.release();
     }

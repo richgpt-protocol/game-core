@@ -331,7 +331,7 @@ export class BetService implements OnModuleInit {
       let walletTx: WalletTx;
       if (totalWalletBalanceUsed > 0) {
         if (totalWalletBalanceUsed > actualWalletBalance) {
-          throw new BadRequestException('Insufficient balance');
+          throw new BadRequestException('bet.INSUFFICIENT_BALANCE');
         }
 
         // Create wallet tx
@@ -547,7 +547,7 @@ export class BetService implements OnModuleInit {
           totalPastBetAmountsForThisBet + totalAmountForThisNumberPair >
           allGamesArr[i].maxBetAmount
         ) {
-          throw new BadRequestException('Bet amount exceeds max allowed');
+          throw new BadRequestException('bet.AMOUNT_EXCEEDS_MAX_ALLOWED');
         }
       }
     }

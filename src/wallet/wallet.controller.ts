@@ -38,6 +38,7 @@ import { PermissionEnum } from 'src/shared/enum/permission.enum';
 import { CreditService } from './services/credit.service';
 import { AddCreditBackofficeDto } from './dto/credit.dto';
 import { DataSource } from 'typeorm';
+import { I18n, I18nContext } from 'nestjs-i18n';
 
 @ApiTags('Wallet')
 @Controller('api/v1/wallet')
@@ -101,7 +102,10 @@ export class WalletController {
     description: 'Bad Request',
     type: ErrorResponseVo,
   })
-  async claim(@Req() req: any): Promise<ResponseVo<any>> {
+  async claim(
+    @Req() req: any,
+    @I18n() i18n: I18nContext,
+  ): Promise<ResponseVo<any>> {
     try {
       const res = await this.claimService.claim(Number(req.user.userId));
       if (!res.error) {
@@ -112,14 +116,14 @@ export class WalletController {
         };
       } else {
         return {
-          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          statusCode: HttpStatus.BAD_REQUEST,
           data: null,
-          message: res.error,
+          message: i18n.translate(res.error),
         };
       }
     } catch (error) {
       return {
-        statusCode: HttpStatus.BAD_REQUEST,
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         data: null,
         message: error.message,
       };
