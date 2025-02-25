@@ -227,7 +227,7 @@ export class TelegramService {
 
   private async handleContactSharing(ctx) {
     try {
-      const { id, username } = ctx.update.message.from;
+      const { id, username, language_code } = ctx.update.message.from;
       const { contact } = ctx.update.message;
 
       // If user uploads contact manually
