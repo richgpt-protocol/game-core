@@ -2,7 +2,7 @@ import { IsEnum } from 'class-validator';
 
 export enum Language {
   EN = 'en',
-  ZH_HANS = 'zh-hans',
+  ZH = 'zh',
 }
 
 export class UpdateUserLanguageDto {
