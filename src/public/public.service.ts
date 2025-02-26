@@ -1166,12 +1166,14 @@ export class PublicService {
         'betOrder.bigForecastAmount',
         'betOrder.smallForecastAmount',
         'gameUsdTx.txHash',
+        'user.uid',
+        'creditUser.uid',
       ])
-      .leftJoin('betOrder.walletTx', 'walletTx')
-      .leftJoin('walletTx.userWallet', 'userWallet')
+      .leftJoinAndSelect('betOrder.walletTx', 'walletTx')
+      .leftJoinAndSelect('walletTx.userWallet', 'userWallet')
       .leftJoin('userWallet.user', 'user')
-      .leftJoin('betOrder.creditWalletTx', 'creditWalletTx')
-      .leftJoin('creditWalletTx.userWallet', 'creditUserWallet')
+      .leftJoinAndSelect('betOrder.creditWalletTx', 'creditWalletTx')
+      .leftJoinAndSelect('creditWalletTx.userWallet', 'creditUserWallet')
       .leftJoin('creditUserWallet.user', 'creditUser')
       .leftJoin('betOrder.gameUsdTx', 'gameUsdTx')
       .where(
