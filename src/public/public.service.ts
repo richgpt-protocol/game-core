@@ -1487,4 +1487,18 @@ export class PublicService {
 
     return await this.claimService.claim(user.id);
   }
+
+  async getUserLanguage(uid: string): Promise<string | null> {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) throw new Error('User not found');
+
+    return await this.userService.getUserLanguage(user.id);
+  }
+
+  async updateUserLanguage(uid: string, language: string) {
+    const user = await this.userService.findByCriteria('uid', uid);
+    if (!user) throw new Error('User not found');
+
+    await this.userService.updateUserLanguage(user.id, language);
+  }
 }

@@ -778,4 +778,51 @@ export class PublicController {
       };
     }
   }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-user-language')
+  @ApiResponse({
+    status: 200,
+    description: 'Get user language',
+    type: ResponseVo,
+  })
+  async getUserLanguage(@Query('uid') uid: string): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getUserLanguage(uid);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get user language',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      throw error;
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('update-user-language')
+  @ApiResponse({
+    status: 200,
+    description: 'Update user language',
+    type: ResponseVo,
+  })
+  async updateUserLanguage(
+    @Body() payload: { uid: string; language: string },
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.updateUserLanguage(
+        payload.uid,
+        payload.language,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success update user language',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      throw error;
+    }
+  }
 }
