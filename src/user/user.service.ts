@@ -65,6 +65,7 @@ import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { Job } from 'bullmq';
 import { NotificationType } from 'src/shared/dto/admin-notification.dto';
+import { Language } from './dto/update-user-language.dto';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -1419,12 +1420,26 @@ export class UserService implements OnModuleInit {
     }
   }
 
-  async getUserLanguage(userId: number) {
+  async getUserLanguage(userId: number): Promise<string | null> {
     const user = await this.userRepository.findOneBy({ id: userId });
-    return user?.language || 'en';
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    return user.language;
   }
 
   async updateUserLanguage(userId: number, language: string) {
-    await this.userRepository.update(userId, { language });
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    if (!Object.values(Language).includes(language as Language)) {
+      throw new BadRequestException('Invalid language');
+    }
+
+    user.language = language;
+    await this.userRepository.save(user);
   }
 }
