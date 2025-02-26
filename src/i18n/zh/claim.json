@@ -1,0 +1,6 @@
+{
+  "CLAIM_NOT_AVAILABLE_YET": "领取尚未开放",
+  "CLAIM_IN_PROGRESS": "领取进行中",
+  "NO_BET_ORDER_AVAILABLE_FOR_CLAIM": "没有可领取的投注订单",
+  "UNABLE_TO_PROCESS_CLAIM": "目前无法处理领取"
+}

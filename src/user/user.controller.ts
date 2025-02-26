@@ -13,7 +13,13 @@ import {
   Query,
   Request,
 } from '@nestjs/common';
-import { ApiHeader, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiHeader,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { I18n, I18nContext } from 'nestjs-i18n';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { MobileCountries } from 'src/shared/constants/mobile-country.constant';
@@ -45,6 +51,10 @@ import { Cache } from 'cache-manager';
 import { WalletService } from 'src/wallet/wallet.service';
 import { DataSource } from 'typeorm';
 import { isValidSixDigitPairs } from 'src/shared/utils/digit-validation.util';
+import {
+  Language,
+  UpdateUserLanguageDto,
+} from './dto/update-user-language.dto';
 
 @ApiTags('User')
 @Controller('api/v1/user')
@@ -720,6 +730,54 @@ export class UserController {
         statusCode: 400,
         data: null,
         message: await i18n.translate('Referrer not exist.'),
+      };
+    }
+  }
+
+  @Secure(null, UserRole.USER)
+  @Get('get-user-language')
+  async getUserLanguage(@Request() req) {
+    const language = (await this.userService.getUserLanguage(
+      req.user.userId,
+    )) as Language;
+    return {
+      statusCode: 200,
+      data: { language },
+      message: 'User language retrieved successfully.',
+    };
+  }
+
+  @Secure(null, UserRole.USER)
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        language: { type: 'string', enum: Object.values(Language) },
+      },
+    },
+  })
+  @Post('update-user-language')
+  async updateUserLanguage(
+    @Request() req,
+    @Body() payload: UpdateUserLanguageDto,
+  ) {
+    try {
+      await this.userService.updateUserLanguage(
+        req.user.userId,
+        payload.language,
+      );
+
+      return {
+        statusCode: 200,
+        data: null,
+        message: 'User language updated successfully',
+      };
+    } catch (error) {
+      this.logger.error(`updateUserLanguage error: ${error}`);
+      return {
+        statusCode: 400,
+        data: null,
+        message: 'Failed to update user language',
       };
     }
   }

@@ -65,6 +65,7 @@ import { QueueService } from 'src/queue/queue.service';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { Job } from 'bullmq';
 import { NotificationType } from 'src/shared/dto/admin-notification.dto';
+import { Language } from './dto/update-user-language.dto';
 
 const depositBotAddAddress = process.env.DEPOSIT_BOT_SERVER_URL;
 type SetReferrerEvent = {
@@ -312,7 +313,7 @@ export class UserService implements OnModuleInit {
     });
     if (user && user.isMobileVerified) {
       // user && !user.isMobileVerified means user register but never success verified via otp
-      return { error: 'phone number exist', data: null };
+      return { error: 'user.PHONENO_EXIST', data: null };
     }
 
     // check if referralCode valid
@@ -330,7 +331,7 @@ export class UserService implements OnModuleInit {
         })
         .getOne();
       if (!referralUser) {
-        return { error: 'invalid referral code', data: null };
+        return { error: 'user.REFERAL_INVALID', data: null };
       }
       referralUserId = referralUser.id;
     }
@@ -338,7 +339,7 @@ export class UserService implements OnModuleInit {
     // check if last otp generated within 60 seconds
     if (user && user.otpGenerateTime) {
       if (await this.isOtpGeneratedWithin60Seconds(user.otpGenerateTime)) {
-        return { error: 'otp generated within 60 seconds', data: null };
+        return { error: 'user.OTP_GENERATED_WITHIN_60_SECONDS', data: null };
       }
     }
 
@@ -655,7 +656,7 @@ export class UserService implements OnModuleInit {
     // check if last otp generated within 60 seconds
     if (user.otpGenerateTime) {
       if (await this.isOtpGeneratedWithin60Seconds(user.otpGenerateTime)) {
-        return { error: 'otp generated within 60 seconds', data: null };
+        return { error: 'user.OTP_GENERATED_WITHIN_60_SECONDS', data: null };
       }
     }
 
@@ -686,15 +687,14 @@ export class UserService implements OnModuleInit {
   }
 
   async updateFcmToken(user: User, fcmToken: string): Promise<void> {
-
     if (!fcmToken || fcmToken.trim().length === 0) {
       return;
     }
     if (!user.fcm || user.fcm !== fcmToken) {
-        console.log(`Updating FCM token for user ID: ${user.id}`);
-        user.fcm = fcmToken;
-        await this.userRepository.save(user);
-    } 
+      console.log(`Updating FCM token for user ID: ${user.id}`);
+      user.fcm = fcmToken;
+      await this.userRepository.save(user);
+    }
   }
 
   @OnEvent('user.service.otp', { async: true })
@@ -821,7 +821,7 @@ export class UserService implements OnModuleInit {
 
     try {
       if (!user) {
-        return { error: 'invalid phone number', data: null };
+        return { error: 'user.WRONG_PHONE_NUMBER', data: null };
       }
 
       const { error } = await this.validateUserStatus(user);
@@ -1418,5 +1418,28 @@ export class UserService implements OnModuleInit {
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
     }
+  }
+
+  async getUserLanguage(userId: number): Promise<string | null> {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    return user.language;
+  }
+
+  async updateUserLanguage(userId: number, language: string) {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    if (!Object.values(Language).includes(language as Language)) {
+      throw new BadRequestException('Invalid language');
+    }
+
+    user.language = language;
+    await this.userRepository.save(user);
   }
 }

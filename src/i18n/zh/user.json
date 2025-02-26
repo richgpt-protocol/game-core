@@ -1,1 +1,14 @@
-{}
+{
+  "PHONENO_EXIST": "电话号码已存在。",
+  "REFERAL_INVALID": "推荐码无效。",
+  "OTP_GENERATED_WITHIN_60_SECONDS": "已在过去的60秒内生成了一个一次性密码。请稍后再试。",
+  "WRONG_PHONE_NUMBER": "电话号码错误。",
+  "ACCOUNT_INACTIVE": "此账号未激活。",
+  "ACCOUNT_SUSPEND": "此账号已被暂停。请通过 {0.supportEmail} 联系系统管理员。",
+  "ACCOUNT_TERMINATED": "此账号已被终止。",
+  "ACCOUNT_UNVERIFIED": "此账号未验证。请重新注册以激活您的账号。",
+  "ACCOUNT_PENDING": "此账号正在等待处理。",
+  "EXCEED_LOGIN_ATTEMPT": "登录尝试次数超过3次。请发送电子邮件给系统管理员处理。",
+  "FAILED_VERIFY_OTP": "输入的一次性密码无效。请重试。",
+  "OTP_EXPIRED": "您的一次性密码已过期。请重新请求新的一次性密码。"
+}
