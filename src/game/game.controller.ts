@@ -173,7 +173,7 @@ export class GameController {
       return {
         statusCode: HttpStatus.OK,
         data,
-        message: 'bet success',
+        message: i18n.translate('game.BET_SUCCESS'),
       };
     } catch (error) {
       return {
