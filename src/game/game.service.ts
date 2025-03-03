@@ -55,6 +55,7 @@ import { PointTx } from 'src/point/entities/point-tx.entity';
 import { BetService } from './bet.service';
 import { OnChainUtil } from 'src/shared/utils/on-chain.util';
 import { delay } from 'src/shared/constants/util.constant';
+import { I18nService } from 'nestjs-i18n';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -91,6 +92,7 @@ export class GameService implements OnModuleInit {
     private fcmService: FCMService,
     private airesponseService: AiResponseService,
     private betService: BetService,
+    private i18n: I18nService,
   ) {}
 
   // process of closing bet for current epoch, set draw result, announce draw result, set available claim and process referral bonus
@@ -1506,7 +1508,12 @@ ${winningBets.map((bet) => `UID: ${bet.uid}, Draw Epoch: ${bet.drawEpoch}, Winni
 
         // Only sent once per user
         if (!betUsers.has(user.id)) {
-          const message = `Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆 \n\n[Open Game Now] https://t.me/fuyo_game_bot/fuyo_game`;
+          const message = this.i18n.translate(
+            'game.RESULT_ANNOUNCEMENT_REMINDER',
+            {
+              lang: user.language || 'en',
+            },
+          );
           await this.fcmService.sendUserFirebase_TelegramNotification(
             user.id,
             'Result Announcement Reminder 🕒',

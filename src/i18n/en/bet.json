@@ -1,4 +1,5 @@
 {
   "AMOUNT_EXCEEDS_MAX_ALLOWED": "Bet amount exceeds max allowed",
-  "INSUFFICIENT_BALANCE": "Insufficient balance to bet"
+  "INSUFFICIENT_BALANCE": "Insufficient balance to bet",
+  "BET_SUCCESS": "Your Buy has been successfully processed"
 }

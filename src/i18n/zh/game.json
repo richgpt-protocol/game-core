@@ -1,3 +1,6 @@
 {
-  "BET_SUCCESS": "投注成功"
+  "BET_SUCCESS": "投注成功",
+  "IS_WINNER": "✨ 你赢了！✨\n\n🎉 太棒了！你刚刚赢了游戏！\n\n**游戏期数:** ${epoch}\n**中奖号码:** ${winningNumberPair}\n\n🍀 好运在你这边——为什么不试试你的运气呢？",
+  "IS_NOT_WINNER": "🧧 好运再来！🧧\n\n结果已经揭晓，但运气不在你这边。\n\n**游戏期数:** ${epoch}\n\n🎯 再试一次——你的幸运日可能就在不远处！",
+  "RESULT_ANNOUNCEMENT_REMINDER": "只剩1分钟结果就要揭晓了！⏳ \n\n赶快查看一下是否中奖吧！ 🏆 \n\n[立即开奖] https://t.me/fuyo_game_bot/fuyo_game"
 }
