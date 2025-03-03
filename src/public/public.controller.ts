@@ -23,6 +23,7 @@ import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimJackpotDto } from './dtos/claim.dto';
 import { GameService } from 'src/game/game.service';
+import { I18n, I18nContext } from 'nestjs-i18n';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
@@ -306,8 +307,9 @@ export class PublicController {
   })
   async requestWithdraw(
     @Body() payload: RequestWithdrawDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const data = await this.publicService.withdraw(payload);
+    const data = await this.publicService.withdraw(payload, i18n);
     return {
       statusCode: HttpStatus.CREATED,
       data,
