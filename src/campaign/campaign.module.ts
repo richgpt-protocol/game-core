@@ -12,6 +12,7 @@ import { JackpotTx } from 'src/game/entities/jackpot-tx.entity';
 import { ConfigModule } from 'src/config/config.module';
 import { SharedModule } from 'src/shared/shared.module';
 import { CampaignCron } from './campaign.cron';
+import { User } from 'src/user/entities/user.entity';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { CampaignCron } from './campaign.cron';
       SquidGameRevival,
       Setting,
       JackpotTx,
+      User,
     ]),
     PermissionModule,
     WalletModule,
