@@ -1,0 +1,5 @@
+{
+  "INTERNAL_TRANSFER_SUCCESS": "Your internal transfer has been successfully processed",
+  "INTERNAL_TRANSFER_RECEIVED": "You have received GameUSD",
+  "INTERNAL_TRANSFER_RECEIVED_TG": "You have received {amount} USDT from {senderUid}."
+}
