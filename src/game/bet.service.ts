@@ -54,6 +54,7 @@ import { JackpotTx } from './entities/jackpot-tx.entity';
 import { Jackpot } from './entities/jackpot.entity';
 import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participant.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
+import { I18nService } from 'nestjs-i18n';
 
 interface SubmitBetJobDTO {
   userWalletId: number;
@@ -100,6 +101,7 @@ export class BetService implements OnModuleInit {
     @InjectRepository(JackpotTx)
     private jackpotTxRepository: Repository<JackpotTx>,
     private readonly adminNotificationService: AdminNotificationService,
+    private i18n: I18nService,
   ) {}
   onModuleInit() {
     // Executed when distributing referral rewards for betting
@@ -1103,10 +1105,15 @@ export class BetService implements OnModuleInit {
   async handleTxSuccess(job: Job<{ gameUsdTxId: number; isMasked: boolean }>) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
+    let isTransactionCommitted = false;
+    let gameUsdTx: GameUsdTx;
+    let userWallet: UserWallet;
+    let walletTx: WalletTx;
+
     try {
       await queryRunner.startTransaction();
 
-      const gameUsdTx = await queryRunner.manager
+      gameUsdTx = await queryRunner.manager
         .createQueryBuilder(GameUsdTx, 'gameUsdTx')
         .leftJoinAndSelect('gameUsdTx.walletTxs', 'walletTxs')
         .leftJoinAndSelect('gameUsdTx.betOrders', 'betOrders')
@@ -1121,9 +1128,6 @@ export class BetService implements OnModuleInit {
         .leftJoinAndSelect('userWallet.user', 'user')
         .where('gameUsdTx.id = :id', { id: gameUsdTx.id })
         .getMany();
-
-      let userWallet: UserWallet;
-      let walletTx: WalletTx;
 
       if (gameUsdTx.walletTxs && gameUsdTx.walletTxs.length > 0) {
         walletTx = await queryRunner.manager
@@ -1201,6 +1205,7 @@ export class BetService implements OnModuleInit {
       await queryRunner.manager.save(userWallet);
 
       await queryRunner.commitTransaction();
+      isTransactionCommitted = true;
 
       //Process referral immediately if the bet is not masked.
       if (!job.data.isMasked) {
@@ -1212,20 +1217,26 @@ export class BetService implements OnModuleInit {
           queueType: QueueType.BETTING_REFERRAL_DISTRIBUTION,
         });
       }
-
-      // TODO: Shouldn't use gameUsdTx (comes from queryRunner)
-      await this.userService.setUserNotification(userWallet.userId, {
-        type: 'bet',
-        title: 'Buy Order Processed Successfully',
-        message: 'Your Buy has been successfully processed',
-        gameUsdTxId: gameUsdTx.id,
-      });
     } catch (error) {
       this.logger.error(error);
       await queryRunner.rollbackTransaction();
       throw new Error('Error in handleTxSuccess');
     } finally {
       if (!queryRunner.isReleased) await queryRunner.release();
+    }
+
+    if (isTransactionCommitted) {
+      const userLanguage = await this.userService.getUserLanguage(
+        userWallet.userId,
+      );
+      await this.userService.setUserNotification(userWallet.userId, {
+        type: 'bet',
+        title: 'Buy Order Processed Successfully',
+        message: this.i18n.translate('bet.BET_SUCCESS', {
+          lang: userLanguage || 'en',
+        }),
+        gameUsdTxId: gameUsdTx.id,
+      });
     }
   }
 
