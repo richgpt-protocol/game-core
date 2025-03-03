@@ -38,6 +38,7 @@ import { ConfigService } from 'src/config/config.service';
 import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { WalletTxType } from 'src/shared/enum/txType.enum';
 import { FCMService } from 'src/shared/services/fcm.service';
+import { I18nContext, I18nService } from 'nestjs-i18n';
 
 type RedeemResponse = {
   error: string;
@@ -84,6 +85,7 @@ export class WithdrawService implements OnModuleInit {
     private userService: UserService,
     private readonly queueService: QueueService,
     private configService: ConfigService,
+    private i18n: I18nService,
   ) {
     this.payoutCronMutex = new Mutex();
   }
@@ -119,6 +121,7 @@ export class WithdrawService implements OnModuleInit {
   async requestRedeem(
     userId: number,
     payload: RedeemDto,
+    i18n: I18nContext,
   ): Promise<RedeemResponse> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -129,11 +132,17 @@ export class WithdrawService implements OnModuleInit {
         .leftJoinAndSelect('user.wallet', 'wallet')
         .where('user.id = :userId', { userId })
         .getOne();
+      if (!user) {
+        return {
+          error: 'User not found',
+          data: null,
+        };
+      }
       const userWallet = user.wallet;
 
       if (!user.withdrawPin) {
         return {
-          error: 'Please set withdraw password',
+          error: i18n.translate('withdraw.WITHDRAW_PASSWORD_NOT_SET'),
           data: null,
         };
       }
@@ -143,14 +152,14 @@ export class WithdrawService implements OnModuleInit {
       );
       if (!verified) {
         return {
-          error: 'Please check withdraw password',
+          error: i18n.translate('withdraw.WITHDRAW_PASSWORD_NOT_MATCH'),
           data: null,
         };
       }
 
       if (payload.amount < 1) {
         return {
-          error: 'Minimum withdrawable amount is $1',
+          error: i18n.translate('withdraw.MINIMUM_WITHDRAWABLE_AMOUNT'),
           data: null,
         };
       }
@@ -180,7 +189,7 @@ export class WithdrawService implements OnModuleInit {
           : userWallet.walletBalance - pendingAmount;
       if (actualWalletBalance < payload.amount) {
         return {
-          error: 'Insufficient redeemable balance',
+          error: i18n.translate('withdraw.INSUFFICIENT_BALANCE'),
           data: null,
         };
       }
@@ -189,7 +198,7 @@ export class WithdrawService implements OnModuleInit {
       );
       if (userLevel < 10) {
         return {
-          error: 'Insufficient level to redeem',
+          error: i18n.translate('withdraw.INSUFFICIENT_LEVEL'),
           data: null,
         };
       }
@@ -218,7 +227,10 @@ export class WithdrawService implements OnModuleInit {
       );
 
       if (lastPendingRedeemWalletTx) {
-        return { error: 'Previous withdrawal is in progress', data: null };
+        return {
+          error: i18n.translate('withdraw.PREVIOUS_WITHDRAWAL_IN_PROGRESS'),
+          data: null,
+        };
       }
 
       const setting = await queryRunner.manager.findOne(Setting, {
@@ -338,7 +350,10 @@ export class WithdrawService implements OnModuleInit {
       await this.userService.setUserNotification(userId, {
         type: 'redeem',
         title: 'Redeem Processed Successfully',
-        message: `Your redeem of $${payload.amount} has been successfully processed and pending for review.`,
+        // message: `Your redeem of $${payload.amount} has been successfully processed and pending for review.`,
+        message: i18n.translate('withdraw.REDEEM_SUCCESS', {
+          args: { amount: payload.amount },
+        }),
         walletTxId: walletTx.id,
       });
 
@@ -363,7 +378,7 @@ export class WithdrawService implements OnModuleInit {
         true,
       );
       return {
-        error: 'Unable to process withdraw request at the moment',
+        error: i18n.translate('withdraw.UNABLE_TO_PROCESS_WITHDRAW_REQUEST'),
         data: null,
       };
     } finally {
@@ -430,10 +445,15 @@ export class WithdrawService implements OnModuleInit {
         await queryRunner.manager.save(walletTx);
         await queryRunner.commitTransaction();
 
-        await this.userService.setUserNotification(walletTx.userWalletId, {
+        const userId = walletTx.userWallet.userId;
+        const userLanguage = await this.userService.getUserLanguage(userId);
+        await this.userService.setUserNotification(userId, {
           type: 'review redeem',
           title: 'Redeem Request Rejected',
-          message: `Your redeem request for amount $${Number(walletTx.txAmount)} has been rejected. Please contact admin for more information.`,
+          message: this.i18n.translate('withdraw.REDEEM_REQUEST_REJECTED', {
+            lang: userLanguage || 'en',
+            args: { amount: Number(walletTx.txAmount).toFixed(2) },
+          }),
           walletTxId: walletTx.id,
         });
       }
@@ -627,20 +647,28 @@ export class WithdrawService implements OnModuleInit {
 
     if (redeemTx) {
       try {
-        await this.userService.setUserNotification(
-          redeemTx.walletTx.userWalletId,
-          {
-            type: 'payout',
-            title: 'Payout Successfully',
-            message: `Your payout for amount $${Number(redeemTx.amount)} has been processed successfully.`,
-            walletTxId: redeemTx.walletTx.id,
-          },
-        );
+        const userId = redeemTx.walletTx.userWallet.userId;
+        const userLanguage = await this.userService.getUserLanguage(userId);
+        await this.userService.setUserNotification(userId, {
+          type: 'payout',
+          title: 'Payout Successfully',
+          message: this.i18n.translate('withdraw.PAYOUT_SUCCESS', {
+            lang: userLanguage || 'en',
+            args: { amount: Number(redeemTx.amount).toFixed(2) },
+          }),
+          walletTxId: redeemTx.walletTx.id,
+        });
 
         await this.fcmService.sendUserFirebase_TelegramNotification(
           redeemTx.walletTx.userWalletId,
           'Withdrawal Successful',
-          `You have withdrawn ${Number(redeemTx.amount).toFixed(2)} USDT to ${redeemTx.walletTx.userWallet.walletAddress}`,
+          this.i18n.translate('withdraw.PAYOUT_SUCCESS_TG', {
+            lang: userLanguage || 'en',
+            args: {
+              amount: Number(redeemTx.amount).toFixed(2),
+              address: redeemTx.walletTx.userWallet.walletAddress,
+            },
+          }),
         );
       } catch (ex) {
         this.logger.error('handlePayout() for sending notification error: ');
