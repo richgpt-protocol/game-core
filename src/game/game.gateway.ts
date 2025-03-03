@@ -17,6 +17,8 @@ import { BetOrder } from './entities/bet-order.entity';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { FCMService } from 'src/shared/services/fcm.service';
 import { ConfigService } from 'src/config/config.service';
+import { UserService } from 'src/user/user.service';
+import { I18nService } from 'nestjs-i18n';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class GameGateway {
@@ -37,6 +39,8 @@ export class GameGateway {
     private dataSource: DataSource,
     private fcmService: FCMService,
     private configService: ConfigService,
+    private userService: UserService,
+    private i18n: I18nService,
   ) {}
 
   @SubscribeMessage('liveDrawResult')
@@ -245,10 +249,17 @@ export class GameGateway {
             if (isWinner) break;
           }
 
+          const userLanguage = await this.userService.getUserLanguage(userId);
           const title = isWinner ? '✨ You’re a Winner! ✨' : '📢 Game Results';
           const message = isWinner
-            ? `✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${epoch}\n**Winning Number:** ${winningNumberPair}\n\n🍀 Luck is on your side—why not try your luck again?`
-            : `🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!`;
+            ? this.i18n.translate('game.IS_WINNER', {
+                args: { epoch, winningNumberPair },
+                lang: userLanguage || 'en',
+              })
+            : this.i18n.translate('game.IS_NOT_WINNER', {
+                args: { epoch },
+                lang: userLanguage || 'en',
+              });
 
           await this.fcmService.sendUserFirebase_TelegramNotification(
             userId,
