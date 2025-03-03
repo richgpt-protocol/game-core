@@ -38,8 +38,9 @@ import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { CreditWalletTxType } from 'src/shared/enum/txType.enum';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import axios from 'axios';
-
+import { I18nService } from 'nestjs-i18n';
 import { FCMService } from 'src/shared/services/fcm.service';
+
 @Injectable()
 export class CreditService {
   private readonly logger = new Logger(CreditService.name);
@@ -64,6 +65,7 @@ export class CreditService {
     private eventEmitter: EventEmitter2,
     private readonly queueService: QueueService,
     private fcmService: FCMService,
+    private i18n: I18nService,
   ) {
     this.GAMEUSD_TRANFER_INITIATOR =
       this.configService.get('CREDIT_BOT_ADDRESS');
@@ -467,6 +469,7 @@ export class CreditService {
     const { creditWalletTxId } = job.data;
     const queryRunner = this.dataSource.createQueryRunner();
     let creditWalletTx;
+    let userId;
     try {
       await queryRunner.connect();
       await queryRunner.startTransaction();
@@ -485,6 +488,7 @@ export class CreditService {
 
       const gameUsdTx = creditWalletTx.gameUsdTx;
       const userWallet = creditWalletTx.userWallet;
+      userId = userWallet.userId;
       // throw new Error('Test error');
 
       const signer = await this.getSigner(
@@ -565,12 +569,15 @@ export class CreditService {
         }
 
         if (creditWalletTx.txType == 'CREDIT') {
+          const userLanguage = await this.userService.getUserLanguage(userId);
           await this.userService.setUserNotification(
             creditWalletTx.userWallet.userId,
             {
               type: 'Credit',
               title: 'Credit Added Successfully',
-              message: 'Your Credit has been added successfully',
+              message: this.i18n.translate('credit.CREDIT_SUCCESS', {
+                lang: userLanguage || 'en',
+              }),
               walletTxId: creditWalletTx.id,
             },
           );
@@ -578,7 +585,12 @@ export class CreditService {
           await this.fcmService.sendUserFirebase_TelegramNotification(
             creditWalletTx.userWallet.userId,
             'Credit Added',
-            `You have received $${Number(creditWalletTx.gameUsdTx.amount).toFixed(2)} as a credit. Check your app wallet to view your updated balance.`,
+            this.i18n.translate('credit.CREDIT_SUCCESS_TG', {
+              lang: userLanguage || 'en',
+              args: {
+                amount: Number(creditWalletTx.gameUsdTx.amount).toFixed(2),
+              },
+            }),
           );
         }
       } catch (ex) {
