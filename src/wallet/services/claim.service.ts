@@ -27,6 +27,7 @@ import { ClaimJackpotDetail } from '../entities/claim-jackpot-detail.entity';
 import { QueueName, QueueType } from 'src/shared/enum/queue.enum';
 import { QueueService } from 'src/queue/queue.service';
 import { Job } from 'bullmq';
+import { I18nService } from 'nestjs-i18n';
 
 type ClaimResponse = {
   error: string;
@@ -77,6 +78,7 @@ export class ClaimService implements OnModuleInit {
     private userService: UserService,
     private configService: ConfigService,
     private queueService: QueueService,
+    private i18n: I18nService,
   ) {}
 
   onModuleInit() {
@@ -481,10 +483,15 @@ export class ClaimService implements OnModuleInit {
       // finalize queryRunner
       await queryRunner.release();
 
+      const userLanguage = await this.userService.getUserLanguage(
+        payload.userId,
+      );
       await this.userService.setUserNotification(payload.userId, {
         type: 'claim',
         title: 'Claim Processed Successfully',
-        message: 'Your claim has been successfully processed',
+        message: this.i18n.translate('claim.CLAIM_SUCCESS', {
+          lang: userLanguage || 'en',
+        }),
         walletTxId: walletTx.id,
       });
     }

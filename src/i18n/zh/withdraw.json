@@ -1,0 +1,14 @@
+{
+  "REDEEM_SUCCESS": "您兑换的${amount}已成功处理并待审核",
+  "INSUFFICIENT_BALANCE": "余额不足",
+  "INSUFFICIENT_LEVEL": "等级不足",
+  "WITHDRAW_PASSWORD_NOT_SET": "请设置提款密码",
+  "WITHDRAW_PASSWORD_NOT_MATCH": "请检查提款密码",
+  "MINIMUM_WITHDRAWABLE_AMOUNT": "最小提款金额为$1",
+  "PREVIOUS_WITHDRAWAL_IN_PROGRESS": "前一次提款正在进行中",
+  "UNABLE_TO_PROCESS_WITHDRAW_REQUEST": "暂时无法处理提款请求",
+  "REQUEST_REDEEM_SUCCESS": "请求提款成功",
+  "REDEEM_REQUEST_REJECTED": "您对${amount}的提款请求已驳回。请联系管理员获取更多信息。",
+  "PAYOUT_SUCCESS": "您对${amount}的提款已成功处理。",
+  "PAYOUT_SUCCESS_TG": "您已提款${amount} USDT到${address}"
+}

@@ -2,5 +2,6 @@
   "CLAIM_NOT_AVAILABLE_YET": "Claim is not available yet",
   "CLAIM_IN_PROGRESS": "Claim is in progress",
   "NO_BET_ORDER_AVAILABLE_FOR_CLAIM": "No bet order available for claim",
-  "UNABLE_TO_PROCESS_CLAIM": "Unable to process claim at the moment"
+  "UNABLE_TO_PROCESS_CLAIM": "Unable to process claim at the moment",
+  "CLAIM_SUCCESS": "Your claim has been successfully processed"
 }

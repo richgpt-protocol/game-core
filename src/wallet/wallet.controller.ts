@@ -190,17 +190,19 @@ export class WalletController {
   async requestRedeem(
     @Req() req: any,
     @Body() payload: RedeemDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
     try {
       const res = await this.withdrawService.requestRedeem(
         Number(req.user.userId),
         payload,
+        i18n,
       );
       if (!res.error) {
         return {
           statusCode: HttpStatus.OK,
           data: res.data,
-          message: 'request redeem success',
+          message: i18n.translate('withdraw.REQUEST_REDEEM_SUCCESS'),
         };
       } else {
         return {

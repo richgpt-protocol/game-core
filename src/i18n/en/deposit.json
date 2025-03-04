@@ -1,0 +1,4 @@
+{
+  "DEPOSIT_SUCCESS": "Your deposit has been successfully processed",
+  "DEPOSIT_SUCCESS_TG": "You have received ${amount} USDT in your wallet. Check your app wallet to view your updated balance."
+}

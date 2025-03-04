@@ -59,6 +59,7 @@ import { DrawResult } from 'src/game/entities/draw-result.entity';
 import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
 import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { ChatbotService } from 'src/chatbot/chatbot.service';
+import { I18nContext } from 'nestjs-i18n';
 
 @Injectable()
 export class PublicService {
@@ -556,14 +557,18 @@ export class PublicService {
     };
   }
 
-  async withdraw(payload: RequestWithdrawDto) {
+  async withdraw(payload: RequestWithdrawDto, i18n: I18nContext) {
     const { uid, ...withdrawPayload } = payload;
     const user = await this.userService.findByCriteria('uid', uid);
     if (!user) {
       throw new BadRequestException('User not found');
     }
 
-    return await this.withdrawService.requestRedeem(user.id, withdrawPayload);
+    return await this.withdrawService.requestRedeem(
+      user.id,
+      withdrawPayload,
+      i18n,
+    );
   }
 
   async setWithdrawPassword(payload: SetWithdrawPinDto) {

@@ -1,3 +1,6 @@
 {
-  "BET_SUCCESS": "Bet success"
+  "BET_SUCCESS": "Bet success",
+  "IS_WINNER": "✨ You’re a Winner! ✨\n\n🎉 Amazing! You’ve just won the game!\n\n**Game Epoch:** ${epoch}\n**Winning Number:** ${winningNumberPair}\n\n🍀 Luck is on your side—why not try your luck again?",
+  "IS_NOT_WINNER": "🧧 Better Luck Next Time! 🧧\n\nThe results are in, but luck wasn’t on your side this time.\n\n**Game Epoch:** ${epoch}\n\n🎯 Take another shot—your lucky day could be just around the corner!",
+  "RESULT_ANNOUNCEMENT_REMINDER": "Only 1 minute left until the results are announced! ⏳ \n\nCheck it out now and see if you're a winner! 🏆 \n\n[Open Game Now] https://t.me/fuyo_game_bot/fuyo_game"
 }
