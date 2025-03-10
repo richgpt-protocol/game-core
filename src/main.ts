@@ -11,6 +11,24 @@ import { join } from 'path';
 import { ConfigService } from './config/config.service';
 import { QueueService } from './queue/queue.service';
 
+// Add global unhandled rejection handler
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED PROMISE REJECTION:', reason);
+  // Log additional details that might help with debugging
+  console.error('Promise:', promise);
+  if (reason instanceof Error) {
+    console.error('Stack trace:', reason.stack);
+  }
+  // Don't exit the process - just log the error
+});
+
+// Add global uncaught exception handler
+process.on('uncaughtException', (error) => {
+  console.error('UNCAUGHT EXCEPTION:', error);
+  console.error('Stack trace:', error.stack);
+  // Don't exit the process - just log the error
+});
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   setupSwagger(app);
