@@ -65,6 +65,11 @@ export class GameService implements OnModuleInit {
       'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
     ),
   );
+  backupProvider = new ethers.JsonRpcProvider(
+    this.configService.get(
+      'PROVIDER_RPC_URL_BACKUP_' + this.configService.get('BASE_CHAIN_ID'),
+    ),
+  );
 
   constructor(
     @InjectRepository(Game)
@@ -396,7 +401,7 @@ export class GameService implements OnModuleInit {
       console.log('Response waiting');
       const txReceipt = await OnChainUtil.waitForTransaction(
         txResponse,
-        this.provider,
+        this.backupProvider,
       );
       console.log('Finished wait');
 
