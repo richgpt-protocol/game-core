@@ -1,0 +1,4 @@
+{
+  "CREDIT_SUCCESS": "您的信用额已成功处理",
+  "CREDIT_SUCCESS_TG": "您已收到${amount}作为信用额。请检查您的应用钱包查看更新后的余额。"
+}

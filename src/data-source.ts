@@ -22,6 +22,8 @@ const options: DataSourceOptions & SeederOptions = {
   // extra: {
   //   queryTimeout: 5000,
   // },
+  migrations: [__dirname + '/../migrations/*.{js,ts}'],
+  migrationsTableName: 'migrations',
 };
 
 export const AppDataSource = new DataSource(options);

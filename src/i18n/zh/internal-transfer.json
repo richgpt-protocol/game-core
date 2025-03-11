@@ -1,0 +1,5 @@
+{
+  "INTERNAL_TRANSFER_SUCCESS": "您的内部转账已成功处理",
+  "INTERNAL_TRANSFER_RECEIVED": "您已收到GameUSD",
+  "INTERNAL_TRANSFER_RECEIVED_TG": "您已收到来自{senderUid}的{amount} USDT。"
+}

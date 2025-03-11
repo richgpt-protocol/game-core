@@ -48,7 +48,7 @@ import { FCMService } from 'src/shared/services/fcm.service';
 import { GasService } from 'src/shared/services/gas.service';
 import { ReloadTx } from '../entities/reload-tx.entity';
 import { OnChainUtil } from 'src/shared/utils/on-chain.util';
-
+import { I18nService } from 'nestjs-i18n';
 /**
  * How deposit works
  * 1. deposit-bot access via api/v1/wallet/deposit
@@ -79,6 +79,7 @@ export class DepositService implements OnModuleInit {
     private campaignService: CampaignService,
     private creditService: CreditService,
     private fcmService: FCMService,
+    private i18n: I18nService,
     @InjectRepository(ReloadTx)
     private reloadTxRepository: Repository<ReloadTx>,
     private gasService: GasService,
@@ -989,16 +990,23 @@ export class DepositService implements OnModuleInit {
     // Send notifications outside of the transaction
     if (walletTx) {
       try {
-        await this.userService.setUserNotification(walletTx.userWallet.userId, {
+        const userId = walletTx.userWallet.userId;
+        const userLanguage = await this.userService.getUserLanguage(userId);
+        await this.userService.setUserNotification(userId, {
           type: 'Deposit',
           title: 'Deposit Processed Successfully',
-          message: 'Your Deposit has been successfully processed',
+          message: this.i18n.translate('deposit.DEPOSIT_SUCCESS', {
+            lang: userLanguage || 'en',
+          }),
           walletTxId: walletTx.id,
         });
         await this.fcmService.sendUserFirebase_TelegramNotification(
-          walletTx.userWallet.userId,
+          userId,
           'Deposit Successful',
-          `You have received ${Number(walletTx.txAmount).toFixed(2)} USDT in your wallet. Check your app wallet to view your updated balance.`,
+          this.i18n.translate('deposit.DEPOSIT_SUCCESS_TG', {
+            lang: userLanguage || 'en',
+            args: { amount: Number(walletTx.txAmount).toFixed(2) },
+          }),
         );
       } catch (error) {
         console.log('Error in sending notification [Deposit function]', error);

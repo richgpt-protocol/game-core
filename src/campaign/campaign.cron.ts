@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Setting } from 'src/setting/entities/setting.entity';
 import { ConfigService } from 'src/config/config.service';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
@@ -11,6 +11,9 @@ import { MPC } from 'src/shared/mpc';
 import { SettingEnum } from 'src/shared/enum/setting.enum';
 import { FCMService } from 'src/shared/services/fcm.service';
 import { BetOrder } from 'src/game/entities/bet-order.entity';
+import { User } from 'src/user/entities/user.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { I18nService } from 'nestjs-i18n';
 
 @Injectable()
 export class CampaignCron {
@@ -20,6 +23,9 @@ export class CampaignCron {
     private configService: ConfigService,
     private fcmService: FCMService,
     private adminNotificationService: AdminNotificationService,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    private i18n: I18nService,
   ) {}
 
   @Cron('0 5 */1 * * *') // 5 minutes after every hour
@@ -87,6 +93,10 @@ export class CampaignCron {
           for (const betOrder of betOrders) {
             // walletTx.txAmount should only be the amount bet with USDT
             const betAmount = betOrder.walletTx.txAmount;
+            const userId = betOrder.walletTx.userWallet.userId;
+            const user = await this.userRepository.findOneBy({
+              id: userId,
+            });
 
             let retryCount = 0;
             if (cashbackCapPerEpoch >= betAmount) {
@@ -111,18 +121,22 @@ export class CampaignCron {
                 cashbackCapPerEpoch -= betAmount;
 
                 await this.fcmService.sendUserFirebase_TelegramNotification(
-                  betOrder.walletTx.userWallet.userId,
+                  userId,
                   'Cashback Campaign',
-                  `🎉 Congrats! Your cashback from last hour's bet has been sent! 💰 You have also gained ${betAmount * 1000} XP! 🚀
-📢 Invite friends to join now and earn up to 20% commission in USDT on their bets! 🎁 Keep playing & win more! 🎲✨`,
+                  this.i18n.translate('campaign.CASHBACK_SUCCESS_TG', {
+                    args: { amount: betAmount * 1000 },
+                    lang: user.language || 'en',
+                  }),
                 );
               }
             } else {
               await this.fcmService.sendUserFirebase_TelegramNotification(
-                betOrder.walletTx.userWallet.userId,
+                userId,
                 'Cashback Campaign',
-                `😲 Almost! The last hour's cashback hit the cap, and you've missed it! ⏳ Bet early next hour before it runs out! ⏰ Here's ${betAmount * 1000} XP reward for your bet! 🎮🔥
-📢 Invite friends to join now and earn up to 20% commission in USDT on their bets! 🎁 Keep playing & win more! 🎯🏆`,
+                this.i18n.translate('campaign.CASHBACK_FAILED_TG', {
+                  args: { amount: betAmount * 1000 },
+                  lang: user.language || 'en',
+                }),
               );
             }
           }

@@ -61,12 +61,13 @@ export class User {
   // terminated -
   // unverified - sign up but not yet verified via otp
   // pending - pending for admin/developer to review
-  status: UserStatus.ACTIVE |
-    UserStatus.INACTIVE |
-    UserStatus.SUSPENDED |
-    UserStatus.TERMINATED |
-    UserStatus.UNVERIFIED |
-    UserStatus.PENDING;
+  status:
+    | UserStatus.ACTIVE
+    | UserStatus.INACTIVE
+    | UserStatus.SUSPENDED
+    | UserStatus.TERMINATED
+    | UserStatus.UNVERIFIED
+    | UserStatus.PENDING;
 
   @Column({
     select: false,
@@ -171,4 +172,9 @@ export class User {
 
   @OneToMany(() => ChatLog, (chatLog) => chatLog.user)
   chatLogs: ChatLog[];
+
+  @Column({
+    nullable: true,
+  })
+  language: string;
 }
