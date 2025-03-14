@@ -23,6 +23,7 @@ import { RequestWithdrawDto, SetWithdrawPinDto } from './dtos/withdraw.dto';
 import { SquidGameTicketListDto } from './dtos/squid-game.dto';
 import { ClaimJackpotDto } from './dtos/claim.dto';
 import { GameService } from 'src/game/game.service';
+import { I18n, I18nContext } from 'nestjs-i18n';
 
 @ApiTags('Public')
 @Controller('api/v1/public')
@@ -306,8 +307,9 @@ export class PublicController {
   })
   async requestWithdraw(
     @Body() payload: RequestWithdrawDto,
+    @I18n() i18n: I18nContext,
   ): Promise<ResponseVo<any>> {
-    const data = await this.publicService.withdraw(payload);
+    const data = await this.publicService.withdraw(payload, i18n);
     return {
       statusCode: HttpStatus.CREATED,
       data,
@@ -776,6 +778,53 @@ export class PublicController {
         data: null,
         message: 'Error claim',
       };
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Get('get-user-language')
+  @ApiResponse({
+    status: 200,
+    description: 'Get user language',
+    type: ResponseVo,
+  })
+  async getUserLanguage(@Query('uid') uid: string): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.getUserLanguage(uid);
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success get user language',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      throw error;
+    }
+  }
+
+  @UseGuards(SecretTokenGuard)
+  @Post('update-user-language')
+  @ApiResponse({
+    status: 200,
+    description: 'Update user language',
+    type: ResponseVo,
+  })
+  async updateUserLanguage(
+    @Body() payload: { uid: string; language: string },
+  ): Promise<ResponseVo<any>> {
+    try {
+      const data = await this.publicService.updateUserLanguage(
+        payload.uid,
+        payload.language,
+      );
+      return {
+        statusCode: HttpStatus.OK,
+        data,
+        message: 'Success update user language',
+      };
+    } catch (error) {
+      this.logger.error(error);
+      throw error;
     }
   }
 }

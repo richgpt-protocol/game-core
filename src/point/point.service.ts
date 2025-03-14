@@ -17,6 +17,7 @@ import { PointSnapshot } from './entities/PointSnapshot.entity';
 import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { FCMService } from 'src/shared/services/fcm.service';
 import { delay } from 'src/shared/constants/util.constant';
+import { I18nService } from 'nestjs-i18n';
 
 @Injectable()
 export class PointService {
@@ -38,6 +39,7 @@ export class PointService {
     private walletService: WalletService,
     private userService: UserService,
     private fcmService: FCMService,
+    private i18n: I18nService,
   ) {}
 
   getDepositPoints(depositAmount: number): { xp: number; bonusPerc: number } {
@@ -494,12 +496,21 @@ export class PointService {
           this.walletService.calculateLevel(Number(pointTx.endingBalance)),
         );
         if (levelAfter > levelBefore) {
+          const userLanguage = await this.userService.getUserLanguage(
+            pointTx.userWallet.userId,
+          );
           await this.userService.setUserNotification(
             pointTx.userWallet.userId,
             {
               type: 'point',
               title: 'Congratulations on Level Up',
-              message: `You just level up from ${levelBefore} to level ${levelAfter}!`,
+              message: this.i18n.translate('point.LEVEL_UP', {
+                lang: userLanguage || 'en',
+                args: {
+                  levelBefore,
+                  levelAfter,
+                },
+              }),
               walletTxId: pointTx.walletTxId,
             },
           );
@@ -507,6 +518,7 @@ export class PointService {
           isLevelUp = true;
           notifiedUsers.push({
             userId: pointTx.userWallet.userId,
+            userLanguage,
             levelBefore,
             levelAfter,
           });
@@ -537,7 +549,13 @@ export class PointService {
           await this.fcmService.sendUserFirebase_TelegramNotification(
             notifiedUser.userId,
             'Congratulations on Level Up',
-            `You just level up from ${notifiedUser.levelBefore} to level ${notifiedUser.levelAfter}!`,
+            this.i18n.translate('point.LEVEL_UP', {
+              lang: notifiedUser.userLanguage || 'en',
+              args: {
+                levelBefore: notifiedUser.levelBefore,
+                levelAfter: notifiedUser.levelAfter,
+              },
+            }),
           );
           await delay(200);
         }

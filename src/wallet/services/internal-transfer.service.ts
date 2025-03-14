@@ -22,6 +22,7 @@ import * as bcrypt from 'bcrypt';
 import { WalletTxType } from 'src/shared/enum/txType.enum';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { FCMService } from 'src/shared/services/fcm.service';
+import { I18nService } from 'nestjs-i18n';
 
 @Injectable()
 export class InternalTransferService {
@@ -47,6 +48,7 @@ export class InternalTransferService {
     private configService: ConfigService,
     private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
+    private i18n: I18nService,
   ) {}
 
   async transferGameUSD(userId: number, payload: TransferGameUSDDto) {
@@ -387,19 +389,35 @@ export class InternalTransferService {
             Number(receiverUserWallet.walletBalance) +
             Number(senderWalletTx.txAmount);
 
+          const senderUserLanguage = await this.userService.getUserLanguage(
+            senderUserWallet.userId,
+          );
           await this.userService.setUserNotification(senderUserWallet.userId, {
             type: 'Transfer',
             title: 'Transfer Processed Successfully',
-            message: 'Your Transfer has been successfully processed',
+            message: this.i18n.translate(
+              'internal-transfer.INTERNAL_TRANSFER_SUCCESS',
+              {
+                lang: senderUserLanguage || 'en',
+              },
+            ),
             walletTxId: senderWalletTx.id,
           });
 
+          const receiverUserLanguage = await this.userService.getUserLanguage(
+            receiverUserWallet.userId,
+          );
           await this.userService.setUserNotification(
             receiverUserWallet.userId,
             {
               type: 'Transfer',
               title: 'Received GameUSD Transfer',
-              message: 'You have received GameUSD',
+              message: this.i18n.translate(
+                'internal-transfer.INTERNAL_TRANSFER_RECEIVED',
+                {
+                  lang: receiverUserLanguage || 'en',
+                },
+              ),
               walletTxId: receiverWalletTx.id,
             },
           );
@@ -458,10 +476,22 @@ export class InternalTransferService {
         const senderUser = await this.dataSource.manager.findOne(User, {
           where: { id: senderUserWallet.userId },
         });
+        const receiverUserLanguage = await this.userService.getUserLanguage(
+          receiverUserWallet.userId,
+        );
         await this.fcmService.sendUserFirebase_TelegramNotification(
           receiverUserWallet.userId,
           'Internal Transfer Received',
-          `You have received ${Number(senderWalletTx.txAmount).toFixed(2)} USDT from ${senderUser.uid}.`,
+          this.i18n.translate(
+            'internal-transfer.INTERNAL_TRANSFER_RECEIVED_TG',
+            {
+              lang: receiverUserLanguage || 'en',
+              args: {
+                amount: Number(senderWalletTx.txAmount).toFixed(2),
+                senderUid: senderUser.uid,
+              },
+            },
+          ),
         );
       } catch (ex) {
         this.logger.error(

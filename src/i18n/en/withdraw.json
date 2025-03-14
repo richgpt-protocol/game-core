@@ -1,0 +1,14 @@
+{
+  "REDEEM_SUCCESS": "Your redeem of ${amount} has been successfully processed and pending for review.",
+  "INSUFFICIENT_BALANCE": "Insufficient redeemable balance",
+  "INSUFFICIENT_LEVEL": "Insufficient level to redeem",
+  "WITHDRAW_PASSWORD_NOT_SET": "Please set withdraw password",
+  "WITHDRAW_PASSWORD_NOT_MATCH": "Please check withdraw password",
+  "MINIMUM_WITHDRAWABLE_AMOUNT": "Minimum withdrawable amount is $1",
+  "PREVIOUS_WITHDRAWAL_IN_PROGRESS": "Previous withdrawal is in progress",
+  "UNABLE_TO_PROCESS_WITHDRAW_REQUEST": "Unable to process withdraw request at the moment",
+  "REQUEST_REDEEM_SUCCESS": "Request redeem success",
+  "REDEEM_REQUEST_REJECTED": "Your redeem request for amount ${amount} has been rejected. Please contact admin for more information.",
+  "PAYOUT_SUCCESS": "Your payout for amount ${amount} has been processed successfully.",
+  "PAYOUT_SUCCESS_TG": "You have withdrawn ${amount} USDT to ${address}"
+}

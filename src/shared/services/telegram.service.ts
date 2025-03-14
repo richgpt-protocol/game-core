@@ -9,6 +9,7 @@ import * as TelegramBot from 'node-telegram-bot-api';
 import { UserStatus } from '../enum/status.enum';
 import axios from 'axios';
 import { ChatbotTelegram } from 'src/chatbot/chatbot.telegram';
+import { en, zh_hans } from '../language';
 
 @Injectable()
 export class TelegramService {
@@ -58,44 +59,29 @@ export class TelegramService {
     });
   }
 
-  private handleStartFuyoBot(msg) {
+  private async handleStartFuyoBot(msg) {
     const senderId = msg.from?.id || 0;
     const chatId = msg.chat.id;
+
+    const user = await this.userRepository.findOne({
+      where: { tgId: senderId.toString() },
+    });
+    const senderLanguage = user
+      ? // user.language default to null if unset
+        user.language || msg.from?.language_code || 'en'
+      : 'en';
     const photoUrl = 'https://storage.googleapis.com/fuyo-assets/IMG_2883.jpg';
 
-    // Define the inline keyboard
     const inlineKeyboard = {
       reply_markup: {
-        inline_keyboard: [
-          [{ text: '🤖 Fuyo AI', callback_data: 'chat_with_ai' }],
-          [
-            {
-              text: '🎮 Fuyo TG Game',
-              web_app: { url: 'https://game.fuyo.lol/' },
-            },
-          ],
-          [{ text: '🐦 Follow us on X', url: 'https://x.com/FuyoAI' }],
-          [{ text: '💬 Join the Community', url: 'https://t.me/fuyoapp' }],
-          [{ text: '📲 Download Fuyo App', url: 'https://app.fuyo.lol/' }],
-          [
-            {
-              text: '💰 Join Ambassador Program',
-              url: 'https://medium.com/@fuyoapp/fuyos-refer-to-earn-ambassador-program-4e36b4c05e42',
-            },
-          ],
-        ],
+        inline_keyboard: senderLanguage.startsWith('zh')
+          ? zh_hans.inline_keyboard
+          : en.inline_keyboard,
       },
     };
 
     this.fuyoBot.sendPhoto(chatId, photoUrl, {
-      caption:
-        '<b>Welcome to Fuyo AI - Your Personal AI Agent for GambleFi!🤖💰</b>\n\n' +
-        '<b>🎰Bet $10, get $10 cashback</b>\n\n' +
-        '<b>🤑Passive income with Refer-to-earn ambassador program</b>\n\n' +
-        '<b>🪙Earn XP and $FUYO airdrop</b>\n\n' +
-        '<b>🔥Double chance of winning - 4D lottery with up to 6500x returns and seasonal Jackpots!</b>\n\n' +
-        '<b>Get rich. #GetFuyoAI!</b>\n\n' +
-        '<b>👇Tap a button to get started:</b>',
+      caption: senderLanguage.startsWith('zh') ? zh_hans.caption : en.caption,
       parse_mode: 'HTML',
       ...inlineKeyboard,
     });
@@ -130,7 +116,7 @@ export class TelegramService {
   private async handleStartCommand(ctx) {
     try {
       const { payload } = ctx;
-      const { id, username } = ctx.update.message.from;
+      const { id, username, language_code } = ctx.update.message.from;
 
       if (!payload || payload == '') {
         return await ctx.reply('Invalid request: payload is missing');
@@ -147,6 +133,7 @@ export class TelegramService {
           'tgId',
           'status',
           'isReset',
+          'language',
         ],
       });
 
@@ -160,10 +147,16 @@ export class TelegramService {
           return await ctx.reply('Invalid Telegram account');
         }
 
+        const verificationCode = user.verificationCode;
+        const appName = this.configService.get('APP_NAME');
+        const senderLanguage = user.language || language_code || 'en';
         return await ctx.reply(
-          `Please use the code - ${user.verificationCode} to verify your mobile number for logging into ${this.configService.get(
-            'APP_NAME',
-          )}`,
+          senderLanguage.startsWith('zh')
+            ? zh_hans.verifyMobileMessage(verificationCode, appName)
+            : en.verifyMobileMessage(verificationCode, appName),
+          {
+            parse_mode: 'HTML',
+          },
         );
       } else {
         //registeration otp
@@ -178,6 +171,7 @@ export class TelegramService {
             },
           ],
         });
+        const senderLanguage = existing?.language || language_code || 'en';
 
         if (
           existing &&
@@ -185,7 +179,12 @@ export class TelegramService {
           existing.status != UserStatus.PENDING
         ) {
           return await ctx.reply(
-            'Please Contact Admin. Telegram already registered',
+            senderLanguage.startsWith('zh')
+              ? zh_hans.telegramRegisteredMessage
+              : en.telegramRegisteredMessage,
+            {
+              parse_mode: 'HTML',
+            },
           );
         }
 
@@ -198,7 +197,9 @@ export class TelegramService {
             keyboard: [
               [
                 {
-                  text: 'Share Contact',
+                  text: senderLanguage.startsWith('zh')
+                    ? zh_hans.shareContactButton
+                    : en.shareContactButton,
                   request_contact: true,
                 },
               ],
@@ -207,7 +208,9 @@ export class TelegramService {
           },
         };
         return await ctx.reply(
-          'Please share your contact information:',
+          senderLanguage.startsWith('zh')
+            ? zh_hans.shareContactMessage
+            : en.shareContactMessage,
           requestContactKeyboard,
         );
       }
@@ -224,7 +227,7 @@ export class TelegramService {
 
   private async handleContactSharing(ctx) {
     try {
-      const { id, username } = ctx.update.message.from;
+      const { id, username, language_code } = ctx.update.message.from;
       const { contact } = ctx.update.message;
 
       // If user uploads contact manually
@@ -256,6 +259,7 @@ export class TelegramService {
       if (!user) {
         return await ctx.reply('Invalid request');
       }
+      const senderLanguage = user.language || language_code || 'en';
 
       // if (user.phoneNumber != contact.phone_number) {
       //   return await ctx.reply('Invalid phone number');
@@ -281,14 +285,24 @@ export class TelegramService {
         user.tgId = null;
         await this.userRepository.save(user);
         return await ctx.reply(
-          'Telegram data mismatch. Is the telegram Phone number same as the registered phone number?',
+          senderLanguage.startsWith('zh')
+            ? zh_hans.telegramDataMismatchMessage
+            : en.telegramDataMismatchMessage,
+          {
+            parse_mode: 'HTML',
+          },
         );
       }
 
+      const verificationCode = user.verificationCode;
+      const appName = this.configService.get('APP_NAME');
       await ctx.reply(
-        `Please use the code - ${user.verificationCode} to verify your mobile number for ${this.configService.get(
-          'APP_NAME',
-        )} user registration.`,
+        senderLanguage.startsWith('zh')
+          ? zh_hans.verifyMobileMessage(verificationCode, appName)
+          : en.verifyMobileMessage(verificationCode, appName),
+        {
+          parse_mode: 'HTML',
+        },
       );
     } catch (error) {
       this.logger.error('handleContactSharing error', error);
@@ -308,10 +322,14 @@ export class TelegramService {
     callbackQuery: TelegramBot.CallbackQuery,
   ) {
     const tgId = callbackQuery.from.id;
-
     const user = await this.userRepository.findOne({
       where: { tgId: tgId.toString() },
     });
+    const senderLanguage = user
+      ? // user.language default to null if unset
+        user.language || callbackQuery.from.language_code || 'en'
+      : 'en';
+
     if (!user) {
       const tgUserName = callbackQuery.message.chat.first_name
         ? callbackQuery.message.chat.first_name
@@ -320,21 +338,18 @@ export class TelegramService {
           : 'Lucky Seeker';
       return await this.fuyoBot.sendMessage(
         callbackQuery.message.chat.id,
-        `💸 WANT TO MAKE MONEY? 💸
-
-Hi ${tgUserName}! Ready to win big with <b>Fuyo AI</b>? 🏆
-
-<b>Chat with our AI</b> to predict your lucky 4D number. 🔥
-
-🔥 Start making real money today! 👉 https://t.me/fuyo_game_bot/fuyo_game
-`,
+        senderLanguage.startsWith('zh')
+          ? zh_hans.noAccountMessage(tgUserName)
+          : en.noAccountMessage(tgUserName),
         { parse_mode: 'HTML' },
       );
     }
 
     return await this.fuyoBot.sendMessage(
       callbackQuery.message.chat.id,
-      `Hey! 👋 I’m your FUYO AI buddy. Got questions about 4D draws, results, or just wanna chat about lucky numbers? Let’s talk—I’m here for you! 🍀`,
+      senderLanguage.startsWith('zh')
+        ? zh_hans.initialMessage
+        : en.initialMessage,
     );
   }
 

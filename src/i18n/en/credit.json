@@ -1,0 +1,4 @@
+{
+  "CREDIT_SUCCESS": "Your credit has been successfully processed",
+  "CREDIT_SUCCESS_TG": "You have received ${amount} as a credit. Check your app wallet to view your updated balance."
+}

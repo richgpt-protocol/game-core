@@ -1,0 +1,4 @@
+{
+  "DEPOSIT_SUCCESS": "您的存款已成功处理",
+  "DEPOSIT_SUCCESS_TG": "您已收到${amount} USDT到您的钱包。请检查您的应用钱包查看更新后的余额。"
+}
