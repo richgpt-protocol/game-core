@@ -92,19 +92,21 @@ export class CampaignCron {
           let cashbackCapPerEpoch = cashbackSettingValue.capPerEpoch as number;
           for (const betOrder of betOrders) {
             // walletTx.txAmount should only be the amount bet with USDT
-            const betAmount = betOrder.walletTx.txAmount;
+            const betAmount = Number(betOrder.walletTx.txAmount);
+            const cashbackAmount =
+              betAmount * Number(cashbackSettingValue.cashbackRate);
             const userId = betOrder.walletTx.userWallet.userId;
             const user = await this.userRepository.findOneBy({
               id: userId,
             });
 
             let retryCount = 0;
-            if (cashbackCapPerEpoch >= betAmount) {
+            if (cashbackCapPerEpoch >= cashbackAmount) {
               while (retryCount < 3) {
                 try {
                   const txResponse = await token.transfer(
                     betOrder.walletTx.userWallet.walletAddress,
-                    ethers.parseUnits(betAmount.toString(), 18),
+                    ethers.parseUnits(cashbackAmount.toString(), 18),
                   );
                   const txReceipt = await txResponse.wait();
                   if (txReceipt.status === 1) break;
@@ -118,7 +120,7 @@ export class CampaignCron {
                 retryCount++;
               }
               if (retryCount < 3) {
-                cashbackCapPerEpoch -= betAmount;
+                cashbackCapPerEpoch -= cashbackAmount;
 
                 await this.fcmService.sendUserFirebase_TelegramNotification(
                   userId,
