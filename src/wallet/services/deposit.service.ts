@@ -140,7 +140,7 @@ export class DepositService implements OnModuleInit {
   }
 
   /** This method is Initiated by deposit bot.
-   * This method will ignore the tx if the sender is mini-game's USDT sender.
+   * This method will ignore the tx if the sender is mini-game's USDT sender or cashback distributer.
    */
   async processDeposit(payload: DepositDTO) {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -183,7 +183,9 @@ export class DepositService implements OnModuleInit {
 
       if (
         payload.amount < 1 &&
-        payload.depositerAddress.toLowerCase() !== miniGameUSDTSender
+        payload.depositerAddress.toLowerCase() !== miniGameUSDTSender &&
+        payload.depositerAddress.toLowerCase() !==
+          this.configService.get('CASHBACK_DISTRIBUTER_ADDRESS').toLowerCase()
       ) {
         // deposit amount less than $1, inform admin and do nothing
         await this.adminNotificationService.setAdminNotification(
