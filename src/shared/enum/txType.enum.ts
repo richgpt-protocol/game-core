@@ -17,6 +17,7 @@ export enum ReferralTxType {
   SET_REFERRAL = 'SET_REFERRAL',
 }
 
+// please update credit.service.expireCredits() if new enum is added
 export enum CreditWalletTxType {
   CREDIT = 'CREDIT',
   PLAY = 'PLAY',

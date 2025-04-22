@@ -14,7 +14,9 @@ export class OnChainUtil {
       }
     } catch (error) {
       // if timeout, wait() will throw error "wait for transaction timeout"
-      console.log('error', error);
+      console.log(
+        `${new Date()} waitForTransaction() error: ${error}, txResponse: ${txResponse.hash}`,
+      );
       // try to get receipt from second provider
       txReceipt = await backupProvider.getTransactionReceipt(txResponse.hash);
       if (!txReceipt) {
