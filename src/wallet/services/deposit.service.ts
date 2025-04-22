@@ -65,6 +65,11 @@ import { I18nService } from 'nestjs-i18n';
 @Injectable()
 export class DepositService implements OnModuleInit {
   private readonly logger = new Logger(DepositService.name);
+  backupProvider = new ethers.JsonRpcProvider(
+    this.configService.get(
+      'PROVIDER_RPC_URL_BACKUP_' + this.configService.get('BASE_CHAIN_ID'),
+    ),
+  );
 
   constructor(
     @InjectRepository(UserWallet)
@@ -586,7 +591,7 @@ export class DepositService implements OnModuleInit {
       // into catch block and retry again in next cron job
       const receipt = await OnChainUtil.waitForTransaction(
         onchainEscrowTx,
-        userSigner.provider,
+        this.backupProvider,
       );
       this.logger.log(`onchainEscrowTx waiting`);
 
@@ -1349,7 +1354,10 @@ export class DepositService implements OnModuleInit {
           to: walletAddress,
           value: ethers.parseEther(amount),
         });
-        const txReceipt = await txResponse.wait();
+        const txReceipt = await OnChainUtil.waitForTransaction(
+          txResponse,
+          this.backupProvider,
+        );
         if (!txReceipt || txReceipt.status !== 1) {
           throw new Error(
             `Failed to reload native token on-chain in chain ${chainId}`,
