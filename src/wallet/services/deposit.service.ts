@@ -580,10 +580,11 @@ export class DepositService implements OnModuleInit {
       // if transfer token failed, normally due to insufficient gas fee, means
       // user wallet haven't been reloaded yet in processDeposit() especially new created wallet
       // into catch block and retry again in next cron job
-      const receipt = await OnChainUtil.waitForTransaction(
-        onchainEscrowTx,
-        this.backupProvider,
-      );
+      // const receipt = await OnChainUtil.waitForTransaction(
+      //   onchainEscrowTx,
+      //   this.backupProvider,
+      // );
+      const receipt = await onchainEscrowTx.wait();
       if (!receipt) {
         this.logger.error(
           `handleEscrowTx() error: Transaction receipt not found for depositTxId: ${depositTx.id}`,
@@ -1329,10 +1330,11 @@ export class DepositService implements OnModuleInit {
           to: walletAddress,
           value: ethers.parseEther(amount),
         });
-        const txReceipt = await OnChainUtil.waitForTransaction(
-          txResponse,
-          this.backupProvider,
-        );
+        // const txReceipt = await OnChainUtil.waitForTransaction(
+        //   txResponse,
+        //   this.backupProvider,
+        // );
+        const txReceipt = await txResponse.wait();
         if (!txReceipt || txReceipt.status !== 1) {
           throw new Error(
             `Failed to reload native token on-chain in chain ${chainId}`,
