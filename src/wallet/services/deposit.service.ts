@@ -49,6 +49,7 @@ import { GasService } from 'src/shared/services/gas.service';
 import { ReloadTx } from '../entities/reload-tx.entity';
 import { OnChainUtil } from 'src/shared/utils/on-chain.util';
 import { I18nService } from 'nestjs-i18n';
+import { ProviderUtil } from 'src/shared/utils/provider.util';
 /**
  * How deposit works
  * 1. deposit-bot access via api/v1/wallet/deposit
@@ -694,8 +695,7 @@ export class DepositService implements OnModuleInit {
     walletAddress: string,
     chainId: number,
   ): Promise<ethers.Wallet> {
-    const providerUrl = this.configService.get(`PROVIDER_RPC_URL_${chainId}`);
-    const provider = new ethers.JsonRpcProvider(providerUrl);
+    const provider = ProviderUtil.createFallbackProvider(chainId.toString());
     return new ethers.Wallet(
       await MPC.retrievePrivateKey(walletAddress),
       provider,
@@ -1321,10 +1321,7 @@ export class DepositService implements OnModuleInit {
 
     const baseChainId = Number(this.configService.get('BASE_CHAIN_ID'));
     if (chainId !== baseChainId) {
-      const chain_provider_rpc_url = this.configService.get(
-        `PROVIDER_RPC_URL_${chainId.toString()}`,
-      );
-      const provider = new ethers.JsonRpcProvider(chain_provider_rpc_url);
+      const provider = ProviderUtil.createFallbackProvider(chainId.toString());
       const balance = await provider.getBalance(walletAddress);
       if (balance <= ethers.parseEther(amount)) {
         const chainSupplyAccount = supplyAccount.connect(provider);
@@ -1359,10 +1356,9 @@ export class DepositService implements OnModuleInit {
       }
     }
 
-    const base_chain_provider_rpc_url = this.configService.get(
-      `PROVIDER_RPC_URL_${baseChainId.toString()}`,
+    const provider = ProviderUtil.createFallbackProvider(
+      baseChainId.toString(),
     );
-    const provider = new ethers.JsonRpcProvider(base_chain_provider_rpc_url);
     const balance = await provider.getBalance(walletAddress);
     if (balance <= ethers.parseEther(amount)) {
       const chainSupplyAccount = supplyAccount.connect(provider);

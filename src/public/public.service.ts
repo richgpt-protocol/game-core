@@ -60,6 +60,7 @@ import { RedeemTx } from 'src/wallet/entities/redeem-tx.entity';
 import { ChatLog } from 'src/chatbot/entities/chatLog.entity';
 import { ChatbotService } from 'src/chatbot/chatbot.service';
 import { I18nContext } from 'nestjs-i18n';
+import { ProviderUtil } from 'src/shared/utils/provider.util';
 
 @Injectable()
 export class PublicService {
@@ -850,8 +851,8 @@ export class PublicService {
 
       let receipt: ContractTransactionReceipt;
       try {
-        const provider = new JsonRpcProvider(
-          this.configService.get(`PROVIDER_RPC_URL_${usdtTx.chainId}`),
+        const provider = ProviderUtil.createFallbackProvider(
+          usdtTx.chainId.toString(),
         );
         const signer = new Wallet(
           await MPC.retrievePrivateKey(usdtTx.senderAddress),

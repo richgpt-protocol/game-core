@@ -23,6 +23,7 @@ import { WalletTxType } from 'src/shared/enum/txType.enum';
 import { TxStatus } from 'src/shared/enum/status.enum';
 import { FCMService } from 'src/shared/services/fcm.service';
 import { I18nService } from 'nestjs-i18n';
+import { ProviderUtil } from 'src/shared/utils/provider.util';
 
 @Injectable()
 export class InternalTransferService {
@@ -328,10 +329,8 @@ export class InternalTransferService {
       senderUserWallet = senderWalletTx.userWallet;
       receiverUserWallet = receiverWalletTx.userWallet;
 
-      const provider = new JsonRpcProvider(
-        this.configService.get(
-          'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
-        ),
+      const provider = ProviderUtil.createFallbackProvider(
+        this.configService.get('BASE_CHAIN_ID'),
       );
 
       const userSigner = new Wallet(
@@ -507,9 +506,7 @@ export class InternalTransferService {
     chainId: number,
   ): Promise<boolean> {
     try {
-      const provider = new JsonRpcProvider(
-        this.configService.get('PROVIDER_RPC_URL_' + chainId.toString()),
-      );
+      const provider = ProviderUtil.createFallbackProvider(chainId.toString());
 
       const nativeBalance = await provider.getBalance(userWallet.walletAddress);
 
