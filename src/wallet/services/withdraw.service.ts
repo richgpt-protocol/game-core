@@ -175,6 +175,20 @@ export class WithdrawService implements OnModuleInit {
         };
       }
 
+      if (!ethers.isAddress(payload.tokenAddress)) {
+        return {
+          error: i18n.translate('withdraw.INVALID_TOKEN_ADDRESS_FORMAT'),
+          data: null,
+        };
+      }
+
+      if (!ethers.isAddress(payload.receiverAddress)) {
+        return {
+          error: i18n.translate('withdraw.INVALID_RECEIVER_ADDRESS_FORMAT'),
+          data: null,
+        };
+      }
+
       const pendingAmountResult = await queryRunner.manager.query(
         `SELECT SUM(txAmount) as pendingAmount FROM wallet_tx 
           WHERE
