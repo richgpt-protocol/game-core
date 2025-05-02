@@ -10,5 +10,7 @@
   "REQUEST_REDEEM_SUCCESS": "Request redeem success",
   "REDEEM_REQUEST_REJECTED": "Your redeem request for amount ${amount} has been rejected. Please contact admin for more information.",
   "PAYOUT_SUCCESS": "Your payout for amount ${amount} has been processed successfully.",
-  "PAYOUT_SUCCESS_TG": "You have withdrawn ${amount} USDT to ${address}"
+  "PAYOUT_SUCCESS_TG": "You have withdrawn ${amount} USDT to ${address}",
+  "INVALID_TOKEN_ADDRESS_FORMAT": "Invalid token address format",
+  "INVALID_RECEIVER_ADDRESS_FORMAT": "Invalid receiver address format"
 }
