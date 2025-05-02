@@ -10,5 +10,7 @@
   "REQUEST_REDEEM_SUCCESS": "请求提款成功",
   "REDEEM_REQUEST_REJECTED": "您对${amount}的提款请求已驳回。请联系管理员获取更多信息。",
   "PAYOUT_SUCCESS": "您对${amount}的提款已成功处理。",
-  "PAYOUT_SUCCESS_TG": "您已提款${amount} USDT到${address}"
+  "PAYOUT_SUCCESS_TG": "您已提款${amount} USDT到${address}",
+  "INVALID_TOKEN_ADDRESS_FORMAT": "代币地址格式错误",
+  "INVALID_RECEIVER_ADDRESS_FORMAT": "接收地址格式错误"
 }
