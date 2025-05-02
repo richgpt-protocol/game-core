@@ -14,6 +14,7 @@ import { BetOrder } from 'src/game/entities/bet-order.entity';
 import { User } from 'src/user/entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { I18nService } from 'nestjs-i18n';
+import { ProviderUtil } from 'src/shared/utils/provider.util';
 
 @Injectable()
 export class CampaignCron {
@@ -73,10 +74,8 @@ export class CampaignCron {
           });
           if (betOrders.length === 0) return;
 
-          const provider = new ethers.JsonRpcProvider(
-            this.configService.get(
-              `PROVIDER_RPC_URL_${this.configService.get('BASE_CHAIN_ID')}`,
-            ),
+          const provider = ProviderUtil.createFallbackProvider(
+            this.configService.get('BASE_CHAIN_ID'),
           );
           const cashbackDistributerAddress = this.configService.get(
             'CASHBACK_DISTRIBUTER_ADDRESS',

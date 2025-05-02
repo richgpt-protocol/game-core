@@ -56,19 +56,23 @@ import { BetService } from './bet.service';
 import { OnChainUtil } from 'src/shared/utils/on-chain.util';
 import { delay } from 'src/shared/constants/util.constant';
 import { I18nService } from 'nestjs-i18n';
+import { ProviderUtil } from 'src/shared/utils/provider.util';
 
 @Injectable()
 export class GameService implements OnModuleInit {
   private readonly logger = new Logger(GameService.name);
-  provider = new ethers.JsonRpcProvider(
-    this.configService.get(
-      'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
-    ),
-  );
-  backupProvider = new ethers.JsonRpcProvider(
-    this.configService.get(
-      'PROVIDER_RPC_URL_BACKUP_' + this.configService.get('BASE_CHAIN_ID'),
-    ),
+  // provider = new ethers.JsonRpcProvider(
+  //   this.configService.get(
+  //     'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
+  //   ),
+  // );
+  // backupProvider = new ethers.JsonRpcProvider(
+  //   this.configService.get(
+  //     'PROVIDER_RPC_URL_BACKUP_' + this.configService.get('BASE_CHAIN_ID'),
+  //   ),
+  // );
+  private provider = ProviderUtil.createFallbackProvider(
+    this.configService.get('BASE_CHAIN_ID'),
   );
 
   constructor(
@@ -399,10 +403,11 @@ export class GameService implements OnModuleInit {
         },
       );
       console.log('Response waiting');
-      const txReceipt = await OnChainUtil.waitForTransaction(
-        txResponse,
-        this.backupProvider,
-      );
+      // const txReceipt = await OnChainUtil.waitForTransaction(
+      //   txResponse,
+      //   this.backupProvider,
+      // );
+      const txReceipt = await txResponse.wait();
       console.log('Finished wait');
 
       const game = await queryRunner.manager

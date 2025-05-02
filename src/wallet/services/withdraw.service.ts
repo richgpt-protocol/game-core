@@ -39,6 +39,7 @@ import { TxStatus, UserStatus } from 'src/shared/enum/status.enum';
 import { WalletTxType } from 'src/shared/enum/txType.enum';
 import { FCMService } from 'src/shared/services/fcm.service';
 import { I18nContext, I18nService } from 'nestjs-i18n';
+import { ProviderUtil } from 'src/shared/utils/provider.util';
 
 type RedeemResponse = {
   error: string;
@@ -725,12 +726,8 @@ export class WithdrawService implements OnModuleInit {
   }
 
   private async approveGameUsdToken(from: string, minApproval: number) {
-    // const providerUrl = process.env.OPBNB_PROVIDER_RPC_URL;
-    // const provider = new ethers.JsonRpcProvider(providerUrl);
-    const provider = new ethers.JsonRpcProvider(
-      this.configService.get(
-        'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
-      ),
+    const provider = ProviderUtil.createFallbackProvider(
+      this.configService.get('BASE_CHAIN_ID'),
     );
     const signer = new ethers.Wallet(
       await MPC.retrievePrivateKey(from),
@@ -770,12 +767,8 @@ export class WithdrawService implements OnModuleInit {
     );
   }
   private async withdrawGameUSD(from: string, amount: number, fee: number) {
-    // const providerUrl = process.env.OPBNB_PROVIDER_RPC_URL;
-    // const provider = new ethers.JsonRpcProvider(providerUrl);
-    const provider = new ethers.JsonRpcProvider(
-      this.configService.get(
-        'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
-      ),
+    const provider = ProviderUtil.createFallbackProvider(
+      this.configService.get('BASE_CHAIN_ID'),
     );
     const withdrawBot = new ethers.Wallet(
       await MPC.retrievePrivateKey(
@@ -822,10 +815,6 @@ export class WithdrawService implements OnModuleInit {
   }
 
   private async getUsdtBalance(chainId: number): Promise<bigint> {
-    const providerUrl =
-      chainId === 56 || chainId === 97
-        ? this.configService.get('BNB_PROVIDER_RPC_URL')
-        : this.configService.get('OPBNB_PROVIDER_RPC_URL');
     const tokenAddress =
       chainId === 56 || chainId === 97
         ? this.configService.get('BNB_USDT_TOKEN_ADDRESS')
@@ -835,7 +824,7 @@ export class WithdrawService implements OnModuleInit {
         ? this.configService.get('BNB_PAYOUT_POOL_CONTRACT_ADDRESS')
         : this.configService.get('OPBNB_PAYOUT_POOL_CONTRACT_ADDRESS');
 
-    const provider = new ethers.JsonRpcProvider(providerUrl);
+    const provider = ProviderUtil.createFallbackProvider(chainId.toString());
     const usdtTokenContract = GameUSD__factory.connect(tokenAddress, provider);
     return await usdtTokenContract.balanceOf(payoutPoolAddress);
   }
@@ -847,10 +836,7 @@ export class WithdrawService implements OnModuleInit {
     signature: BytesLike,
   ): Promise<ethers.TransactionReceipt> {
     try {
-      const providerUrl = this.configService.get(
-        'PROVIDER_RPC_URL_' + chainId.toString(),
-      );
-      const provider = new ethers.JsonRpcProvider(providerUrl);
+      const provider = ProviderUtil.createFallbackProvider(chainId.toString());
       const payoutBot = new ethers.Wallet(
         await MPC.retrievePrivateKey(
           this.configService.get('PAYOUT_BOT_ADDRESS'),

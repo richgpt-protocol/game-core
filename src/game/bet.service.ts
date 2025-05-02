@@ -21,6 +21,7 @@ import {
   Wallet,
   ethers,
   parseUnits,
+  Provider,
 } from 'ethers';
 import {
   Core__factory,
@@ -55,6 +56,7 @@ import { Jackpot } from './entities/jackpot.entity';
 import { SquidGameParticipant } from 'src/campaign/entities/squidGame.participant.entity';
 import { AdminNotificationService } from 'src/shared/services/admin-notification.service';
 import { I18nService } from 'nestjs-i18n';
+import { ProviderUtil } from 'src/shared/utils/provider.util';
 
 interface SubmitBetJobDTO {
   userWalletId: number;
@@ -82,6 +84,9 @@ interface ParticipateJackpotDTO {
 export class BetService implements OnModuleInit {
   private readonly logger = new Logger(BetService.name);
   private readonly MAX_NUMBER_OF_DRAWS = 168;
+  private provider = ProviderUtil.createFallbackProvider(
+    this.configService.get('BASE_CHAIN_ID'),
+  );
 
   constructor(
     // @InjectRepository(Game)
@@ -818,7 +823,7 @@ export class BetService implements OnModuleInit {
     ticketId: number,
     payload: BetOrder[],
     userSigner: Wallet,
-    provider: JsonRpcProvider,
+    provider: Provider,
   ) {
     try {
       const coreContractAddr = this.configService.get('CORE_CONTRACT_ADDRESS');
@@ -986,14 +991,9 @@ export class BetService implements OnModuleInit {
         return true;
       }
 
-      const provider = new JsonRpcProvider(
-        this.configService.get(
-          `PROVIDER_RPC_URL_${this.configService.get('BASE_CHAIN_ID')}`,
-        ),
-      );
       const userSigner = new Wallet(
         await MPC.retrievePrivateKey(userWallet.walletAddress),
-        provider,
+        this.provider,
       );
 
       // console.log('submitting bet', betOrders);
@@ -1002,10 +1002,12 @@ export class BetService implements OnModuleInit {
         gameUsdTxId,
         betOrders,
         userSigner,
-        provider,
+        this.provider,
       );
 
-      const txReceipt = await provider.getTransactionReceipt(onchainTx.hash);
+      const txReceipt = await this.provider.getTransactionReceipt(
+        onchainTx.hash,
+      );
       if (txReceipt && txReceipt.status === 1) {
         // Need to commit transaction immediately if onchain tx is successful
         // This is the reason why need queue to prevent re-submit onchain again if failed to execute job and retry
@@ -1322,16 +1324,11 @@ export class BetService implements OnModuleInit {
         +this.configService.get('BASE_CHAIN_ID'),
       );
 
-      const provider = new JsonRpcProvider(
-        this.configService.get(
-          'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
-        ),
-      );
       const distributeReferralFeeBot = new Wallet(
         await MPC.retrievePrivateKey(
           this.configService.get('DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS'),
         ),
-        provider,
+        this.provider,
       );
       const depositContract = Deposit__factory.connect(
         this.configService.get('DEPOSIT_CONTRACT_ADDRESS'),
@@ -1648,11 +1645,7 @@ export class BetService implements OnModuleInit {
       // participate jackpot on-chain tx is executed by user wallet
       const userSigner = new Wallet(
         await MPC.retrievePrivateKey(walletAddress),
-        new JsonRpcProvider(
-          this.configService.get(
-            'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
-          ),
-        ),
+        this.provider,
       );
       const jackpotContract = Jackpot__factory.connect(
         this.configService.get('JACKPOT_CONTRACT_ADDRESS'),
@@ -1753,11 +1746,7 @@ export class BetService implements OnModuleInit {
           await MPC.retrievePrivateKey(
             this.configService.get('DISTRIBUTE_REFERRAL_FEE_BOT_ADDRESS'),
           ),
-          new JsonRpcProvider(
-            this.configService.get(
-              'PROVIDER_RPC_URL_' + this.configService.get('BASE_CHAIN_ID'),
-            ),
-          ),
+          this.provider,
         ),
       );
 
@@ -1878,11 +1867,9 @@ export class BetService implements OnModuleInit {
     userWallet: UserWallet,
     chainId: number,
   ): Promise<boolean> {
-    const provider = new JsonRpcProvider(
-      this.configService.get('OPBNB_PROVIDER_RPC_URL'),
+    const nativeBalance = await this.provider.getBalance(
+      userWallet.walletAddress,
     );
-
-    const nativeBalance = await provider.getBalance(userWallet.walletAddress);
 
     const minimumNativeBalance = this.configService.get(
       `MINIMUM_NATIVE_BALANCE_${chainId}`,

@@ -40,6 +40,7 @@ import { TxStatus } from 'src/shared/enum/status.enum';
 import axios from 'axios';
 import { I18nService } from 'nestjs-i18n';
 import { FCMService } from 'src/shared/services/fcm.service';
+import { ProviderUtil } from 'src/shared/utils/provider.util';
 
 @Injectable()
 export class CreditService {
@@ -442,8 +443,7 @@ export class CreditService {
   }
 
   private async getSigner(chainId: number, address: string): Promise<Wallet> {
-    const providerUrl = this.configService.get(`PROVIDER_RPC_URL_${chainId}`);
-    const provider = new JsonRpcProvider(providerUrl);
+    const provider = ProviderUtil.createFallbackProvider(chainId.toString());
     const signerPrivKey = await MPC.retrievePrivateKey(address);
 
     return new Wallet(signerPrivKey, provider);
