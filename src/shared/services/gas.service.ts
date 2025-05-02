@@ -14,6 +14,7 @@ import { Mutex } from 'async-mutex';
 import { ConfigService } from 'src/config/config.service';
 import { TxStatus } from '../enum/status.enum';
 import { MultiCall__factory } from 'src/contract';
+import { ProviderUtil } from '../utils/provider.util';
 
 @Injectable()
 export class GasService {
@@ -39,10 +40,7 @@ export class GasService {
     userAddress: string,
     chainId: number,
   ): Promise<void> {
-    const provider_rpc_url = this.configService.get(
-      `PROVIDER_RPC_URL_${chainId.toString()}`,
-    );
-    const provider = new ethers.JsonRpcProvider(provider_rpc_url);
+    const provider = ProviderUtil.createFallbackProvider(chainId.toString());
     const balance = await provider.getBalance(userAddress);
 
     if (balance < ethers.parseEther('0.001')) {
@@ -75,11 +73,6 @@ export class GasService {
         // no reloadTx for admin reload because
         // no userWallet for admin (userWalletId is compulsory)
         // just simply reload admin wallet
-        const provider_rpc_url = this.configService.get(
-          `PROVIDER_RPC_URL_${chainId.toString()}`,
-        );
-        const provider = new ethers.JsonRpcProvider(provider_rpc_url);
-
         // no error handling for admin wallet reload
         // try again in next reload
         const supplyAccount = new ethers.Wallet(
@@ -130,10 +123,7 @@ export class GasService {
       if (reloadTxs.length === 0) return;
       this.logger.log(`reloadTxs.length: ${reloadTxs.length}`);
 
-      const provider_rpc_url = this.configService.get(
-        `PROVIDER_RPC_URL_${chainId.toString()}`,
-      );
-      const provider = new ethers.JsonRpcProvider(provider_rpc_url);
+      const provider = ProviderUtil.createFallbackProvider(chainId.toString());
       const supplyAccount = new ethers.Wallet(
         await MPC.retrievePrivateKey(
           this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),
@@ -263,10 +253,7 @@ export class GasService {
     walletAddress: string,
     chainId: number,
   ): Promise<ethers.TransactionReceipt> {
-    const provider_rpc_url = this.configService.get(
-      `PROVIDER_RPC_URL_${chainId.toString()}`,
-    );
-    const provider = new ethers.JsonRpcProvider(provider_rpc_url);
+    const provider = ProviderUtil.createFallbackProvider(chainId.toString());
     const supplyAccount = new ethers.Wallet(
       await MPC.retrievePrivateKey(
         this.configService.get('SUPPLY_ACCOUNT_ADDRESS'),

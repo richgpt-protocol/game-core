@@ -49,6 +49,7 @@ import { GasService } from 'src/shared/services/gas.service';
 import { ReloadTx } from '../entities/reload-tx.entity';
 import { OnChainUtil } from 'src/shared/utils/on-chain.util';
 import { I18nService } from 'nestjs-i18n';
+import { ProviderUtil } from 'src/shared/utils/provider.util';
 /**
  * How deposit works
  * 1. deposit-bot access via api/v1/wallet/deposit
@@ -579,10 +580,11 @@ export class DepositService implements OnModuleInit {
       // if transfer token failed, normally due to insufficient gas fee, means
       // user wallet haven't been reloaded yet in processDeposit() especially new created wallet
       // into catch block and retry again in next cron job
-      const receipt = await OnChainUtil.waitForTransaction(
-        onchainEscrowTx,
-        this.backupProvider,
-      );
+      // const receipt = await OnChainUtil.waitForTransaction(
+      //   onchainEscrowTx,
+      //   this.backupProvider,
+      // );
+      const receipt = await onchainEscrowTx.wait();
       if (!receipt) {
         this.logger.error(
           `handleEscrowTx() error: Transaction receipt not found for depositTxId: ${depositTx.id}`,
@@ -694,8 +696,7 @@ export class DepositService implements OnModuleInit {
     walletAddress: string,
     chainId: number,
   ): Promise<ethers.Wallet> {
-    const providerUrl = this.configService.get(`PROVIDER_RPC_URL_${chainId}`);
-    const provider = new ethers.JsonRpcProvider(providerUrl);
+    const provider = ProviderUtil.createFallbackProvider(chainId.toString());
     return new ethers.Wallet(
       await MPC.retrievePrivateKey(walletAddress),
       provider,
@@ -1321,10 +1322,7 @@ export class DepositService implements OnModuleInit {
 
     const baseChainId = Number(this.configService.get('BASE_CHAIN_ID'));
     if (chainId !== baseChainId) {
-      const chain_provider_rpc_url = this.configService.get(
-        `PROVIDER_RPC_URL_${chainId.toString()}`,
-      );
-      const provider = new ethers.JsonRpcProvider(chain_provider_rpc_url);
+      const provider = ProviderUtil.createFallbackProvider(chainId.toString());
       const balance = await provider.getBalance(walletAddress);
       if (balance <= ethers.parseEther(amount)) {
         const chainSupplyAccount = supplyAccount.connect(provider);
@@ -1332,10 +1330,11 @@ export class DepositService implements OnModuleInit {
           to: walletAddress,
           value: ethers.parseEther(amount),
         });
-        const txReceipt = await OnChainUtil.waitForTransaction(
-          txResponse,
-          this.backupProvider,
-        );
+        // const txReceipt = await OnChainUtil.waitForTransaction(
+        //   txResponse,
+        //   this.backupProvider,
+        // );
+        const txReceipt = await txResponse.wait();
         if (!txReceipt || txReceipt.status !== 1) {
           throw new Error(
             `Failed to reload native token on-chain in chain ${chainId}`,
@@ -1359,10 +1358,9 @@ export class DepositService implements OnModuleInit {
       }
     }
 
-    const base_chain_provider_rpc_url = this.configService.get(
-      `PROVIDER_RPC_URL_${baseChainId.toString()}`,
+    const provider = ProviderUtil.createFallbackProvider(
+      baseChainId.toString(),
     );
-    const provider = new ethers.JsonRpcProvider(base_chain_provider_rpc_url);
     const balance = await provider.getBalance(walletAddress);
     if (balance <= ethers.parseEther(amount)) {
       const chainSupplyAccount = supplyAccount.connect(provider);
